@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Posts by {{ username }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.4.1/milligram.min.css">
+    <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Posts by @{{ username }}</h1>
+        <a href="/">&larr; Back</a>
+        {% if tweets %}
+            {% for tweet in tweets %}
+                <div style="margin-bottom: 2em;">
+                    <blockquote class="twitter-tweet">
+                        <a href="{{ tweet[0] }}"></a>
+                    </blockquote>
+                    <div style="margin: 0.5em 0 0.5em 0;">
+                        <strong>Text:</strong> {{ tweet[1] }}
+                    </div>
+                    {% if tweet[2] %}
+                        <div>
+                            <strong>Media:</strong>
+                            {% for media_url in tweet[2].split(',') %}
+                                {% if media_url.endswith('.jpg') or media_url.endswith('.png') or media_url.endswith('.jpeg') %}
+                                    <img src="{{ media_url }}" alt="media" style="max-width:300px; max-height:300px; margin:0.5em;" />
+                                {% elif media_url %}
+                                    <a href="{{ media_url }}" target="_blank">{{ media_url }}</a>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <small>{{ tweet[6] }}
+                        {% if tweet[3] %} | Repost{% endif %}
+                        {% if tweet[4] %} | Like{% endif %}
+                        {% if tweet[5] %} | Comment/Quote (parent: {{ tweet[6] }}){% endif %}
+                    </small>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No posts found for this user.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

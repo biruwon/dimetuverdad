@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>X Posts Viewer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.4.1/milligram.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1>X Posts Viewer</h1>
+        <form action="/user/" method="get">
+            <label for="username">Enter username:</label>
+            <input type="text" id="username" name="username" placeholder="elonmusk" required>
+            <button type="submit">View Posts</button>
+        </form>
+    </div>
+    <script>
+        document.querySelector('form').onsubmit = function(e) {
+            e.preventDefault();
+            var user = document.getElementById('username').value.trim();
+            if(user) window.location = '/user/' + user;
+        };
+    </script>
+</body>
+</html>
