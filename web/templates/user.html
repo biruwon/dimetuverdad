@@ -36,6 +36,48 @@
                         {% if tweet[4] %} | Like{% endif %}
                         {% if tweet[5] %} | Comment/Quote (parent: {{ tweet[6] }}){% endif %}
                     </small>
+                    {% set analysis_json = analysis_map.get(tweet[0]) %}
+                    {% if analysis_json %}
+                        <div style="margin-top:0.5em;padding:0.5em;border-left:3px solid #ccc;">
+                            <strong>Automated analysis:</strong>
+                            <div><em>Far-right score:</em> {{ analysis_json.get('far_right_score') }}</div>
+                            {% set extra = analysis_json.get('extra_info', {}) %}
+                            {% if extra and extra.get('evidence') %}
+                                <div style="margin-top:0.5em;">
+                                    <strong>Evidence:</strong>
+                                    <ul>
+                                    {% for src in extra.get('evidence') %}
+                                        <li>
+                                          <strong>{{ src.label if src.label else src.source }}</strong>
+                                          {% if src.results %}
+                                            <ul>
+                                            {% for it in src.results %}
+                                                <li>
+                                                    {% if it.verdict == 'debunk' %}
+                                                        <span style="color:green;font-weight:bold;">[Debunk]</span>
+                                                    {% else %}
+                                                        <span style="color:gray;">[Source]</span>
+                                                    {% endif %}
+                                                    <a href="{{ it.url }}" target="_blank">{{ it.title or it.url }}</a>
+                                                    <div style="font-size:0.9em;color:#444;">{{ it.snippet }}</div>
+                                                </li>
+                                            {% endfor %}
+                                            </ul>
+                                          {% else %}
+                                            <a href="{{ src.search_url }}" target="_blank">Search page</a>
+                                          {% endif %}
+                                        </li>
+                                    {% endfor %}
+                                    </ul>
+                                </div>
+                            {% else %}
+                                <div style="font-size:0.9em;color:#666;">No evidence retrieved.</div>
+                            {% endif %}
+                            <div style="margin-top:0.5em;"><strong>LLM explanation:</strong>
+                                <div style="font-size:0.9em;color:#333;">{{ analysis_json.get('explanation') }}</div>
+                            </div>
+                        </div>
+                    {% endif %}
                 </div>
             {% endfor %}
         {% else %}

@@ -1,18 +1,115 @@
 from transformers import pipeline
 import re
+import torch
+from retrieval import retrieve_evidence_for_post, format_evidence
+import sqlite3
+import json
+import os
+import argparse
+
+# DB path (same as other scripts)
+DB_PATH = os.path.join(os.path.dirname(__file__), 'accounts.db')
+
+
+def init_analysis_table():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS analyses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tweet_url TEXT,
+        analysis_json TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    conn.commit()
+    conn.close()
+
+
+def save_analysis(tweet_url: str, analysis_obj: dict):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('INSERT INTO analyses (tweet_url, analysis_json) VALUES (?, ?)', (tweet_url, json.dumps(analysis_obj, ensure_ascii=False)))
+    conn.commit()
+    conn.close()
+
+
+# Far-right motif list (common themes and codewords used by activists)
+FAR_RIGHT_MOTIFS = [
+    'inmigr', 'inmigrantes', 'migración', 'reemplaz', 'soros', 'globalist', 'deep state', 'islamiz',
+    'ilegales', 'okupa', 'terror', 'nacional', 'identidad', 'familia', 'tradición', 'invasión', 'traidor',
+    'raza', 'suprem', 'ilegales', 'qn', 'roedores', 'plandemia', 'mascara', 'vacuna', 'microchip', 'genocid',
+    'degener', 'sodom', 'antiespa', 'invasor', 'traicion'
+]
+
+
+def far_right_score(text: str) -> float:
+    t = text.lower()
+    score = 0
+    for m in FAR_RIGHT_MOTIFS:
+        if m in t:
+            score += 1
+    # calls-to-action verbs or all-caps words add weight
+    if re.search(r"\b(venid[ae]|salid|luchar|tomar|recuperar|ocupar|atacar|salid|marchad|concentrad|revolución)\b", t):
+        score += 2
+    if re.search(r"\b[A-Z]{3,}\b", text):
+        score += 1
+    # scale score to 0..1 where higher means stronger far-right signal
+    max_possible = max(1, len(FAR_RIGHT_MOTIFS) + 3)
+    return min(1.0, score / max_possible)
+
+
+# init_analysis_table() will be called later only if saving is enabled;
+# this avoids DB I/O when running in fast/analysis-only mode.
 
 # Zero-shot classification pipeline (multilingual-capable)
 topic_pipe = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
-# Use Gemma for deep analysis
-llm_pipe = pipeline("text-generation", model="google/gemma-2-2b-it", device_map="auto")
+# Lazy LLM loader: will instantiate llm_pipe on first use to avoid heavy startup cost
+llm_pipe = None
+
+
+def load_llm():
+    """Instantiate the LLM pipeline on first use and return it. Safe and idempotent."""
+    global llm_pipe
+    if llm_pipe is not None:
+        return llm_pipe
+    try:
+        if torch.cuda.is_available():
+            llm_pipe = pipeline(
+                "text-generation",
+                model="google/gemma-3n-e2b-it",
+                torch_dtype="auto",
+                device_map="auto",
+                trust_remote_code=True,
+            )
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            llm_pipe = pipeline(
+                "text-generation",
+                model="google/gemma-3n-e2b-it",
+                torch_dtype="auto",
+                device_map="auto",
+                trust_remote_code=True,
+            )
+        else:
+            llm_pipe = pipeline(
+                "text-generation",
+                model="google/gemma-3n-e2b-it",
+                device=-1,
+                trust_remote_code=True,
+            )
+        return llm_pipe
+    except Exception as e:
+        print(f"Warning: could not load Gemma model locally: {e}")
+        llm_pipe = None
+        return None
 
 # Example posts to analyze
 posts = [
     "Prohíben limpiar y desbrozar el monte, y si lo haces te multan. Y ahora te van a investigar por no haberlo limpiado.",
     "Hoy hace sol en Madrid.",
     "🔴 #ÚLTIMAHORA | Pedro Sánchez cierra parte del espacio marítimo de Lanzarote hasta el 31 de agosto para su recreo vacacional en La Mareta. El Gobierno del pueblo.",
-    "🔴 La “extrema derecha” esquivando y toreando las difamaciones, insultos y mentiras de los zurdos, óleo sobre lienzo"
+    "🔴 La “extrema derecha” esquivando y toreando las difamaciones, insultos y mentiras de los zurdos, óleo sobre lienzo",
     "Ocupan el piso de una mujer de 90 años, heredado de su hijo fallecido, y al acomplejado de Agente Anacleto no se le ocurre otra cosa que justificarlo. Es repugnante tener que aguantar a estos mercenarios sin decencia alguna, haciendo el papel de siervos del Gobierno."
 ]
 
@@ -43,38 +140,47 @@ def looks_like_claim(text: str) -> bool:
     return bool(claim_regex.search(text))
 
 
-for text in posts:
-    print(f"\nPost: {text}")
-    # 1. Separate zero-shot checks for politics and misinformation
-    topic_result = topic_pipe(text, candidate_labels=politics_labels, hypothesis_template="Este texto trata sobre {}.")
-    misinfo_result = topic_pipe(text, candidate_labels=misinfo_labels, hypothesis_template="Este texto es {}.")
+def main(posts_list, skip_retrieval=False, skip_save=False):
+    # initialize DB only if saving enabled
+    if not skip_save:
+        init_analysis_table()
 
-    # pick best topic match
-    best_topic_label = topic_result['labels'][0]
-    best_topic_score = topic_result['scores'][0]
-    print(f"Topic detection: {best_topic_label} (score: {best_topic_score:.2f})")
+    # Fast stage: parallel zero-shot + heuristics to select candidates
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    # misinfo scores
-    misinfo_dict = dict(zip(misinfo_result['labels'], misinfo_result['scores']))
-    misinfo_score = misinfo_dict.get('desinformación', 0.0)
-    factual_score = misinfo_dict.get('factual', 0.0)
-    opinion_score = misinfo_dict.get('opinión', 0.0)
-    print(f"Misinfo probs: desinformación={misinfo_score:.2f}, factual={factual_score:.2f}, opinión={opinion_score:.2f}")
+    def fast_check(text):
+        topic_result = topic_pipe(text, candidate_labels=politics_labels, hypothesis_template="Este texto trata sobre {}.")
+        misinfo_result = topic_pipe(text, candidate_labels=misinfo_labels, hypothesis_template="Este texto es {}.")
+        best_topic_score = topic_result['scores'][0]
+        misinfo_dict = dict(zip(misinfo_result['labels'], misinfo_result['scores']))
+        misinfo_score = misinfo_dict.get('desinformación', 0.0)
+        claim_flag = looks_like_claim(text)
+        return (text, best_topic_score, misinfo_score, claim_flag)
 
-    # 2. Heuristic claim detection
-    claim_flag = looks_like_claim(text)
-    print(f"Claim-like content detected: {claim_flag}")
+    candidates = []
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futures = {ex.submit(fast_check, t): t for t in posts_list}
+        for fut in as_completed(futures):
+            t, best_topic_score, misinfo_score, claim_flag = fut.result()
+            political_threshold = 0.45
+            misinfo_threshold = 0.30
+            is_political = best_topic_score >= political_threshold
+            is_probably_misinfo = misinfo_score >= misinfo_threshold
+            print(f"\nPost: {t}")
+            print(f"Topic score: {best_topic_score:.2f}, misinfo: {misinfo_score:.2f}, claim_flag={claim_flag}")
+            if is_political or is_probably_misinfo or claim_flag:
+                candidates.append(t)
 
-    # 3. Combined decision: if topic is political OR misinfo likelihood or claim present -> run LLM
-    political_threshold = 0.45
-    misinfo_threshold = 0.30
+    # Sequential deep analysis on candidates (load LLM lazily)
+    for text in candidates:
+        print("-> Running deep analysis (Gemma) on candidate:", text[:80])
+        evidence = []
+        if not skip_retrieval:
+            try:
+                evidence = retrieve_evidence_for_post(text, max_per_source=2)
+            except Exception as e:
+                print(f"Evidence retrieval failed: {e}")
 
-    is_political = best_topic_score >= political_threshold
-    is_probably_misinfo = misinfo_score >= misinfo_threshold
-
-    if is_political or is_probably_misinfo or claim_flag:
-        print("-> Running deep analysis (Gemma)...")
-        # Enhanced prompt: context-aware (far-right activity), strict Spanish output, JSON schema, no links, no translation
         prompt = (
             "Contexto: Estos posts pertenecen a actividad de la extrema derecha en España dirigida contra el Gobierno; ten en cuenta ese marco al analizar sesgos y posibles llamadas a la acción.\n\n"
             "Instrucciones: Responde SOLO en español. No traduzcas el texto. No inventes enlaces ni cites artículos externos. Devuelve SOLO un objeto JSON válido con las siguientes claves: \n"
@@ -85,13 +191,89 @@ for text in posts:
             "- bias_confidence: número entre 0.0 y 1.0\n"
             "- calls_to_action: 'yes' o 'no'\n"
             "- targeted_group: grupo objetivo si aplica (ej: 'gobierno', 'inmigrantes'), o cadena vacía\n"
-            "- notes: observaciones breves\n\n"
+            "- explanation: explicación breve y clara del razonamiento que llevó a la decisión anterior\n"
+            "- extra_info: un objeto con claves 'retrieval_hint' (palabras clave sugeridas) y 'evidence' (lista vacía que el sistema rellenará)\n\n"
             f"Post: {text}\n\n"
             "JSON:"
         )
-        llm_result = llm_pipe(prompt, max_new_tokens=256)
-        generated = llm_result[0]["generated_text"].strip()
-        # Try to extract JSON from generated text: print raw for now
-        print("Gemma analysis (raw):\n", generated)
-    else:
-        print("No political/misinfo content detected. Skipping deep analysis.")
+
+        pipe = load_llm()
+        if pipe is None:
+            print("LLM not available locally; skipping deep analysis.")
+            continue
+        try:
+            llm_result = pipe(prompt, max_new_tokens=256)
+            if isinstance(llm_result, list) and llm_result:
+                generated = llm_result[0].get("generated_text", "")
+            elif isinstance(llm_result, dict):
+                generated = llm_result.get("generated_text", "")
+            else:
+                generated = str(llm_result)
+            generated = (generated or "").strip()
+        except Exception as e:
+            print(f"LLM generation failed: {e}")
+            continue
+
+        # parse and attach evidence similarly to previous logic
+        import json as _json
+        json_obj = None
+        try:
+            start = generated.find('{')
+            end = generated.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                raw = generated[start:end+1]
+                json_obj = _json.loads(raw)
+        except Exception:
+            json_obj = None
+
+        if json_obj is None:
+            print("Gemma analysis (raw, could not parse JSON):\n", generated)
+            continue
+
+        retrieval_hint = ''
+        if isinstance(json_obj.get('extra_info'), dict):
+            retrieval_hint = json_obj['extra_info'].get('retrieval_hint', '') or ''
+        if not retrieval_hint:
+            parts = []
+            if json_obj.get('topic'):
+                parts.append(str(json_obj['topic']))
+            if json_obj.get('targeted_group'):
+                parts.append(str(json_obj['targeted_group']))
+            retrieval_hint = ' '.join(parts) or text[:200]
+
+        ev = []
+        if not skip_retrieval:
+            try:
+                ev = retrieve_evidence_for_post(retrieval_hint, max_per_source=3)
+            except Exception as e:
+                print(f"Retrieval failed: {e}")
+
+        extra = json_obj.get('extra_info') if isinstance(json_obj.get('extra_info'), dict) else {}
+        extra['evidence'] = ev
+        json_obj['extra_info'] = extra
+        json_obj['far_right_score'] = far_right_score(text)
+
+        tweet_url = json_obj.get('tweet_url') if isinstance(json_obj.get('tweet_url'), str) else None
+        if not tweet_url:
+            tweet_url = text[:140]
+
+        if not skip_save:
+            try:
+                save_analysis(tweet_url, json_obj)
+            except Exception as e:
+                print(f"Failed to save analysis to DB: {e}")
+
+        print("Gemma analysis (parsed JSON with retrieved evidence):\n", _json.dumps(json_obj, ensure_ascii=False, indent=2))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--skip-retrieval', action='store_true', help='Skip retrieval of external evidence')
+    parser.add_argument('--skip-save', action='store_true', help='Skip saving analysis to the DB')
+    parser.add_argument('--fast', action='store_true', help='Shortcut: skip retrieval and saving')
+    args = parser.parse_args()
+    if args.fast:
+        args.skip_retrieval = True
+        args.skip_save = True
+
+    main(posts, skip_retrieval=args.skip_retrieval, skip_save=args.skip_save)
