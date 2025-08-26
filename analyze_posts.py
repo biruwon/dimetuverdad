@@ -104,14 +104,6 @@ def load_llm():
         llm_pipe = None
         return None
 
-# Example posts to analyze
-posts = [
-    "Prohíben limpiar y desbrozar el monte, y si lo haces te multan. Y ahora te van a investigar por no haberlo limpiado.",
-    "Hoy hace sol en Madrid.",
-    "🔴 #ÚLTIMAHORA | Pedro Sánchez cierra parte del espacio marítimo de Lanzarote hasta el 31 de agosto para su recreo vacacional en La Mareta. El Gobierno del pueblo.",
-    "🔴 La “extrema derecha” esquivando y toreando las difamaciones, insultos y mentiras de los zurdos, óleo sobre lienzo",
-    "Ocupan el piso de una mujer de 90 años, heredado de su hijo fallecido, y al acomplejado de Agente Anacleto no se le ocurre otra cosa que justificarlo. Es repugnante tener que aguantar a estos mercenarios sin decencia alguna, haciendo el papel de siervos del Gobierno."
-]
 
 # Labels for topic/politics detection (expanded for extremist/activist signals)
 politics_labels = [
@@ -144,6 +136,9 @@ def main(posts_list, skip_retrieval=False, skip_save=False):
     # initialize DB only if saving enabled
     if not skip_save:
         init_analysis_table()
+
+    # collector for analysis outputs
+    results = []
 
     # Fast stage: parallel zero-shot + heuristics to select candidates
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -263,7 +258,18 @@ def main(posts_list, skip_retrieval=False, skip_save=False):
             except Exception as e:
                 print(f"Failed to save analysis to DB: {e}")
 
+        # Append to results list for writing to file later
+        results.append(json_obj)
         print("Gemma analysis (parsed JSON with retrieved evidence):\n", _json.dumps(json_obj, ensure_ascii=False, indent=2))
+
+    # At end of run, write results to analysis_results.json (overwrite)
+    try:
+        out_path = os.path.join(os.path.dirname(__file__), 'analysis_results.json')
+        with open(out_path, 'w', encoding='utf-8') as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+        print(f"Wrote {len(results)} analysis results to {out_path}")
+    except Exception as e:
+        print(f"Failed to write analysis results file: {e}")
 
 
 if __name__ == '__main__':
@@ -271,9 +277,27 @@ if __name__ == '__main__':
     parser.add_argument('--skip-retrieval', action='store_true', help='Skip retrieval of external evidence')
     parser.add_argument('--skip-save', action='store_true', help='Skip saving analysis to the DB')
     parser.add_argument('--fast', action='store_true', help='Shortcut: skip retrieval and saving')
+    parser.add_argument('--from-db', action='store_true', help='Load posts from DB instead of embedded defaults')
+    parser.add_argument('--results-file', help='Optional path to write analysis results (defaults to analysis_results.json)')
     args = parser.parse_args()
     if args.fast:
         args.skip_retrieval = True
         args.skip_save = True
 
-    main(posts, skip_retrieval=args.skip_retrieval, skip_save=args.skip_save)
+    posts_to_analyze = []
+    if args.from_db:
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('SELECT content FROM tweets ORDER BY created_at DESC LIMIT 1000')
+            rows = c.fetchall()
+            conn.close()
+            posts_to_analyze = [r[0] for r in rows if r and r[0].strip()]
+            print(f"Loaded {len(posts_to_analyze)} posts from DB for analysis")
+        except Exception as e:
+            print(f"Failed to load posts from DB: {e}")
+
+    if not posts_to_analyze:
+        print("No posts to analyze. Run with --from-db to analyze saved tweets or call main() programmatically with a posts list.")
+    else:
+        main(posts_to_analyze, skip_retrieval=args.skip_retrieval, skip_save=args.skip_save)

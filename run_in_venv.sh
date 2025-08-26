@@ -1,41 +1,77 @@
-#!/usr/bin/env zsh
-# Small helper: create and activate a venv, install requirements, and run a Python script
-# Usage: ./run_in_venv.sh [--] [python-args...]
+#!/usr/bin/env bash
+# Lightweight runner for this project.
+# Usage:
+#   ./run_in_venv.sh install       # create venv and install requirements + playwright browsers
+#   ./run_in_venv.sh fetch         # run fetch_tweets.py (open browser, requires X creds in .env)
+#   ./run_in_venv.sh analyze-db    # run analysis querying posts from DB
+#   ./run_in_venv.sh analyze-default # run analysis on embedded default posts (fast)
+#   ./run_in_venv.sh full          # run fetch then analyze-db
 
 set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_DIR="$ROOT_DIR/venv"
+PY="$VENV_DIR/bin/python3"
+PIP="$VENV_DIR/bin/pip"
 
-VENV_DIR="${VENV_DIR:-./venv}"
-REQ_FILE="requirements.txt"
-
-# If a venv is already active, prefer it
-if [ -n "${VIRTUAL_ENV:-}" ]; then
-  echo "Detected active virtualenv at $VIRTUAL_ENV; using it."
-  # shellcheck source=/dev/null
-  source "$VIRTUAL_ENV/bin/activate"
-else
-  echo "No active virtualenv detected. Using $VENV_DIR"
+ensure_venv(){
   if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating venv at $VENV_DIR..."
     python3 -m venv "$VENV_DIR"
   fi
   # shellcheck source=/dev/null
   source "$VENV_DIR/bin/activate"
-fi
+}
 
-echo "Upgrading pip"
-python3 -m pip install --upgrade pip >/dev/null
-
-# Optionally skip installing requirements by setting SKIP_INSTALL=1
-if [ "${SKIP_INSTALL:-0}" != "1" ]; then
-  if [ -f "$REQ_FILE" ]; then
-    echo "Installing requirements from $REQ_FILE"
-    python3 -m pip install -r "$REQ_FILE"
+install(){
+  ensure_venv
+  "$PIP" install --upgrade pip
+  if [ -f "$ROOT_DIR/requirements.txt" ]; then
+    "$PIP" install -r "$ROOT_DIR/requirements.txt"
   else
-    echo "No $REQ_FILE found, skipping pip install"
+    "$PIP" install playwright transformers torch requests beautifulsoup4 lxml
   fi
-else
-  echo "SKIP_INSTALL=1 set; skipping pip install"
-fi
+  # Install Playwright browsers
+  "$PY" -m playwright install
+  echo "Installed requirements and Playwright browsers."
+}
 
-echo "Running analyze_posts.py inside venv"
-exec python3 analyze_posts.py "$@"
+fetch(){
+  ensure_venv
+  echo "Starting fetch_tweets.py (will open Chromium). Make sure your .env has X_USERNAME/X_PASSWORD)."
+  "$PY" "$ROOT_DIR/fetch_tweets.py"
+}
+
+analyze_db(){
+  ensure_venv
+  echo "Running analysis on posts stored in DB (fast mode: skip retrieval)."
+  "$PY" -c "import analyze_posts, sys; analyze_posts.main([], skip_retrieval=True, skip_save=False)" || true
+}
+
+analyze_default(){
+  ensure_venv
+  echo "Running analysis on embedded default posts (fast mode)."
+  "$PY" "$ROOT_DIR/default_posts.py"
+}
+
+case "${1-}" in
+  install)
+    install
+    ;;
+  fetch)
+    fetch
+    ;;
+  analyze-db)
+    analyze_db
+    ;;
+  analyze-default)
+    analyze_default
+    ;;
+  full)
+    install || true
+    fetch
+    analyze_db
+    ;;
+  *)
+    echo "Usage: $0 {install|fetch|analyze-db|analyze-default|full}"
+    exit 1
+    ;;
+esac

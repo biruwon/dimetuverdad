@@ -16,6 +16,20 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 DB_PATH = "accounts.db"
 
+# Default target handles (editable). These are example public accounts; replace or update in 'targets.txt' if present.
+DEFAULT_HANDLES = [
+    "vox_es",
+    "Santi_ABASCAL",
+    "monasterioR",
+    "Ortega_Smith",
+    "hermanntertsch",
+    "AlvisePerez",
+    "eduardoinda",
+    "elmundoes",
+    "larazon_es",
+    "abc_es",
+]
+
 def login_and_save_session(page, username, password):
 
     # Use stealth techniques to avoid detection
@@ -209,12 +223,22 @@ def fetch_full_tweets(page, username, max_tweets=100):
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch tweets from a given X (Twitter) user.")
-    parser.add_argument("username", help="The username to fetch tweets from (without @)")
-    parser.add_argument("--max", type=int, default=100, help="Maximum number of tweets to fetch (default: 100)")
+    parser.add_argument("username", nargs='?', help="Optional single username to fetch tweets from (without @). If omitted, default targets list will be used.")
+    parser.add_argument("--max", type=int, default=100, help="Maximum number of tweets to fetch per user (default: 100)")
+    parser.add_argument("--handles-file", help="Path to a newline-separated file with target handles (overrides defaults)")
     args = parser.parse_args()
 
     username_to_fetch = args.username
     max_tweets = args.max
+
+    handles = DEFAULT_HANDLES.copy()
+    # If a handles file exists, use it
+    if args.handles_file and os.path.exists(args.handles_file):
+        with open(args.handles_file, 'r') as f:
+            handles = [l.strip() for l in f if l.strip()]
+    # If a single username passed on CLI, use only that
+    if username_to_fetch:
+        handles = [username_to_fetch]
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False, slow_mo=50)
@@ -241,24 +265,36 @@ def main():
         print("Sesión guardada en x_session.json")
 
         conn = init_db()
-        tweets = fetch_full_tweets(page, username_to_fetch, max_tweets=max_tweets)
-        print(f"Fetched {len(tweets)} tweets.")
-        for i, tweet in enumerate(tweets, 1):
-            print(f"Tweet #{i}:\n{tweet['content']}\nURL: {tweet['tweet_url']}\nMedia: {tweet['media_links']}\nRepost: {tweet['is_repost']} Like: {tweet['is_like']} Comment: {tweet['is_comment']} Parent: {tweet['parent_tweet_id']}\n{'-'*40}")
-            save_tweet(
-                conn,
-                tweet['tweet_id'],
-                tweet['tweet_url'],
-                tweet['username'],
-                tweet['content'],
-                tweet['media_links'],
-                tweet['is_repost'],
-                tweet['is_like'],
-                tweet['is_comment'],
-                tweet['parent_tweet_id']
-            )
+        # Fetch tweets for each handle in a single browser session
+        total = 0
+        for handle in handles:
+            print(f"\nFetching up to {max_tweets} tweets for @{handle}...")
+            try:
+                tweets = fetch_full_tweets(page, handle, max_tweets=max_tweets)
+            except Exception as e:
+                print(f"Failed to fetch for {handle}: {e}")
+                tweets = []
+            print(f"Fetched {len(tweets)} tweets for {handle}.")
+            for tweet in tweets:
+                save_tweet(
+                    conn,
+                    tweet['tweet_id'],
+                    tweet['tweet_url'],
+                    tweet['username'],
+                    tweet['content'],
+                    tweet['media_links'],
+                    tweet['is_repost'],
+                    tweet['is_like'],
+                    tweet['is_comment'],
+                    tweet['parent_tweet_id']
+                )
+            total += len(tweets)
+        print(f"Total tweets fetched and saved: {total}")
         conn.close()
         browser.close()
+
+    # Note: fetching finished. Analysis is intentionally not run here by default.
+    # Use the runner scripts or call analyze_posts.py separately to run analysis on saved tweets.
 
 if __name__ == "__main__":
     main()
