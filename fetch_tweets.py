@@ -293,8 +293,5 @@ def main():
         conn.close()
         browser.close()
 
-    # Note: fetching finished. Analysis is intentionally not run here by default.
-    # Use the runner scripts or call analyze_posts.py separately to run analysis on saved tweets.
-
 if __name__ == "__main__":
     main()

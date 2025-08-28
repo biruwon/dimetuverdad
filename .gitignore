@@ -24,4 +24,4 @@ storage_state.json
 config.json
 *.env
 x_session.json
-analysis_results.json
+journalism_test_results.json
