@@ -25,3 +25,6 @@ config.json
 *.env
 x_session.json
 journalism_test_results.json
+
+# Model comparison results
+model_comparison_*.json
