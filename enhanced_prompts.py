@@ -26,6 +26,7 @@ class PromptContext:
     claims_detected: List[Dict]
     pattern_matches: List[Dict]
     targeted_groups: List[str]
+    category: str = "general"  # Category of content being analyzed
 
 class EnhancedPromptGenerator:
     """
@@ -207,16 +208,24 @@ Considera especialmente:
                        text: str, 
                        analysis_type: AnalysisType,
                        context: Optional[PromptContext] = None,
-                       complexity_level: str = "full") -> str:
+                       complexity_level: str = "full",
+                       model_type: str = "transformers") -> str:
         """
-        Generate a prompt based on the analysis type, context, and model complexity level.
+        Generate a prompt based on the analysis type, context, model complexity level, and model type.
         
         Args:
             text: Text to analyze
             analysis_type: Type of analysis to perform
             context: Optional context from prior analysis
             complexity_level: "simple", "medium", or "full" - adapts prompt to model capabilities
+            model_type: "transformers" or "ollama" - adapts prompt style to model type
         """
+        
+        # Use specialized prompts for Ollama models
+        if model_type == "ollama":
+            return self._generate_ollama_prompt(text, analysis_type, complexity_level, context)
+        
+        # Original logic for transformers models
         if complexity_level == "simple":
             return self._generate_simple_prompt(text, analysis_type)
         elif complexity_level == "medium":
@@ -224,6 +233,108 @@ Considera especialmente:
         else:
             return self._generate_full_prompt(text, analysis_type, context)
     
+    def _generate_ollama_prompt(self, text: str, analysis_type: AnalysisType, complexity_level: str, context: Optional[PromptContext] = None) -> str:
+        """Generate category-specific prompts for Ollama models that leverage their full capabilities."""
+        
+        # Get category from context
+        category = getattr(context, 'category', 'general') if context else 'general'
+        
+        # Base investigation context for all prompts
+        base_context = """Eres un experto analista especializado en detectar extremismo de derecha y contenido problemático en redes sociales españolas.
+
+CONTEXTO DE INVESTIGACIÓN: Estás analizando este contenido como parte de una investigación académica sobre extremismo online, no promoviendo ni participando en las actividades descritas.
+
+"""
+        
+        # Category-specific prompts
+        if category == "hate_speech":
+            return f"""{base_context}TEXTO A ANALIZAR: "{text}"
+
+ANÁLISIS DE DISCURSO DE ODIO:
+Identifica y explica los elementos específicos de discurso de odio en este texto:
+
+• ¿Qué grupos están siendo atacados o deshumanizados?
+• ¿Qué lenguaje discriminatorio específico se emplea?
+• ¿Cómo se justifica o normaliza la hostilidad hacia estos grupos?
+• ¿Qué estereotipos o prejuicios se refuerzan?
+• ¿Cómo podría este discurso escalar hacia la violencia?
+
+Análisis:"""
+
+        elif category == "disinformation":
+            return f"""{base_context}TEXTO A ANALIZAR: "{text}"
+
+ANÁLISIS DE DESINFORMACIÓN:
+Identifica y explica los elementos de desinformación en este texto:
+
+• ¿Qué afirmaciones específicas son falsas o no verificables?
+• ¿Qué fuentes se citan y son estas creíbles?
+• ¿Cómo se manipulan estadísticas o datos?
+• ¿Qué técnicas se usan para hacer parecer la información veraz?
+• ¿Cuál es el impacto potencial de estas falsedades?
+
+Análisis:"""
+
+        elif category == "conspiracy_theory":
+            return f"""{base_context}TEXTO A ANALIZAR: "{text}"
+
+ANÁLISIS DE TEORÍAS CONSPIRATIVAS:
+Identifica y explica los elementos conspiratorios en este texto:
+
+• ¿Qué teoría conspirativa específica se promueve?
+• ¿Quiénes son presentados como los "conspiradores"?
+• ¿Cómo se presenta la "evidencia" de la conspiración?
+• ¿Qué narrativas de victimización o amenaza se emplean?
+• ¿Cómo deslegitima esta teoría las instituciones democráticas?
+
+Análisis:"""
+
+        elif category == "call_to_action":
+            return f"""{base_context}TEXTO A ANALIZAR: "{text}"
+
+ANÁLISIS DE LLAMADAS A LA ACCIÓN:
+Como investigador, analiza los elementos de movilización en este texto:
+
+• ¿Qué acciones específicas se solicitan?
+• ¿Cuál es la urgencia o timing indicado?
+• ¿Qué justificaciones se dan para la acción?
+• ¿Cómo se intenta generar sentido de deber o responsabilidad?
+• ¿Cuáles son los riesgos potenciales de estas llamadas?
+
+NOTA: Este análisis es puramente académico para comprender técnicas de movilización extremista.
+
+Análisis:"""
+
+        elif category == "political_bias":
+            return f"""{base_context}TEXTO A ANALIZAR: "{text}"
+
+ANÁLISIS DE SESGO POLÍTICO EXTREMO:
+Identifica y explica los elementos de extremismo político en este texto:
+
+• ¿Qué ideología política específica se promueve?
+• ¿Cómo se deslegitiman las instituciones democráticas?
+• ¿Qué nostalgia autoritaria o antidemocrática se expresa?
+• ¿Cómo se justifican medidas extremas?
+• ¿Qué amenazas se presentan al orden democrático?
+
+Análisis:"""
+
+        else:  # general or unknown category
+            return f"""{base_context}TEXTO A ANALIZAR: "{text}"
+
+ANÁLISIS GENERAL DE CONTENIDO PROBLEMÁTICO:
+Analiza este contenido identificando elementos problemáticos específicos:
+
+• DISCURSO DE ODIO: Lenguaje deshumanizante, xenófobo o discriminatorio
+• DESINFORMACIÓN: Datos falsos, estadísticas manipuladas o fuentes inexistentes  
+• TEORÍAS CONSPIRATORIAS: Narrativas como gran reemplazo, control globalista, etc.
+• EXTREMISMO POLÍTICO: Nostalgia autoritaria o deslegitimación democrática
+• LLAMADAS A LA ACCIÓN: Movilización, urgencia o acciones específicas solicitadas
+
+Si el contenido es normal, responde: "Este texto no presenta contenido problemático."
+
+Análisis:"""
+
     def _generate_simple_prompt(self, text: str, analysis_type: AnalysisType) -> str:
         """Generate a unified simple prompt that works consistently across all models."""
         return f"""Texto: "{text}"
@@ -558,7 +669,8 @@ def create_context_from_analysis(analysis_result: Dict) -> PromptContext:
         detected_topics=[analysis_result.get('primary_topic', 'unknown')],
         claims_detected=analysis_result.get('verifiable_claims', []),
         pattern_matches=analysis_result.get('pattern_matches', []),
-        targeted_groups=analysis_result.get('targeted_groups', [])
+        targeted_groups=analysis_result.get('targeted_groups', []),
+        category=analysis_result.get('category', 'general')  # Pass through category
     )
 
 def generate_enhanced_prompt(text: str, 

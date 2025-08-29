@@ -369,6 +369,7 @@ def main():
     parser.add_argument('--fast-only', action='store_true', help='Test only fast models (< 1GB)')
     parser.add_argument('--spanish-only', action='store_true', help='Test only Spanish-optimized models')
     parser.add_argument('--generation-only', action='store_true', help='Test only text generation models')
+    parser.add_argument('--ollama', action='store_true', help='Test only Ollama models (requires Ollama server)')
     parser.add_argument('--all', action='store_true', help='Test ALL available models (slow!)')
     parser.add_argument('--quick', action='store_true', help='Quick test with 2 fastest models only')
     parser.add_argument('--max-examples', type=int, default=3, help='Maximum number of examples to test (default: 3 for speed)')
@@ -389,6 +390,12 @@ def main():
     elif args.generation_only:
         # Get all generation models
         models_to_test = LLMModelConfig.get_models_by_task("generation")
+    elif args.ollama:
+        # Get only Ollama models
+        models_to_test = LLMModelConfig.get_ollama_models()
+        if not models_to_test:
+            print("❌ No Ollama models found. Make sure Ollama server is running: ollama serve")
+            return
     else:
         # Default: test only 1-2 fastest models for quick code validation
         # Get one super-fast model of each type dynamically

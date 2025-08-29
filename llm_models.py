@@ -3,7 +3,6 @@ LLM Models and Pipeline for Spanish Far-Right Analysis
 Extracted for reusability and model comparison.
 """
 
-import json
 import time
 import warnings
 from typing import Dict, List, Optional
@@ -13,6 +12,7 @@ from transformers import (
     pipeline,
     BitsAndBytesConfig
 )
+from openai import OpenAI
 
 from enhanced_prompts import EnhancedPromptGenerator, AnalysisType, create_context_from_analysis
 
@@ -380,6 +380,34 @@ class LLMModelConfig:
             "response_parser": "text2text_generation",
             "prompt_removal_strategy": None,
             "model_type": "text2text"
+        },
+
+        # === OLLAMA MODELS ===
+        "gpt-oss-20b": {
+            "model_name": "gpt-oss:20b",
+            "description": "High-quality 20B parameter model via Ollama - excellent for fact-checking and analysis",
+            "size_gb": 20.0,  # Approximate size
+            "speed": "medium",
+            "quality": "excellent",
+            "free": True,
+            "task_type": "generation",
+            "primary_task": "generation",
+            "pipeline_type": "ollama",  # Special pipeline type for Ollama
+            "complexity_level": "full",  # Large models can handle full complexity
+            "generation_params": {
+                "temperature": 0.3,
+                "max_tokens": 512
+            },
+            "max_input_length": 8000,  # Generous context window
+            "language": "multilingual",
+            "requires_tokenizer_config": False,
+            "response_parser": "ollama_chat",
+            "prompt_removal_strategy": None,
+            "model_type": "chat",
+            "ollama_config": {
+                "base_url": "http://localhost:11434/v1",
+                "api_key": "ollama"
+            }
         }
     }
     
@@ -418,6 +446,30 @@ class LLMModelConfig:
                     print(f"⚠️ Skipping {name}: {config.get('special_requirements', 'compatibility issues')}")
         return compatible_models
     
+
+    
+    @classmethod
+    def get_models_by_task(cls, task_type: str) -> List[str]:
+        """Get models for specific task type."""
+        return [
+            name for name, config in cls.MODELS.items()
+            if config["task_type"] == task_type
+        ]
+    
+    @classmethod
+    def get_fast_models(cls) -> List[str]:
+        """Get list of very fast models for comparison, excluding incompatible ones."""
+        compatible_models = []
+        for name, config in cls.MODELS.items():
+            # Check if model is fast
+            if config["speed"] in ["ultra_fast", "very_fast"]:
+                # Exclude models with known compatibility issues
+                if not config.get("compatibility_issues"):
+                    compatible_models.append(name)
+                else:
+                    print(f"⚠️ Skipping {name}: {config.get('special_requirements', 'compatibility issues')}")
+        return compatible_models
+    
     @classmethod
     def get_spanish_models(cls) -> List[str]:
         """Get list of Spanish-optimized models."""
@@ -432,25 +484,6 @@ class LLMModelConfig:
         return [
             name for name, config in cls.MODELS.items()
             if config["size_gb"] <= max_size_gb
-        ]
-    
-    @classmethod
-    def get_models_by_speed(cls, min_speed: str = "fast") -> List[str]:
-        """Get models with minimum speed level."""
-        speed_levels = ["ultra_fast", "very_fast", "fast", "medium", "slow"]
-        min_level = speed_levels.index(min_speed) if min_speed in speed_levels else 2
-        
-        return [
-            name for name, config in cls.MODELS.items()
-            if speed_levels.index(config["speed"]) <= min_level
-        ]
-    
-    @classmethod
-    def get_models_by_task(cls, task_type: str) -> List[str]:
-        """Get models for specific task type."""
-        return [
-            name for name, config in cls.MODELS.items()
-            if config["task_type"] == task_type
         ]
     
     @classmethod
@@ -489,34 +522,14 @@ class LLMModelConfig:
         return compatible_models[0]
     
     @classmethod
-    def get_balanced_model_selection(cls, max_models: int = 6) -> List[str]:
-        """Get a balanced selection of models for comparison/testing."""
-        selection = []
-        
-        # Get fastest classification models
-        fast_classifiers = [
+    def get_ollama_models(cls) -> List[str]:
+        """Get list of Ollama models."""
+        return [
             name for name, config in cls.MODELS.items()
-            if config["task_type"] == "classification" and config["speed"] in ["ultra_fast", "very_fast"]
+            if config.get("pipeline_type") == "ollama"
         ]
-        
-        # Get fastest generation models  
-        fast_generators = [
-            name for name, config in cls.MODELS.items()
-            if config["task_type"] == "generation" and config["speed"] in ["ultra_fast", "very_fast", "fast"]
-        ]
-        
-        # Add 2-3 classification models
-        selection.extend(fast_classifiers[:3])
-        
-        # Add 2-3 generation models
-        selection.extend(fast_generators[:3])
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        selection = [m for m in selection if not (m in seen or seen.add(m))]
-        
-        # Trim to max_models
-        return selection[:max_models]
+    
+
 
 class ResponseParser:
     """Handles different types of response parsing based on pipeline type."""
@@ -659,6 +672,10 @@ class EnhancedLLMPipeline:
         self.model_info = {}
         self.model_type = "text"  # Default to text generation
         
+        # Ollama-specific attributes
+        self.ollama_client = None
+        self.ollama_model_name = None
+        
         # Allow specific model override
         self.specific_models = specific_models or {}
         
@@ -691,10 +708,6 @@ class EnhancedLLMPipeline:
             print(f"📦 Loading generation model: {gen_config['model_name']}")
             print(f"   Size: {gen_config['size_gb']}GB, Speed: {gen_config['speed']}, Quality: {gen_config['quality']}")
             
-            # Track current model name for type detection
-            self.current_gen_model_name = gen_config['model_name']
-            self.current_class_model_name = class_config['model_name']
-            
             # Load generation model
             self._load_generation_model(gen_config)
             
@@ -709,6 +722,28 @@ class EnhancedLLMPipeline:
     def _load_generation_model(self, gen_config: Dict):
         """Load generation model with configuration-driven approach."""
         try:
+            pipeline_type = gen_config.get("pipeline_type", "text-generation")
+            
+            # Check if this is an Ollama model
+            if pipeline_type == "ollama":
+                print(f"📦 Loading Ollama model: {gen_config['model_name']}")
+                ollama_config = gen_config.get("ollama_config", {})
+                
+                # Create OpenAI client for Ollama
+                self.ollama_client = OpenAI(
+                    base_url=ollama_config.get("base_url", "http://localhost:11434/v1"),
+                    api_key=ollama_config.get("api_key", "ollama")
+                )
+                
+                # Store model name for Ollama calls
+                self.ollama_model_name = gen_config["model_name"]
+                self.generation_model = "ollama"  # Special marker
+                self.model_type = gen_config.get("model_type", "chat")
+                
+                print("✅ Ollama model configured successfully")
+                return
+            
+            # Regular transformers model loading
             # Quantization config for memory efficiency
             quantization_config = None
             if self.enable_quantization and torch.cuda.is_available():
@@ -730,9 +765,6 @@ class EnhancedLLMPipeline:
             # Use CPU by default for stability
             device = -1  # Default to CPU for stability
             model_name = gen_config["model_name"]
-            
-            # Get pipeline type from configuration
-            pipeline_type = gen_config.get("pipeline_type", "text-generation")
             
             # Create pipeline using configuration - minimal setup for stability
             pipeline_kwargs = {
@@ -946,12 +978,14 @@ class EnhancedLLMPipeline:
             
             print(f"📝 Using generation approach for {model_name} (complexity: {complexity_level})")
             
-            # Generate prompt with appropriate complexity level
+            # Generate prompt with appropriate complexity level and model type
+            model_type = "ollama" if self.generation_model == "ollama" else "transformers"
             enhanced_prompt = self.prompt_generator.generate_prompt(
                 text=text,
                 analysis_type=analysis_type,
                 context=prompt_context,
-                complexity_level=complexity_level
+                complexity_level=complexity_level,
+                model_type=model_type
             )
             
             # Get generation parameters from configuration
@@ -969,45 +1003,42 @@ class EnhancedLLMPipeline:
             
             # Generate response using the enhanced prompt with error handling
             try:
-                # Use full enhanced prompt with proper token limits
-                response = self.generation_model(enhanced_prompt, **generation_params)
+                # Check if this is an Ollama model
+                if self.generation_model == "ollama":
+                    # Use Ollama chat completion
+                    response = self.ollama_client.chat.completions.create(
+                        model=self.ollama_model_name,
+                        messages=[{"role": "user", "content": enhanced_prompt}],
+                        **generation_params
+                    )
+                    # Extract response text from Ollama format
+                    generated_text = response.choices[0].message.content
+                else:
+                    # Use transformers pipeline
+                    response = self.generation_model(enhanced_prompt, **generation_params)
+                    # Parse using ResponseParser
+                    parser_type = gen_config.get("response_parser", "text_generation")
+                    generated_text = ResponseParser.parse_response(
+                        response, parser_type, enhanced_prompt, gen_config
+                    )
             except Exception as gen_error:
                 print(f"❌ Generation model error: {gen_error}")
                 # Don't hide errors - raise them for debugging
                 raise gen_error
             
-            # Extract and parse the response using configuration-driven approach
-            if response and len(response) > 0:
-                # Get parser type from configuration
-                parser_type = gen_config.get("response_parser", "text_generation")
-                
-                # Use the ResponseParser to handle the response
-                generated_text = ResponseParser.parse_response(
-                    response, parser_type, enhanced_prompt, gen_config
-                )
-                
-                # Ensure we have some text to work with
-                if not generated_text or len(str(generated_text).strip()) < 5:
-                    # LLM failed - return error message instead of fallback
-                    return {
-                        "llm_explanation": "Error: El modelo LLM no pudo generar una respuesta",
-                        "llm_confidence": 0.1,
-                        "llm_categories": ["generation_error"],
-                        "llm_sentiment": "neutral",
-                        "llm_threat_assessment": "low"
-                    }
-                
-                # Use unified extraction for all models - no JSON parsing
-                return self._extract_text_response(str(generated_text), enhanced_prompt)
-            else:
-                # No response generated - return basic fallback
+            # Ensure we have some text to work with
+            if not generated_text or len(str(generated_text).strip()) < 5:
+                # LLM failed - return error message instead of fallback
                 return {
-                    "llm_explanation": "No se pudo generar análisis LLM",
-                    "llm_confidence": 0.3,
-                    "llm_categories": [],
+                    "llm_explanation": "Error: El modelo LLM no pudo generar una respuesta",
+                    "llm_confidence": 0.1,
+                    "llm_categories": ["generation_error"],
                     "llm_sentiment": "neutral",
                     "llm_threat_assessment": "low"
                 }
+            
+            # Use unified extraction for all models - no JSON parsing
+            return self._extract_text_response(str(generated_text), enhanced_prompt)
             
         except Exception as e:
             print(f"⚠️ Enhanced analysis error: {e}")
@@ -1018,154 +1049,22 @@ class EnhancedLLMPipeline:
                 "llm_sentiment": "neutral",
                 "llm_threat_assessment": "low"
             }
-        
-        return {
-            "llm_explanation": "Análisis LLM completado con formato básico",
-            "llm_confidence": 0.5
-        }
-    
-    def _extract_json_response(self, generated_text: str, prompt: str) -> Optional[Dict]:
-        """Extract JSON response from generated text."""
-        try:
-            # Remove the original prompt
-            response_text = generated_text.replace(prompt, '').strip()
-            
-            # Skip if the response is just repeating templates
-            if 'o "medio" o "bajo"' in response_text or '"explicacion": "Razón específica:' in response_text:
-                return None
-            
-            # Find JSON content
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
-            
-            if json_start != -1 and json_end > json_start:
-                json_text = response_text[json_start:json_end]
-                
-                # Clean up common issues
-                json_text = json_text.replace('"alto" o "medio" o "bajo"', '"alto"')
-                json_text = json_text.replace('"extrema_derecha" o "derecha"', '"extrema_derecha"')
-                
-                try:
-                    parsed = json.loads(json_text)
-                    # Validate it's not just a template
-                    if isinstance(parsed, dict) and 'explicacion' in parsed:
-                        explanation = parsed['explicacion']
-                        if len(explanation) > 20 and 'problemático porque' in explanation:
-                            return parsed
-                except json.JSONDecodeError:
-                    pass
-                    
-        except Exception as e:
-            print(f"⚠️ JSON extraction error: {e}")
-        
-        return None
-    
-    def _convert_enhanced_response(self, json_response: Dict, analysis_type: AnalysisType) -> Dict:
-        """Convert enhanced JSON response to standard format."""
-        result = {
-            "llm_explanation": json_response.get('explicacion', ''),
-            "llm_confidence": 0.8,  # High confidence for structured responses
-            "llm_categories": [],
-            "llm_sentiment": "neutral",
-            "llm_threat_assessment": "low"
-        }
-        
-        # Extract threat assessment
-        if 'nivel_amenaza' in json_response:
-            threat_map = {
-                'critico': 'critical',
-                'alto': 'high', 
-                'medio': 'medium',
-                'bajo': 'low',
-                'minimo': 'minimal'
-            }
-            result["llm_threat_assessment"] = threat_map.get(json_response['nivel_amenaza'], 'low')
-        
-        # Extract categories based on analysis type
-        if analysis_type == AnalysisType.THREAT_ASSESSMENT:
-            if 'tipo_amenaza' in json_response:
-                result["llm_categories"] = json_response['tipo_amenaza']
-        elif 'tecnicas_manipulacion' in json_response:
-            result["llm_categories"] = json_response['tecnicas_manipulacion']
-        
-        # Extract sentiment
-        if 'sesgo_politico' in json_response:
-            bias = str(json_response['sesgo_politico']).lower()
-            if 'extrema' in bias:
-                result["llm_sentiment"] = 'negative'
-            elif 'centro' in bias:
-                result["llm_sentiment"] = 'neutral'
-            else:
-                result["llm_sentiment"] = 'negative'
-        
-        return result
     
     def _extract_text_response(self, generated_text: str, prompt: str) -> Dict:
-        """Extract a consistent explanation format from any model response."""
-        # Clean up the text and remove the prompt
+        """Extract explanation from model response without truncation or modifications."""
+        # Remove the prompt if present
         if prompt in generated_text:
-            response_text = generated_text.replace(prompt, '').strip()
+            explanation = generated_text.replace(prompt, '').strip()
         else:
-            response_text = generated_text.strip()
+            explanation = generated_text.strip()
         
-        # Remove common artifacts
-        response_text = response_text.strip('"').strip("'").strip()
+        # Only remove surrounding quotes if they completely wrap the response
+        if explanation.startswith('"') and explanation.endswith('"'):
+            explanation = explanation[1:-1].strip()
         
-        # Handle very short responses
-        if len(response_text) < 10:
-            raise ValueError(f"Response too short: {response_text}")
-        
-        # Look for the explanation after "Explicación:"
-        if "Explicación:" in response_text:
-            parts = response_text.split("Explicación:")
-            if len(parts) > 1 and len(parts[1].strip()) > 10:
-                explanation = parts[1].strip()
-            else:
-                explanation = response_text
-        else:
-            explanation = response_text
-        
-        # Clean up JSON artifacts that some models produce
-        if explanation.startswith('{ "') or explanation.startswith('{"'):
-            # Extract just the explanation content from JSON-like responses
-            if '"explicacion"' in explanation.lower():
-                import re
-                match = re.search(r'"explicacion[^"]*":\s*"([^"]+)"', explanation.lower())
-                if match:
-                    explanation = match.group(1)
-                else:
-                    # Fallback to first meaningful sentence
-                    explanation = explanation.split('.')[0] if '.' in explanation else explanation[:100]
-        
-        # Remove repeated templates or artifacts
-        if "critico|alto|medio|bajo" in explanation or "lista de tipos detectados" in explanation:
-            # Model is repeating template - extract first meaningful sentence
-            sentences = explanation.split('.')
-            for sentence in sentences:
-                if len(sentence) > 20 and not any(template in sentence for template in ["critico|alto", "lista de", "JSON válido"]):
-                    explanation = sentence.strip()
-                    break
-            else:
-                explanation = "El texto contiene contenido problemático que requiere análisis adicional."
-        
-        # Handle translation artifacts from T5 models
-        if explanation.startswith('"The ') or explanation.startswith('The '):
-            explanation = "Este texto contiene lenguaje discriminatorio o desinformación."
-        
-        # Handle repetitive or nonsensical content
-        if len(explanation) > 200:
-            sentences = explanation.split('.')
-            # Use first meaningful sentence that's not too long
-            for sentence in sentences:
-                if 20 < len(sentence) < 150 and sentence.count(' ') > 3:
-                    explanation = sentence.strip()
-                    break
-            else:
-                explanation = explanation[:150] + "..."
-        
-        # Ensure the explanation is in Spanish and makes sense
-        if not any(spanish_word in explanation.lower() for spanish_word in ['este', 'esta', 'el', 'la', 'texto', 'contiene', 'discurso']):
-            explanation = "Este texto contiene contenido problemático relacionado con discurso de odio, desinformación o extremismo."
+        # Handle empty responses
+        if not explanation or len(explanation) < 5:
+            explanation = "Análisis completado sin respuesta detallada del modelo."
         
         return {
             "llm_explanation": explanation,
