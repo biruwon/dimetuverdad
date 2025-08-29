@@ -206,10 +206,96 @@ Considera especialmente:
     def generate_prompt(self, 
                        text: str, 
                        analysis_type: AnalysisType,
-                       context: Optional[PromptContext] = None) -> str:
+                       context: Optional[PromptContext] = None,
+                       complexity_level: str = "full") -> str:
         """
-        Generate a sophisticated prompt based on the analysis type and context.
+        Generate a prompt based on the analysis type, context, and model complexity level.
+        
+        Args:
+            text: Text to analyze
+            analysis_type: Type of analysis to perform
+            context: Optional context from prior analysis
+            complexity_level: "simple", "medium", or "full" - adapts prompt to model capabilities
         """
+        if complexity_level == "simple":
+            return self._generate_simple_prompt(text, analysis_type)
+        elif complexity_level == "medium":
+            return self._generate_medium_prompt(text, analysis_type, context)
+        else:
+            return self._generate_full_prompt(text, analysis_type, context)
+    
+    def _generate_simple_prompt(self, text: str, analysis_type: AnalysisType) -> str:
+        """Generate a simplified prompt for smaller models using example-based approach."""
+        
+        if analysis_type == AnalysisType.THREAT_ASSESSMENT:
+            return f"""Ejemplo: "Vamos a por vosotros mañana"
+Análisis: Este texto contiene amenazas directas e inmediatas de violencia.
+Nivel: alto
+
+Texto: "{text}"
+Análisis:"""
+        
+        elif analysis_type == AnalysisType.MISINFORMATION:
+            return f"""Ejemplo: "Las vacunas contienen chips de control mental"
+Análisis: Este texto propaga teorías conspirativas sin evidencia científica.
+Tipo: desinformación
+
+Texto: "{text}"
+Análisis:"""
+        
+        else:  # COMPREHENSIVE
+            return f"""Ejemplo: "Los inmigrantes nos roban el trabajo y son criminales"
+Análisis: Este texto promueve xenofobia y estereotipos negativos infundados contra inmigrantes.
+Categoría: discurso de odio
+Nivel: alto
+
+Texto: "{text}"
+Análisis:"""
+    
+    def _generate_medium_prompt(self, text: str, analysis_type: AnalysisType, context: Optional[PromptContext] = None) -> str:
+        """Generate a medium complexity prompt for mid-tier models."""
+        
+        base_instructions = """
+CONTEXTO: Eres un experto analista especializado en detectar activismo de extrema derecha en redes sociales españolas.
+
+DETECTA ESPECÍFICAMENTE:
+- Desinformación y teorías conspiratorias (anti-inmigración, anti-globalización)
+- Incitación al odio contra minorías, inmigrantes, políticos
+- Retórica nacionalista extrema o nostalgia franquista
+- Llamadas a la movilización o acción
+- Sesgos políticos y manipulación emocional
+
+MANTÉN OBJETIVIDAD:
+- Base el análisis en evidencia textual específica
+- Distingue entre opinión política legítima y extremismo
+- Considera el contexto político español actual
+"""
+        
+        # Add simplified context if available
+        context_section = ""
+        if context and context.far_right_score > 0.5:
+            context_section = f"\n⚠️ CONTEXTO: Contenido con puntuación de extrema derecha {context.far_right_score:.2f}"
+        
+        # Get simplified analysis instructions
+        analysis_instructions = self._get_medium_analysis_instructions(analysis_type)
+        
+        # Get simplified output format
+        output_format = self._get_medium_output_format(analysis_type)
+        
+        return f"""{base_instructions}{context_section}
+
+{analysis_instructions}
+
+{output_format}
+
+TEXTO A ANALIZAR:
+"{text}"
+
+RESPUESTA (JSON válido únicamente):"""
+    
+    def _generate_full_prompt(self, text: str, analysis_type: AnalysisType, context: Optional[PromptContext] = None) -> str:
+        """Generate the full sophisticated prompt for advanced models."""
+        # This is the original implementation
         # Start with base instructions
         prompt_parts = [self.base_instructions]
         
@@ -230,6 +316,92 @@ Considera especialmente:
         prompt_parts.append("RESPUESTA (JSON válido únicamente):")
         
         return "\n".join(prompt_parts)
+    
+    def _get_medium_analysis_instructions(self, analysis_type: AnalysisType) -> str:
+        """Get medium complexity analysis instructions."""
+        instructions = {
+            AnalysisType.COMPREHENSIVE: """
+🎯 ANÁLISIS INTEGRAL: Evalúa sistemáticamente:
+
+1. SESGO POLÍTICO: Identifica posicionamiento en el espectro político español
+2. AMENAZAS: Detecta amenazas directas/indirectas contra personas o grupos
+3. DESINFORMACIÓN: Verifica afirmaciones y detecta teorías conspirativas
+4. MOVILIZACIÓN: Identifica llamadas a manifestaciones, boicots, acciones
+5. IMPACTO SOCIAL: Evalúa potencial de incitar odio o radicalización
+
+Considera el contexto político español actual y las tensiones sociales.
+""",
+            
+            AnalysisType.THREAT_ASSESSMENT: """
+🚨 EVALUACIÓN DE AMENAZAS: Analiza:
+
+1. TIPOLOGÍA: Directa, indirecta, condicional o implícita
+2. TEMPORALIDAD: Inmediata, corto plazo, medio/largo plazo
+3. ESPECIFICIDAD: Personas, lugares, grupos, métodos mencionados
+4. ESCALADA: Potencial de amplificación y violencia real
+5. CONTEXTO ESPAÑOL: Marco legal y antecedentes históricos
+
+Prioriza amenazas específicas, temporales y contra objetivos identificables.
+""",
+            
+            AnalysisType.MISINFORMATION: """
+🔍 ANÁLISIS DE DESINFORMACIÓN: Examina:
+
+1. VERIFICACIÓN: Contrasta con fuentes oficiales españolas
+2. TÉCNICAS: Identifica manipulación de datos y técnicas de propaganda
+3. FUENTES: Evalúa credibilidad de referencias citadas
+4. INTENCIONALIDAD: Desinformación deliberada vs. error honesto
+5. IMPACTO ESPAÑOL: Efecto en tensiones sociales y procesos democráticos
+
+Enfócate en desinformación que alimente extremismo de derecha.
+"""
+        }
+        
+        return instructions.get(analysis_type, instructions[AnalysisType.COMPREHENSIVE])
+    
+    def _get_medium_output_format(self, analysis_type: AnalysisType) -> str:
+        """Get medium complexity output format."""
+        if analysis_type == AnalysisType.THREAT_ASSESSMENT:
+            schema = {
+                "nivel_amenaza": "critico|alto|medio|bajo",
+                "tipo_amenaza": ["lista de tipos detectados"],
+                "inmediatez": "inmediata|corto_plazo|medio_plazo|largo_plazo",
+                "objetivos_amenaza": ["objetivos o blancos identificados"],
+                "explicacion": "justificación detallada"
+            }
+        elif analysis_type == AnalysisType.MISINFORMATION:
+            schema = {
+                "es_desinformacion": "true|false",
+                "nivel_confianza": "0.0-1.0",
+                "tipos_desinformacion": ["tipos específicos detectados"],
+                "tecnicas_empleadas": ["técnicas de desinformación"],
+                "explicacion": "análisis detallado"
+            }
+        else:  # COMPREHENSIVE
+            schema = {
+                "sesgo_politico": "extrema_izquierda|izquierda|centro|derecha|extrema_derecha|indefinido",
+                "nivel_amenaza": "critico|alto|medio|bajo",
+                "tecnicas_manipulacion": ["técnicas detectadas"],
+                "grupos_objetivo": ["grupos atacados"],
+                "llamadas_accion": {
+                    "presentes": "true|false",
+                    "tipo": "tipo de acción solicitada",
+                    "urgencia": "inmediata|corto_plazo|largo_plazo"
+                },
+                "explicacion": "explicación detallada del análisis"
+            }
+        
+        return f"""
+FORMATO DE RESPUESTA:
+Responde con un objeto JSON válido:
+
+{json.dumps(schema, indent=2, ensure_ascii=False)}
+
+REQUISITOS:
+- JSON válido sin comentarios
+- Explicaciones claras en español
+- Máximo 100 palabras por explicación
+"""
     
     def _generate_context_section(self, context: PromptContext, analysis_type: AnalysisType) -> str:
         """Generate contextual information section."""
@@ -464,7 +636,8 @@ def create_context_from_analysis(analysis_result: Dict) -> PromptContext:
 
 def generate_enhanced_prompt(text: str, 
                            analysis_type: AnalysisType = AnalysisType.COMPREHENSIVE,
-                           prior_analysis: Optional[Dict] = None) -> str:
+                           prior_analysis: Optional[Dict] = None,
+                           complexity_level: str = "full") -> str:
     """
     Convenience function to generate enhanced prompts.
     """
@@ -474,7 +647,7 @@ def generate_enhanced_prompt(text: str,
     if prior_analysis:
         context = create_context_from_analysis(prior_analysis)
     
-    return generator.generate_prompt(text, analysis_type, context)
+    return generator.generate_prompt(text, analysis_type, context, complexity_level)
 
 # Test the prompt generator
 if __name__ == "__main__":

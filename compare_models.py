@@ -206,10 +206,17 @@ class ModelComparator:
                 specific_models["generation"] = model_name
             else:
                 specific_models["classification"] = model_name
-                # Add a fast generation model for the prompt system
+                # Add a fast generation model for the prompt system, avoiding incompatible ones
                 fast_generation_models = [name for name, config in LLMModelConfig.MODELS.items() 
-                                        if config["task_type"] == "generation" and config["speed"] in ["ultra_fast", "very_fast"]]
-                specific_models["generation"] = fast_generation_models[0] if fast_generation_models else LLMModelConfig.get_fastest_model_for_task("generation")
+                                        if config["task_type"] == "generation" 
+                                        and config["speed"] in ["ultra_fast", "very_fast"]
+                                        and not config.get("compatibility_issues")]  # Exclude incompatible models
+                
+                if fast_generation_models:
+                    specific_models["generation"] = fast_generation_models[0]
+                else:
+                    # Fallback to any safe generation model
+                    specific_models["generation"] = LLMModelConfig.get_fastest_model_for_task("generation")
             
             pipeline = EnhancedLLMPipeline(
                 model_priority="speed",
@@ -275,7 +282,6 @@ class ModelComparator:
                 llm_sentiment=result.get('llm_sentiment', 'neutral'),
                 llm_categories=result.get('llm_categories', [])
             )
-            
         except Exception as e:
             processing_time = time.time() - start_time
             return ModelResult(
@@ -402,7 +408,9 @@ def main():
     parser.add_argument('--models', nargs='+', help='Specific models to test')
     parser.add_argument('--fast-only', action='store_true', help='Test only fast models (< 1GB)')
     parser.add_argument('--spanish-only', action='store_true', help='Test only Spanish-optimized models')
-    parser.add_argument('--max-examples', type=int, help='Maximum number of examples to test')
+    parser.add_argument('--all', action='store_true', help='Test ALL available models (slow!)')
+    parser.add_argument('--quick', action='store_true', help='Quick test with 2 fastest models only')
+    parser.add_argument('--max-examples', type=int, default=3, help='Maximum number of examples to test (default: 3 for speed)')
     parser.add_argument('--save-results', action='store_true', help='Save detailed results to JSON')
     
     args = parser.parse_args()
@@ -411,13 +419,18 @@ def main():
     models_to_test = None
     if args.models:
         models_to_test = args.models
+    elif args.all:
+        models_to_test = list(LLMModelConfig.MODELS.keys())
     elif args.fast_only:
         models_to_test = LLMModelConfig.get_models_by_size(1.0)
     elif args.spanish_only:
         models_to_test = LLMModelConfig.get_spanish_models()
     else:
-        # Default: test a balanced selection of fast models
-        models_to_test = LLMModelConfig.get_balanced_model_selection(6)
+        # Default: test only 1-2 fastest models for quick code validation
+        # Get one super-fast model of each type dynamically
+        fastest_generation = LLMModelConfig.get_fastest_model_for_task("generation")
+        fastest_classification = LLMModelConfig.get_fastest_model_for_task("classification")
+        models_to_test = [fastest_generation, fastest_classification]
     
     print(f"🎯 Modelos seleccionados para prueba: {models_to_test}")
     

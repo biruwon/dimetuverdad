@@ -40,6 +40,7 @@ class LLMModelConfig:
             "task_type": "classification",
             "primary_task": "classification",  # Use classification pipeline directly
             "pipeline_type": "text-classification",
+            "complexity_level": "simple",  # Ultra-fast models use simple prompts
             "generation_params": {},  # No generation params for pure classification
             "max_input_length": 512,
             "language": "multilingual",
@@ -47,41 +48,11 @@ class LLMModelConfig:
             "response_parser": "classification",
             "prompt_removal_strategy": None,
             "model_type": "text",
-            "fallback_params": {}  # Classification models don't need fallback generation params
+            "fallback_params": {},  # Classification models don't need fallback generation params
+            "special_requirements": "Classification only - no generation parameters"
         },
         
         # === FAST MODELS (< 1GB) ===
-        "distilgpt2": {
-            "model_name": "distilgpt2",
-            "description": "Very fast distilled GPT-2 model",
-            "size_gb": 0.3,
-            "speed": "very_fast",
-            "quality": "basic",
-            "free": True,
-            "task_type": "generation",
-            "primary_task": "generation",  # Use generation pipeline
-            "pipeline_type": "text-generation",
-            "generation_params": {
-                "max_new_tokens": 150,
-                "do_sample": True,
-                "temperature": 0.3,
-                "return_full_text": False,
-                "truncation": True
-            },
-            "max_input_length": 800,
-            "language": "english",
-            "requires_tokenizer_config": True,
-            "response_parser": "text_generation",
-            "prompt_removal_strategy": "remove_prompt",
-            "model_type": "text",
-            "fallback_params": {
-                "max_new_tokens": 50,
-                "do_sample": False,
-                "truncation": True,
-                "pad_token_id": 50256
-            }
-        },
-        
         "distilbert-multilingual": {
             "model_name": "distilbert-base-multilingual-cased",
             "description": "Fast multilingual BERT",
@@ -92,12 +63,8 @@ class LLMModelConfig:
             "task_type": "classification",
             "primary_task": "mixed",  # Can do both classification and generation
             "pipeline_type": "text-classification",
-            "generation_params": {
-                "max_new_tokens": 120,
-                "do_sample": True,
-                "temperature": 0.4,
-                "return_full_text": False
-            },
+            "complexity_level": "simple",  # Very fast models use simple prompts
+            "generation_params": {},
             "max_input_length": 512,
             "language": "multilingual",
             "requires_tokenizer_config": False,
@@ -116,14 +83,12 @@ class LLMModelConfig:
             "task_type": "generation",
             "primary_task": "generation",  # Use generation pipeline
             "pipeline_type": "text-generation",
+            "complexity_level": "simple",  # Small Spanish model uses simple prompts
             "generation_params": {
-                "max_new_tokens": 150,
-                "do_sample": True,
-                "temperature": 0.3,
-                "return_full_text": False,
-                "truncation": True
+                "max_new_tokens": 512,
+                "pad_token_id": 50256
             },
-            "max_input_length": 800,
+            "max_input_length": 1500,
             "language": "spanish",
             "requires_tokenizer_config": True,
             "response_parser": "text_generation",
@@ -142,6 +107,7 @@ class LLMModelConfig:
             "task_type": "classification",
             "primary_task": "classification",  # Use classification pipeline directly
             "pipeline_type": "text-classification",
+            "complexity_level": "simple",  # Classification models use simple prompts
             "generation_params": {},
             "max_input_length": 512,
             "language": "spanish",
@@ -161,6 +127,7 @@ class LLMModelConfig:
             "task_type": "classification", 
             "primary_task": "classification",  # Use classification pipeline directly
             "pipeline_type": "text-classification",
+            "complexity_level": "simple",  # Classification models use simple prompts
             "generation_params": {},
             "max_input_length": 512,
             "language": "spanish",
@@ -181,6 +148,7 @@ class LLMModelConfig:
             "task_type": "classification",
             "primary_task": "classification",  # Use classification pipeline directly
             "pipeline_type": "text-classification",
+            "complexity_level": "simple",  # Classification models use simple prompts
             "generation_params": {},
             "max_input_length": 512,
             "language": "english",
@@ -200,6 +168,7 @@ class LLMModelConfig:
             "task_type": "classification",
             "primary_task": "classification",  # Use classification pipeline directly
             "pipeline_type": "text-classification",
+            "complexity_level": "simple",  # Classification models use simple prompts
             "generation_params": {},
             "max_input_length": 512,
             "language": "spanish",
@@ -220,24 +189,20 @@ class LLMModelConfig:
             "task_type": "generation",
             "primary_task": "generation",  # Use generation pipeline
             "pipeline_type": "text-generation",
+            "complexity_level": "medium",  # Mid-tier models can handle medium complexity
             "generation_params": {
-                "max_new_tokens": 200,
-                "do_sample": True,
-                "temperature": 0.3,
-                "return_full_text": False,
-                "truncation": True
+                "max_new_tokens": 512,
+                "pad_token_id": 2
             },
-            "max_input_length": 1000,
+            "max_input_length": 2500,
             "language": "multilingual",
             "requires_tokenizer_config": True,
             "response_parser": "text_generation",
             "prompt_removal_strategy": "remove_prompt",
             "model_type": "text",
             "fallback_params": {
-                "max_new_tokens": 50,
-                "do_sample": False,
-                "truncation": True,
-                "pad_token_id": 50256
+                "max_new_tokens": 512,
+                "pad_token_id": 2
             }
         },
         
@@ -251,24 +216,20 @@ class LLMModelConfig:
             "task_type": "generation",
             "primary_task": "generation",  # Use generation pipeline
             "pipeline_type": "text-generation",
+            "complexity_level": "full",  # Large models can handle full complexity
             "generation_params": {
-                "max_new_tokens": 300,
-                "do_sample": True,
-                "temperature": 0.3,
-                "return_full_text": False,
-                "truncation": True
+                "max_new_tokens": 512,
+                "pad_token_id": 2
             },
-            "max_input_length": 1200,
+            "max_input_length": 5000,
             "language": "multilingual",
             "requires_tokenizer_config": True,
             "response_parser": "text_generation",
             "prompt_removal_strategy": "remove_prompt",
             "model_type": "text",
             "fallback_params": {
-                "max_new_tokens": 50,
-                "do_sample": False,
-                "truncation": True,
-                "pad_token_id": 50256
+                "max_new_tokens": 512,
+                "pad_token_id": 2
             }
         },
 
@@ -283,13 +244,10 @@ class LLMModelConfig:
             "task_type": "generation",
             "primary_task": "generation",
             "pipeline_type": "text-generation",
+            "complexity_level": "simple",  # Small models use simple prompts
             "generation_params": {
-                "max_new_tokens": 200,
-                "do_sample": False,  # Use greedy decoding to avoid sampling issues
-                "temperature": 1.0,  # Keep at 1.0 when do_sample=False
-                "return_full_text": False,
-                "truncation": True,
-                "pad_token_id": 2  # Gemma uses pad_token_id=2
+                "max_new_tokens": 512,
+                "pad_token_id": 2  # Only essential parameters
             },
             "max_input_length": 2000,  # 32K context window
             "language": "multilingual",
@@ -298,9 +256,7 @@ class LLMModelConfig:
             "prompt_removal_strategy": "remove_prompt",
             "model_type": "text",
             "fallback_params": {
-                "max_new_tokens": 50,
-                "do_sample": False,
-                "truncation": True,
+                "max_new_tokens": 512,
                 "pad_token_id": 2
             }
         },
@@ -315,24 +271,19 @@ class LLMModelConfig:
             "task_type": "generation",
             "primary_task": "generation",
             "pipeline_type": "text-generation",
+            "complexity_level": "medium",  # Instruction-tuned can handle medium complexity
             "generation_params": {
-                "max_new_tokens": 250,
-                "do_sample": False,  # Use greedy decoding to avoid sampling issues
-                "temperature": 1.0,  # Keep at 1.0 when do_sample=False
-                "return_full_text": False,
-                "truncation": True,
-                "pad_token_id": 2  # Gemma uses pad_token_id=2
+                "max_new_tokens": 512,
+                "pad_token_id": 2
             },
-            "max_input_length": 2000,  # 32K context window
+            "max_input_length": 3000,  # 32K context window
             "language": "multilingual",
             "requires_tokenizer_config": True,
             "response_parser": "text_generation",
             "prompt_removal_strategy": "remove_prompt",
             "model_type": "text",
             "fallback_params": {
-                "max_new_tokens": 50,
-                "do_sample": False,
-                "truncation": True,
+                "max_new_tokens": 512,
                 "pad_token_id": 2
             }
         },
@@ -347,24 +298,19 @@ class LLMModelConfig:
             "task_type": "generation",
             "primary_task": "generation",
             "pipeline_type": "text-generation",
+            "complexity_level": "full",  # Large multimodal models can handle full complexity
             "generation_params": {
-                "max_new_tokens": 400,
-                "do_sample": False,  # Use greedy decoding to avoid sampling issues
-                "temperature": 1.0,  # Keep at 1.0 when do_sample=False
-                "return_full_text": False,
-                "truncation": True,
-                "pad_token_id": 2  # Gemma uses pad_token_id=2
+                "max_new_tokens": 512,
+                "pad_token_id": 2
             },
-            "max_input_length": 4000,  # 128K context window
+            "max_input_length": 6000,  # 128K context window
             "language": "multilingual",
             "requires_tokenizer_config": True,
             "response_parser": "text_generation",
             "prompt_removal_strategy": "remove_prompt",
             "model_type": "multimodal",  # Supports images
             "fallback_params": {
-                "max_new_tokens": 100,
-                "do_sample": False,
-                "truncation": True,
+                "max_new_tokens": 512,
                 "pad_token_id": 2
             }
         },
@@ -380,12 +326,12 @@ class LLMModelConfig:
             "task_type": "generation",
             "primary_task": "generation",
             "pipeline_type": "text-generation",
+            "complexity_level": "full",  # Large reasoning models can handle full complexity
             "generation_params": {
-                "max_new_tokens": 500,
+                "max_new_tokens": 512,
                 "do_sample": True,
                 "temperature": 0.2,
-                "return_full_text": False,
-                "truncation": True
+                "return_full_text": False
             },
             "max_input_length": 8000,
             "language": "multilingual",
@@ -394,9 +340,7 @@ class LLMModelConfig:
             "prompt_removal_strategy": "remove_prompt",
             "model_type": "text",
             "fallback_params": {
-                "max_new_tokens": 100,
-                "do_sample": False,
-                "truncation": True
+                "max_new_tokens": 512
             },
             "special_requirements": "Requires 8 GPUs with >40GB memory each, uses fp8 quantization"
         },
@@ -412,12 +356,8 @@ class LLMModelConfig:
             "task_type": "classification",
             "primary_task": "mixed",  # Can do both classification and generation
             "pipeline_type": "text-classification",
-            "generation_params": {
-                "max_new_tokens": 100,
-                "do_sample": True,
-                "temperature": 0.4,
-                "return_full_text": False
-            },
+            "complexity_level": "simple",  # Fast models use simple prompts
+            "generation_params": {},
             "max_input_length": 512,
             "language": "english",
             "requires_tokenizer_config": False,
@@ -437,23 +377,18 @@ class LLMModelConfig:
             "task_type": "generation",
             "primary_task": "generation",  # Use generation pipeline
             "pipeline_type": "text2text-generation",
+            "complexity_level": "simple",  # Small T5 models use simple prompts
             "generation_params": {
-                "max_length": 200,
-                "do_sample": True,
-                "temperature": 0.3,
-                "early_stopping": True,
-                "num_beams": 1
+                "max_length": 512
             },
-            "max_input_length": 350,
+            "max_input_length": 1000,
             "language": "multilingual",
             "requires_tokenizer_config": False,
             "response_parser": "text2text_generation",
             "prompt_removal_strategy": None,
             "model_type": "text2text",
             "fallback_params": {
-                "max_length": 150,
-                "do_sample": False,
-                "early_stopping": True
+                "max_length": 512
             }
         },
         
@@ -467,23 +402,18 @@ class LLMModelConfig:
             "task_type": "generation",
             "primary_task": "generation",  # Use generation pipeline
             "pipeline_type": "text2text-generation",
+            "complexity_level": "medium",  # Base T5 models can handle medium complexity
             "generation_params": {
-                "max_length": 250,
-                "do_sample": True,
-                "temperature": 0.3,
-                "early_stopping": True,
-                "num_beams": 1
+                "max_length": 512
             },
-            "max_input_length": 350,
+            "max_input_length": 1200,
             "language": "multilingual",
             "requires_tokenizer_config": False,
             "response_parser": "text2text_generation",
             "prompt_removal_strategy": None,
             "model_type": "text2text",
             "fallback_params": {
-                "max_length": 150,
-                "do_sample": False,
-                "early_stopping": True
+                "max_length": 512
             }
         },
     }
@@ -511,11 +441,17 @@ class LLMModelConfig:
     
     @classmethod
     def get_fast_models(cls) -> List[str]:
-        """Get list of very fast models for comparison."""
-        return [
-            name for name, config in cls.MODELS.items()
-            if config["speed"] in ["ultra_fast", "very_fast"]
-        ]
+        """Get list of very fast models for comparison, excluding incompatible ones."""
+        compatible_models = []
+        for name, config in cls.MODELS.items():
+            # Check if model is fast
+            if config["speed"] in ["ultra_fast", "very_fast"]:
+                # Exclude models with known compatibility issues
+                if not config.get("compatibility_issues"):
+                    compatible_models.append(name)
+                else:
+                    print(f"⚠️ Skipping {name}: {config.get('special_requirements', 'compatibility issues')}")
+        return compatible_models
     
     @classmethod
     def get_spanish_models(cls) -> List[str]:
@@ -554,22 +490,38 @@ class LLMModelConfig:
     
     @classmethod
     def get_fastest_model_for_task(cls, task_type: str = "generation") -> str:
-        """Get the fastest available model for a specific task."""
+        """Get the fastest available model for a specific task, excluding incompatible ones."""
         models = cls.get_models_by_task(task_type)
-        if not models:
-            # Fallback to any fast model
-            models = cls.get_fast_models()
         
-        if not models:
-            # Ultimate fallback - get the smallest model
-            models = list(cls.MODELS.keys())
-            models.sort(key=lambda x: cls.MODELS[x]["size_gb"])
+        # Filter out incompatible models
+        compatible_models = [
+            name for name in models 
+            if not cls.MODELS[name].get("compatibility_issues")
+        ]
+        
+        if not compatible_models:
+            # Fallback to any fast model if no compatible models found
+            all_models = cls.get_fast_models()
+            if all_models:
+                compatible_models = all_models
+            else:
+                # Ultimate fallback - get the smallest compatible model
+                all_compatible = [
+                    name for name, config in cls.MODELS.items()
+                    if not config.get("compatibility_issues")
+                ]
+                if all_compatible:
+                    all_compatible.sort(key=lambda x: cls.MODELS[x]["size_gb"])
+                    compatible_models = all_compatible
+                else:
+                    # Last resort - return any model
+                    compatible_models = list(cls.MODELS.keys())
         
         # Sort by speed (ultra_fast first)
         speed_order = {"ultra_fast": 0, "very_fast": 1, "fast": 2, "medium": 3, "slow": 4}
-        models.sort(key=lambda x: speed_order.get(cls.MODELS[x]["speed"], 5))
+        compatible_models.sort(key=lambda x: speed_order.get(cls.MODELS[x]["speed"], 5))
         
-        return models[0]
+        return compatible_models[0]
     
     @classmethod
     def get_balanced_model_selection(cls, max_models: int = 6) -> List[str]:
@@ -810,20 +762,28 @@ class EnhancedLLMPipeline:
             if quantization_config:
                 model_kwargs["quantization_config"] = quantization_config
             
-            # Adjust device and precision based on model
-            device = 0 if self.device == "cuda" else -1
-            torch_dtype = torch.float16 if self.device in ["cuda", "mps"] else torch.float32
+            # Use CPU by default for stability
+            device = -1  # Default to CPU for stability
+            model_name = gen_config["model_name"]
             
             # Get pipeline type from configuration
             pipeline_type = gen_config.get("pipeline_type", "text-generation")
             
-            # Create pipeline using configuration
+            # Create pipeline using configuration - minimal setup for stability
+            pipeline_kwargs = {
+                "device": device,
+                "torch_dtype": torch.float32,  # Use float32 for stability
+                "trust_remote_code": False
+            }
+            
+            # Add model-specific kwargs if needed
+            if model_kwargs:
+                pipeline_kwargs.update(model_kwargs)
+            
             self.generation_model = pipeline(
                 pipeline_type,
-                model=gen_config["model_name"],
-                device=device,
-                torch_dtype=torch_dtype,
-                model_kwargs=model_kwargs
+                model=model_name,
+                **pipeline_kwargs
             )
             
             # Store model type from configuration
@@ -832,7 +792,7 @@ class EnhancedLLMPipeline:
             # Load tokenizer if required by configuration
             if gen_config.get("requires_tokenizer_config", False):
                 try:
-                    self.tokenizer = AutoTokenizer.from_pretrained(gen_config["model_name"])
+                    self.tokenizer = AutoTokenizer.from_pretrained(model_name)
                     if self.tokenizer.pad_token is None:
                         self.tokenizer.pad_token = self.tokenizer.eos_token
                 except:
@@ -841,44 +801,52 @@ class EnhancedLLMPipeline:
             print("✅ Generation model loaded successfully")
             
         except Exception as e:
-            print(f"⚠️ Generation model failed: {e}")
-            # Fallback to fastest available model
-            try:
-                fallback_model = LLMModelConfig.get_fastest_model_for_task("generation")
-                fallback_config = LLMModelConfig.MODELS[fallback_model]
-                
-                print(f"🔄 Trying fallback model: {fallback_model}")
-                self.generation_model = pipeline(
-                    "text-generation", 
-                    model=fallback_config["model_name"],
-                    device=-1,
-                    max_new_tokens=150
-                )
-                print("✅ Fallback generation model loaded")
-            except:
-                self.generation_model = None
+            print(f"❌ Generation model failed: {e}")
+            # Don't use fallbacks - expose the real error
+            raise e
     
     def _load_classification_model(self, class_config: Dict):
         """Load classification model."""
         try:
             print(f"📦 Loading classification model: {class_config['model_name']}")
             
-            device = 0 if self.device == "cuda" else -1
+            # Force CPU for classification models to avoid device conflicts
+            device = -1
+            
+            # Ensure we don't pass generation parameters to classification models
+            pipeline_kwargs = {
+                "device": device,
+                "return_all_scores": True,
+                "torch_dtype": torch.float32,
+                "trust_remote_code": False
+            }
+            
+            # Check for special requirements
+            special_reqs = class_config.get("special_requirements", "")
+            if "Classification only" in special_reqs:
+                print(f"   ⚠️ {special_reqs}")
             
             self.classification_model = pipeline(
                 "text-classification",
                 model=class_config["model_name"],
-                device=device,
-                return_all_scores=True
+                **pipeline_kwargs
             )
             print("✅ Classification model loaded successfully")
             
         except Exception as e:
-            print(f"⚠️ Classification model failed: {e}")
-            self.classification_model = None
+            print(f"❌ Classification model failed: {e}")
+            # Don't hide errors - expose them for debugging
+            raise e
     
-    def analyze_content(self, text: str, analysis_context: Dict) -> Dict:
-        """Comprehensive LLM analysis using enhanced prompting system."""
+    def analyze_content(self, text: str, analysis_context: Dict = None, analysis_type: AnalysisType = None) -> Dict:
+        """
+        Comprehensive LLM analysis using enhanced prompting system.
+        
+        Args:
+            text: Text to analyze
+            analysis_context: Dict with prior analysis results (optional)
+            analysis_type: Specific analysis type to perform (optional)
+        """
         result = {
             "llm_explanation": "",
             "llm_confidence": 0.0,
@@ -893,6 +861,15 @@ class EnhancedLLMPipeline:
         start_time = time.time()
         
         try:
+            # Handle case where analysis_type is passed as first argument for backwards compatibility
+            if isinstance(analysis_context, AnalysisType):
+                analysis_type = analysis_context
+                analysis_context = {}
+            
+            # Use provided analysis_context or create empty dict
+            if analysis_context is None:
+                analysis_context = {}
+            
             # Create prompt context from analysis results
             prompt_context = create_context_from_analysis(analysis_context)
             
@@ -901,8 +878,9 @@ class EnhancedLLMPipeline:
                 class_result = self._classify_content(text)
                 result.update(class_result)
             
-            # Determine optimal analysis type based on context
-            analysis_type = self._determine_analysis_type(analysis_context)
+            # Determine optimal analysis type based on context or use provided one
+            if analysis_type is None:
+                analysis_type = self._determine_analysis_type(analysis_context)
             
             # Generate sophisticated prompt using EnhancedPromptGenerator
             if self.generation_model:
@@ -919,7 +897,7 @@ class EnhancedLLMPipeline:
             
             # Provide basic fallback analysis
             result["llm_confidence"] = 0.5
-            result["llm_threat_assessment"] = analysis_context.get('threat_level', 'low').lower()
+            result["llm_threat_assessment"] = analysis_context.get('threat_level', 'low') if analysis_context else 'low'
             result["llm_sentiment"] = "neutral"
         
         return result
@@ -954,9 +932,9 @@ class EnhancedLLMPipeline:
             class_config = self.model_info.get("classification", {})
             
             # Check if this should use pure classification approach
+            # Only use classification approach if the GENERATION model is primarily for classification
             use_classification_approach = (
-                gen_config.get("primary_task") == "classification" or 
-                class_config.get("primary_task") == "classification"
+                gen_config.get("primary_task") == "classification"
             )
             
             if use_classification_approach and self.classification_model:
@@ -999,24 +977,24 @@ class EnhancedLLMPipeline:
             
             # For generation models, use text generation
             model_name = gen_config.get("model_name", "unknown")
-            print(f"📝 Using generation approach for {model_name}")
-            # Generate sophisticated prompt
+            complexity_level = gen_config.get("complexity_level", "medium")  # Default to medium if not specified
+            
+            print(f"📝 Using generation approach for {model_name} (complexity: {complexity_level})")
+            
+            # Generate prompt with appropriate complexity level
             enhanced_prompt = self.prompt_generator.generate_prompt(
                 text=text,
                 analysis_type=analysis_type,
-                context=prompt_context
+                context=prompt_context,
+                complexity_level=complexity_level
             )
             
-            # Get generation parameters and input limits from configuration
-            gen_config = self.model_info.get("generation", {})
+            # Get generation parameters from configuration
             generation_params = gen_config.get("generation_params", {}).copy()
             max_input_length = gen_config.get("max_input_length", 800)
             pipeline_type = gen_config.get("pipeline_type", "text-generation")
             
-            # Handle input truncation based on model configuration
-            if len(enhanced_prompt) > max_input_length:
-                enhanced_prompt = enhanced_prompt[:max_input_length] + "..."
-                print(f"🔄 Truncated input to {max_input_length} characters for {gen_config.get('model_name', 'model')}")
+            # No input truncation - prompts are now properly sized for each model
             
             # Add dynamic parameters based on configuration
             requires_tokenizer = gen_config.get("requires_tokenizer_config", False)
@@ -1030,7 +1008,7 @@ class EnhancedLLMPipeline:
             
             # Generate response using the enhanced prompt with error handling
             try:
-                # Input truncation is already handled above based on model configuration
+                # Use full enhanced prompt with proper token limits
                 response = self.generation_model(enhanced_prompt, **generation_params)
             except Exception as gen_error:
                 print(f"⚠️ Generation model error: {gen_error}")
@@ -1043,21 +1021,20 @@ class EnhancedLLMPipeline:
                         parser_type = gen_config.get("response_parser", "text_generation")
                         if parser_type == "text2text_generation":
                             minimal_params = {
-                                "max_length": 150,
+                                "max_length": 512,
                                 "do_sample": False,
                                 "early_stopping": True
                             }
                         else:
                             minimal_params = {
-                                "max_new_tokens": 50,
+                                "max_new_tokens": 512,  # Very conservative
                                 "do_sample": False,
-                                "truncation": True,
-                                "pad_token_id": 50256
+                                "pad_token_id": 50256,
+                                "return_full_text": False
                             }
-                    # Further truncate for fallback
-                    fallback_length = max_input_length // 2
-                    short_prompt = enhanced_prompt[:fallback_length] if len(enhanced_prompt) > fallback_length else enhanced_prompt
-                    response = self.generation_model(short_prompt, **minimal_params)
+                    
+                    # Use full prompt for fallback
+                    response = self.generation_model(enhanced_prompt, **minimal_params)
                 except Exception as fallback_error:
                     print(f"⚠️ Fallback generation also failed: {fallback_error}")
                     # Return fallback response for generation errors
@@ -1081,7 +1058,14 @@ class EnhancedLLMPipeline:
                 
                 # Ensure we have some text to work with
                 if not generated_text or len(str(generated_text).strip()) < 5:
-                    generated_text = "No response generated"
+                    # LLM failed - return error message instead of fallback
+                    return {
+                        "llm_explanation": "Error: El modelo LLM no pudo generar una respuesta",
+                        "llm_confidence": 0.1,
+                        "llm_categories": ["generation_error"],
+                        "llm_sentiment": "neutral",
+                        "llm_threat_assessment": "low"
+                    }
                 
                 # Try to extract JSON response
                 json_response = self._extract_json_response(str(generated_text), enhanced_prompt)
@@ -1090,7 +1074,7 @@ class EnhancedLLMPipeline:
                     # Convert to our standard format
                     return self._convert_enhanced_response(json_response, analysis_type)
                 else:
-                    # Fallback to text extraction
+                    # Extract text response from LLM generation
                     return self._extract_text_response(str(generated_text), enhanced_prompt)
             else:
                 # No response generated - return basic fallback
@@ -1123,13 +1107,31 @@ class EnhancedLLMPipeline:
             # Remove the original prompt
             response_text = generated_text.replace(prompt, '').strip()
             
+            # Skip if the response is just repeating templates
+            if 'o "medio" o "bajo"' in response_text or '"explicacion": "Razón específica:' in response_text:
+                return None
+            
             # Find JSON content
             json_start = response_text.find('{')
             json_end = response_text.rfind('}') + 1
             
             if json_start != -1 and json_end > json_start:
                 json_text = response_text[json_start:json_end]
-                return json.loads(json_text)
+                
+                # Clean up common issues
+                json_text = json_text.replace('"alto" o "medio" o "bajo"', '"alto"')
+                json_text = json_text.replace('"extrema_derecha" o "derecha"', '"extrema_derecha"')
+                
+                try:
+                    parsed = json.loads(json_text)
+                    # Validate it's not just a template
+                    if isinstance(parsed, dict) and 'explicacion' in parsed:
+                        explanation = parsed['explicacion']
+                        if len(explanation) > 20 and 'problemático porque' in explanation:
+                            return parsed
+                except json.JSONDecodeError:
+                    pass
+                    
         except Exception as e:
             print(f"⚠️ JSON extraction error: {e}")
         
@@ -1179,51 +1181,58 @@ class EnhancedLLMPipeline:
         """Extract analysis from text response when JSON parsing fails."""
         response_text = generated_text.replace(prompt, '').strip()
         
-        # Clean up the response
-        if len(response_text) > 400:
-            response_text = response_text[:397] + "..."
+        # Clean up the response - remove extra whitespace and newlines but preserve content
+        response_text = ' '.join(response_text.split())
         
-        # Try to extract useful information from the text
-        confidence = 0.6
-        sentiment = "neutral"
-        threat_assessment = "low"
-        categories = []
+        # For responses that follow expected patterns, extract the relevant part
+        if "Análisis:" in response_text:
+            # Take everything after the last "Análisis:" but limit to reasonable length
+            parts = response_text.split("Análisis:")
+            explanation = parts[-1].strip()
+            
+            # Take first substantial sentence or paragraph, clean up repetitive content
+            sentences = explanation.split('.')
+            clean_explanation = sentences[0].strip()
+            
+            # If first sentence is too short, add more sentences up to reasonable length
+            if len(clean_explanation) < 50 and len(sentences) > 1:
+                for i in range(1, min(len(sentences), 4)):
+                    if sentences[i].strip():
+                        clean_explanation += ". " + sentences[i].strip()
+                        if len(clean_explanation) > 200:  # Reasonable explanation length
+                            break
+            
+            if clean_explanation and len(clean_explanation) > 10:
+                return {
+                    "llm_explanation": clean_explanation,
+                    "llm_confidence": 0.8,
+                    "llm_categories": ["llm_generated"],
+                    "llm_sentiment": "neutral",
+                    "llm_threat_assessment": "unknown"
+                }
         
-        # Simple keyword-based analysis of the generated text
-        text_lower = response_text.lower()
+        # If no pattern found or processing failed, use first part of raw response
+        if len(response_text) < 5:
+            raise ValueError(f"LLM response too short: '{response_text}' - this indicates a generation problem")
         
-        # Look for threat indicators
-        if any(word in text_lower for word in ['peligro', 'amenaza', 'crítico', 'grave', 'riesgo alto']):
-            threat_assessment = "high"
-            confidence = 0.75
-        elif any(word in text_lower for word in ['problema', 'preocup', 'medio', 'moderado']):
-            threat_assessment = "medium"
-            confidence = 0.65
-        
-        # Look for sentiment indicators
-        if any(word in text_lower for word in ['negativ', 'odio', 'desprecio', 'hostil']):
-            sentiment = "negative"
-        elif any(word in text_lower for word in ['positiv', 'neutral', 'equilibr']):
-            sentiment = "positive" if 'positiv' in text_lower else "neutral"
-        
-        # Look for categories
-        if any(word in text_lower for word in ['odio', 'hate', 'discrimin']):
-            categories.append("hate_speech")
-        if any(word in text_lower for word in ['desinform', 'fake', 'falso']):
-            categories.append("misinformation")
-        if any(word in text_lower for word in ['manipul', 'sesgo']):
-            categories.append("manipulation")
-        
-        if not categories:
-            categories = ["general"]
+        # Take first meaningful part of response (first few sentences)
+        sentences = response_text.split('.')
+        explanation = sentences[0].strip()
+        if len(explanation) < 50 and len(sentences) > 1:
+            for i in range(1, min(len(sentences), 3)):
+                if sentences[i].strip():
+                    explanation += ". " + sentences[i].strip()
+                    if len(explanation) > 200:
+                        break
         
         return {
-            "llm_explanation": response_text if response_text else "Análisis completado mediante extracción de texto",
-            "llm_confidence": confidence,
-            "llm_categories": categories,
-            "llm_sentiment": sentiment,
-            "llm_threat_assessment": threat_assessment
+            "llm_explanation": response_text,
+            "llm_confidence": 0.7,  # Lower confidence for non-standard format
+            "llm_categories": ["llm_generated"],
+            "llm_sentiment": "neutral",
+            "llm_threat_assessment": "unknown"
         }
+    
     
     def _classify_content(self, text: str) -> Dict:
         """Fast content classification using configuration-driven parsing."""
@@ -1234,16 +1243,14 @@ class EnhancedLLMPipeline:
             # Get classification model configuration
             class_config = self.model_info.get("classification", {})
             
-            # Truncate text based on model configuration
-            max_length = class_config.get("max_input_length", 512)
-            text_truncated = text[:max_length] if len(text) > max_length else text
+            # Use full text for classification - no truncation
             
             # Get classification results
-            results = self.classification_model(text_truncated)
+            results = self.classification_model(text)
             
             # Use ResponseParser to handle classification results
             if results:
-                return ResponseParser.parse_classification_response(results, text_truncated, class_config)
+                return ResponseParser.parse_classification_response(results, text, class_config)
             
         except Exception as e:
             print(f"⚠️ Classification error: {e}")
