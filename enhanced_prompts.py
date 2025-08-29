@@ -225,97 +225,24 @@ Considera especialmente:
             return self._generate_full_prompt(text, analysis_type, context)
     
     def _generate_simple_prompt(self, text: str, analysis_type: AnalysisType) -> str:
-        """Generate a simplified prompt for smaller models using example-based approach."""
-        
-        if analysis_type == AnalysisType.THREAT_ASSESSMENT:
-            return f"""Ejemplo: "Vamos a por vosotros mañana"
-Análisis: Este texto contiene amenazas directas e inmediatas de violencia.
-Nivel: alto
+        """Generate a unified simple prompt that works consistently across all models."""
+        return f"""Texto: "{text}"
 
-Texto: "{text}"
-Análisis:"""
-        
-        elif analysis_type == AnalysisType.MISINFORMATION:
-            return f"""Ejemplo: "Las vacunas contienen chips de control mental"
-Análisis: Este texto propaga teorías conspirativas sin evidencia científica.
-Tipo: desinformación
-
-Texto: "{text}"
-Análisis:"""
-        
-        else:  # COMPREHENSIVE
-            return f"""Ejemplo: "Los inmigrantes nos roban el trabajo y son criminales"
-Análisis: Este texto promueve xenofobia y estereotipos negativos infundados contra inmigrantes.
-Categoría: discurso de odio
-Nivel: alto
-
-Texto: "{text}"
-Análisis:"""
+¿Por qué este texto es problemático? Responde en una frase clara:"""
     
     def _generate_medium_prompt(self, text: str, analysis_type: AnalysisType, context: Optional[PromptContext] = None) -> str:
-        """Generate a medium complexity prompt for mid-tier models."""
-        
-        base_instructions = """
-CONTEXTO: Eres un experto analista especializado en detectar activismo de extrema derecha en redes sociales españolas.
+        """Generate a unified medium complexity prompt."""
+        return f"""Texto: "{text}"
 
-DETECTA ESPECÍFICAMENTE:
-- Desinformación y teorías conspiratorias (anti-inmigración, anti-globalización)
-- Incitación al odio contra minorías, inmigrantes, políticos
-- Retórica nacionalista extrema o nostalgia franquista
-- Llamadas a la movilización o acción
-- Sesgos políticos y manipulación emocional
-
-MANTÉN OBJETIVIDAD:
-- Base el análisis en evidencia textual específica
-- Distingue entre opinión política legítima y extremismo
-- Considera el contexto político español actual
-"""
-        
-        # Add simplified context if available
-        context_section = ""
-        if context and context.far_right_score > 0.5:
-            context_section = f"\n⚠️ CONTEXTO: Contenido con puntuación de extrema derecha {context.far_right_score:.2f}"
-        
-        # Get simplified analysis instructions
-        analysis_instructions = self._get_medium_analysis_instructions(analysis_type)
-        
-        # Get simplified output format
-        output_format = self._get_medium_output_format(analysis_type)
-        
-        return f"""{base_instructions}{context_section}
-
-{analysis_instructions}
-
-{output_format}
-
-TEXTO A ANALIZAR:
-"{text}"
-
-RESPUESTA (JSON válido únicamente):"""
+¿Por qué este texto contiene discurso de odio, desinformación o extremismo? Explica en 1-2 frases:"""
     
     def _generate_full_prompt(self, text: str, analysis_type: AnalysisType, context: Optional[PromptContext] = None) -> str:
-        """Generate the full sophisticated prompt for advanced models."""
-        # This is the original implementation
-        # Start with base instructions
-        prompt_parts = [self.base_instructions]
-        
-        # Add contextual information if available
-        if context:
-            prompt_parts.append(self._generate_context_section(context, analysis_type))
-        
-        # Add specific instructions for analysis type
-        prompt_parts.append(self._get_analysis_instructions(analysis_type))
-        
-        # Add output format specification
-        prompt_parts.append(self._get_output_format(analysis_type))
-        
-        # Add the text to analyze
-        prompt_parts.append(f'\n\nTEXTO A ANALIZAR:\n"""{text}"""\n')
-        
-        # Add final response instruction
-        prompt_parts.append("RESPUESTA (JSON válido únicamente):")
-        
-        return "\n".join(prompt_parts)
+        """Generate a unified comprehensive prompt."""
+        return f"""Analiza este texto: "{text}"
+
+Explica detalladamente por qué este contenido es problemático, considerando aspectos como discurso de odio, desinformación, teorías conspiratorias o extremismo político.
+
+Explicación:"""
     
     def _get_medium_analysis_instructions(self, analysis_type: AnalysisType) -> str:
         """Get medium complexity analysis instructions."""

@@ -52,9 +52,9 @@ class ModelComparator:
         self.results = []
     
     def _create_test_examples(self) -> List[TestExample]:
-        """Create diverse test examples for comparison."""
+        """Create diverse test examples for comparison - one from each major category."""
         return [
-            # === HATE SPEECH EXAMPLES ===
+            # === HATE SPEECH ===
             TestExample(
                 id="hate_001",
                 text="Los musulmanes son una raza inferior que viene a destruir nuestra cultura cristiana.",
@@ -65,17 +65,18 @@ class ModelComparator:
                 has_claims=False
             ),
             
+            # === DISINFORMATION ===
             TestExample(
-                id="hate_002", 
-                text="Hay que eliminar a todos los extranjeros de España. Son como virus que infectan nuestra sociedad.",
-                category="hate_speech",
-                expected_threat_level="critical",
-                description="Direct threat with dehumanizing language",
-                far_right_score=0.92,
-                has_claims=False
+                id="disinfo_001",
+                text="El 85% de los inmigrantes no trabajan y cobran ayudas del estado. Estudio secreto del gobierno lo confirma.",
+                category="disinformation",
+                expected_threat_level="medium",
+                description="False statistics about immigration",
+                far_right_score=0.70,
+                has_claims=True
             ),
             
-            # === CONSPIRACY THEORIES ===
+            # === CONSPIRACY THEORY ===
             TestExample(
                 id="conspiracy_001",
                 text="Soros financia la inmigración para reemplazar a los europeos. Es el plan Kalergi en acción.",
@@ -86,17 +87,7 @@ class ModelComparator:
                 has_claims=True
             ),
             
-            TestExample(
-                id="conspiracy_002",
-                text="Las vacunas COVID contienen microchips 5G para controlar la población. La élite globalista nos quiere como esclavos.",
-                category="disinformation",
-                expected_threat_level="medium", 
-                description="COVID conspiracy with technology fears",
-                far_right_score=0.65,
-                has_claims=True
-            ),
-            
-            # === CALLS TO ACTION ===
+            # === CALL TO ACTION ===
             TestExample(
                 id="action_001",
                 text="¡CONCENTRACIÓN HOY 18:00 en Cibeles! Hay que salir a las calles a defender España de la invasión.",
@@ -105,27 +96,6 @@ class ModelComparator:
                 description="Urgent mobilization with location and time",
                 far_right_score=0.75,
                 has_claims=False
-            ),
-            
-            TestExample(
-                id="action_002",
-                text="Es hora de actuar, patriotas. Organizad manifestaciones en vuestras ciudades. ¡Despertad!",
-                category="call_to_action", 
-                expected_threat_level="medium",
-                description="General mobilization call",
-                far_right_score=0.60,
-                has_claims=False
-            ),
-            
-            # === MISINFORMATION ===
-            TestExample(
-                id="misinfo_001",
-                text="El 85% de los inmigrantes no trabajan y cobran ayudas del estado. Estudio secreto del gobierno lo confirma.",
-                category="disinformation",
-                expected_threat_level="medium",
-                description="False statistics about immigration",
-                far_right_score=0.70,
-                has_claims=True
             ),
             
             # === POLITICAL BIAS ===
@@ -147,16 +117,6 @@ class ModelComparator:
                 expected_threat_level="low",
                 description="Normal everyday content",
                 far_right_score=0.0,
-                has_claims=False
-            ),
-            
-            TestExample(
-                id="normal_002", 
-                text="Interesante artículo sobre la economía española en El País. Habrá que ver cómo evoluciona la inflación.",
-                category="general",
-                expected_threat_level="low",
-                description="Normal news discussion",
-                far_right_score=0.1,
                 has_claims=False
             )
         ]
@@ -408,6 +368,7 @@ def main():
     parser.add_argument('--models', nargs='+', help='Specific models to test')
     parser.add_argument('--fast-only', action='store_true', help='Test only fast models (< 1GB)')
     parser.add_argument('--spanish-only', action='store_true', help='Test only Spanish-optimized models')
+    parser.add_argument('--generation-only', action='store_true', help='Test only text generation models')
     parser.add_argument('--all', action='store_true', help='Test ALL available models (slow!)')
     parser.add_argument('--quick', action='store_true', help='Quick test with 2 fastest models only')
     parser.add_argument('--max-examples', type=int, default=3, help='Maximum number of examples to test (default: 3 for speed)')
@@ -425,6 +386,9 @@ def main():
         models_to_test = LLMModelConfig.get_models_by_size(1.0)
     elif args.spanish_only:
         models_to_test = LLMModelConfig.get_spanish_models()
+    elif args.generation_only:
+        # Get all generation models
+        models_to_test = LLMModelConfig.get_models_by_task("generation")
     else:
         # Default: test only 1-2 fastest models for quick code validation
         # Get one super-fast model of each type dynamically
@@ -436,7 +400,7 @@ def main():
     
     # Run comparison
     comparator = ModelComparator()
-    results = comparator.run_comparison(models_to_test, args.max_examples)
+    comparator.run_comparison(models_to_test, args.max_examples)
     
     # Show summary
     comparator.print_summary_report()

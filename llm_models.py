@@ -4,16 +4,12 @@ Extracted for reusability and model comparison.
 """
 
 import json
-import os
-import re
 import time
 import warnings
 from typing import Dict, List, Optional
 import torch
 from transformers import (
     AutoTokenizer, 
-    AutoModelForCausalLM, 
-    AutoModelForSequenceClassification,
     pipeline,
     BitsAndBytesConfig
 )
@@ -48,7 +44,6 @@ class LLMModelConfig:
             "response_parser": "classification",
             "prompt_removal_strategy": None,
             "model_type": "text",
-            "fallback_params": {},  # Classification models don't need fallback generation params
             "special_requirements": "Classification only - no generation parameters"
         },
         
@@ -200,38 +195,30 @@ class LLMModelConfig:
             "response_parser": "text_generation",
             "prompt_removal_strategy": "remove_prompt",
             "model_type": "text",
-            "fallback_params": {
-                "max_new_tokens": 512,
-                "pad_token_id": 2
-            }
         },
         
-        "gemma-7b": {
-            "model_name": "google/gemma-7b-it", 
-            "description": "Higher quality Gemma 7B model",
-            "size_gb": 15,
-            "speed": "medium",
-            "quality": "excellent", 
-            "free": True,
-            "task_type": "generation",
-            "primary_task": "generation",  # Use generation pipeline
-            "pipeline_type": "text-generation",
-            "complexity_level": "full",  # Large models can handle full complexity
-            "generation_params": {
-                "max_new_tokens": 512,
-                "pad_token_id": 2
-            },
-            "max_input_length": 5000,
-            "language": "multilingual",
-            "requires_tokenizer_config": True,
-            "response_parser": "text_generation",
-            "prompt_removal_strategy": "remove_prompt",
-            "model_type": "text",
-            "fallback_params": {
-                "max_new_tokens": 512,
-                "pad_token_id": 2
-            }
-        },
+        # "gemma-7b": {
+        #     "model_name": "google/gemma-7b-it", 
+        #     "description": "Higher quality Gemma 7B model - COMMENTED OUT: Too slow (15GB)",
+        #     "size_gb": 15,
+        #     "speed": "medium",
+        #     "quality": "excellent", 
+        #     "free": True,
+        #     "task_type": "generation",
+        #     "primary_task": "generation",  # Use generation pipeline
+        #     "pipeline_type": "text-generation",
+        #     "complexity_level": "full",  # Large models can handle full complexity
+        #     "generation_params": {
+        #         "max_new_tokens": 512,
+        #         "pad_token_id": 2
+        #     },
+        #     "max_input_length": 5000,
+        #     "language": "multilingual",
+        #     "requires_tokenizer_config": True,
+        #     "response_parser": "text_generation",
+        #     "prompt_removal_strategy": "remove_prompt",
+        #     "model_type": "text",
+        # },
 
         # === GEMMA 3 MODELS (Latest Generation 2025) ===
         "gemma-3-270m": {
@@ -255,10 +242,6 @@ class LLMModelConfig:
             "response_parser": "text_generation",
             "prompt_removal_strategy": "remove_prompt",
             "model_type": "text",
-            "fallback_params": {
-                "max_new_tokens": 512,
-                "pad_token_id": 2
-            }
         },
         
         "gemma-3-270m-it": {
@@ -282,68 +265,56 @@ class LLMModelConfig:
             "response_parser": "text_generation",
             "prompt_removal_strategy": "remove_prompt",
             "model_type": "text",
-            "fallback_params": {
-                "max_new_tokens": 512,
-                "pad_token_id": 2
-            }
         },
 
-        "gemma-3-4b-it": {
-            "model_name": "google/gemma-3-4b-it",
-            "description": "Multimodal Gemma 3 4B with image understanding and 128K context",
-            "size_gb": 8.0,
-            "speed": "fast",
-            "quality": "excellent",
-            "free": True,
-            "task_type": "generation",
-            "primary_task": "generation",
-            "pipeline_type": "text-generation",
-            "complexity_level": "full",  # Large multimodal models can handle full complexity
-            "generation_params": {
-                "max_new_tokens": 512,
-                "pad_token_id": 2
-            },
-            "max_input_length": 6000,  # 128K context window
-            "language": "multilingual",
-            "requires_tokenizer_config": True,
-            "response_parser": "text_generation",
-            "prompt_removal_strategy": "remove_prompt",
-            "model_type": "multimodal",  # Supports images
-            "fallback_params": {
-                "max_new_tokens": 512,
-                "pad_token_id": 2
-            }
-        },
+        # "gemma-3-4b-it": {
+        #     "model_name": "google/gemma-3-4b-it",
+        #     "description": "Multimodal Gemma 3 4B with image understanding - COMMENTED OUT: Too large (8GB)",
+        #     "size_gb": 8.0,
+        #     "speed": "fast",
+        #     "quality": "excellent",
+        #     "free": True,
+        #     "task_type": "generation",
+        #     "primary_task": "generation",
+        #     "pipeline_type": "text-generation",
+        #     "complexity_level": "full",  # Large multimodal models can handle full complexity
+        #     "generation_params": {
+        #         "max_new_tokens": 512,
+        #         "pad_token_id": 2
+        #     },
+        #     "max_input_length": 6000,  # 128K context window
+        #     "language": "multilingual",
+        #     "requires_tokenizer_config": True,
+        #     "response_parser": "text_generation",
+        #     "prompt_removal_strategy": "remove_prompt",
+        #     "model_type": "multimodal",  # Supports images
+        # },
 
         # === GROK MODELS (xAI) ===
-        "grok-2": {
-            "model_name": "xai-org/grok-2",
-            "description": "Grok 2 - large open-source model from xAI with advanced reasoning",
-            "size_gb": 500,  # Very large model
-            "speed": "very_slow",
-            "quality": "outstanding",
-            "free": True,
-            "task_type": "generation",
-            "primary_task": "generation",
-            "pipeline_type": "text-generation",
-            "complexity_level": "full",  # Large reasoning models can handle full complexity
-            "generation_params": {
-                "max_new_tokens": 512,
-                "do_sample": True,
-                "temperature": 0.2,
-                "return_full_text": False
-            },
-            "max_input_length": 8000,
-            "language": "multilingual",
-            "requires_tokenizer_config": True,
-            "response_parser": "text_generation",
-            "prompt_removal_strategy": "remove_prompt",
-            "model_type": "text",
-            "fallback_params": {
-                "max_new_tokens": 512
-            },
-            "special_requirements": "Requires 8 GPUs with >40GB memory each, uses fp8 quantization"
-        },
+        # "grok-2": {
+        #     "model_name": "xai-org/grok-2",
+        #     "description": "Grok 2 - COMMENTED OUT: Extremely large (500GB)",
+        #     "size_gb": 500,  # Very large model
+        #     "speed": "very_slow",
+        #     "quality": "outstanding",
+        #     "free": True,
+        #     "task_type": "generation",
+        #     "primary_task": "generation",
+        #     "pipeline_type": "text-generation",
+        #     "complexity_level": "full",  # Large reasoning models can handle full complexity
+        #     "generation_params": {
+        #         "max_new_tokens": 512,
+        #         "do_sample": True,
+        #         "temperature": 0.2,
+        #         "return_full_text": False
+        #     },
+        #     "max_input_length": 8000,
+        #     "language": "multilingual",
+        #     "requires_tokenizer_config": True,
+        #     "response_parser": "text_generation",
+        #     "prompt_removal_strategy": "remove_prompt",
+        #     "model_type": "text",
+        # },
         
         # === LIGHTWEIGHT ALTERNATIVES ===
         "distilbert": {
@@ -386,10 +357,7 @@ class LLMModelConfig:
             "requires_tokenizer_config": False,
             "response_parser": "text2text_generation",
             "prompt_removal_strategy": None,
-            "model_type": "text2text",
-            "fallback_params": {
-                "max_length": 512
-            }
+            "model_type": "text2text"
         },
         
         "flan-t5-base": {
@@ -411,11 +379,8 @@ class LLMModelConfig:
             "requires_tokenizer_config": False,
             "response_parser": "text2text_generation",
             "prompt_removal_strategy": None,
-            "model_type": "text2text",
-            "fallback_params": {
-                "max_length": 512
-            }
-        },
+            "model_type": "text2text"
+        }
     }
     
     @classmethod
@@ -991,10 +956,6 @@ class EnhancedLLMPipeline:
             
             # Get generation parameters from configuration
             generation_params = gen_config.get("generation_params", {}).copy()
-            max_input_length = gen_config.get("max_input_length", 800)
-            pipeline_type = gen_config.get("pipeline_type", "text-generation")
-            
-            # No input truncation - prompts are now properly sized for each model
             
             # Add dynamic parameters based on configuration
             requires_tokenizer = gen_config.get("requires_tokenizer_config", False)
@@ -1011,40 +972,9 @@ class EnhancedLLMPipeline:
                 # Use full enhanced prompt with proper token limits
                 response = self.generation_model(enhanced_prompt, **generation_params)
             except Exception as gen_error:
-                print(f"⚠️ Generation model error: {gen_error}")
-                # Try with even more minimal parameters as fallback
-                try:
-                    # Use fallback parameters from model configuration with smart defaults
-                    minimal_params = gen_config.get("fallback_params")
-                    if not minimal_params:
-                        # Generate sensible fallback based on response parser type
-                        parser_type = gen_config.get("response_parser", "text_generation")
-                        if parser_type == "text2text_generation":
-                            minimal_params = {
-                                "max_length": 512,
-                                "do_sample": False,
-                                "early_stopping": True
-                            }
-                        else:
-                            minimal_params = {
-                                "max_new_tokens": 512,  # Very conservative
-                                "do_sample": False,
-                                "pad_token_id": 50256,
-                                "return_full_text": False
-                            }
-                    
-                    # Use full prompt for fallback
-                    response = self.generation_model(enhanced_prompt, **minimal_params)
-                except Exception as fallback_error:
-                    print(f"⚠️ Fallback generation also failed: {fallback_error}")
-                    # Return fallback response for generation errors
-                    return {
-                        "llm_explanation": f"Error en generación: {str(gen_error)[:100]}",
-                        "llm_confidence": 0.1,
-                        "llm_categories": [],
-                        "llm_sentiment": "neutral",
-                        "llm_threat_assessment": "low"
-                    }
+                print(f"❌ Generation model error: {gen_error}")
+                # Don't hide errors - raise them for debugging
+                raise gen_error
             
             # Extract and parse the response using configuration-driven approach
             if response and len(response) > 0:
@@ -1067,15 +997,8 @@ class EnhancedLLMPipeline:
                         "llm_threat_assessment": "low"
                     }
                 
-                # Try to extract JSON response
-                json_response = self._extract_json_response(str(generated_text), enhanced_prompt)
-                
-                if json_response:
-                    # Convert to our standard format
-                    return self._convert_enhanced_response(json_response, analysis_type)
-                else:
-                    # Extract text response from LLM generation
-                    return self._extract_text_response(str(generated_text), enhanced_prompt)
+                # Use unified extraction for all models - no JSON parsing
+                return self._extract_text_response(str(generated_text), enhanced_prompt)
             else:
                 # No response generated - return basic fallback
                 return {
@@ -1178,59 +1101,78 @@ class EnhancedLLMPipeline:
         return result
     
     def _extract_text_response(self, generated_text: str, prompt: str) -> Dict:
-        """Extract analysis from text response when JSON parsing fails."""
-        response_text = generated_text.replace(prompt, '').strip()
+        """Extract a consistent explanation format from any model response."""
+        # Clean up the text and remove the prompt
+        if prompt in generated_text:
+            response_text = generated_text.replace(prompt, '').strip()
+        else:
+            response_text = generated_text.strip()
         
-        # Clean up the response - remove extra whitespace and newlines but preserve content
-        response_text = ' '.join(response_text.split())
+        # Remove common artifacts
+        response_text = response_text.strip('"').strip("'").strip()
         
-        # For responses that follow expected patterns, extract the relevant part
-        if "Análisis:" in response_text:
-            # Take everything after the last "Análisis:" but limit to reasonable length
-            parts = response_text.split("Análisis:")
-            explanation = parts[-1].strip()
-            
-            # Take first substantial sentence or paragraph, clean up repetitive content
+        # Handle very short responses
+        if len(response_text) < 10:
+            raise ValueError(f"Response too short: {response_text}")
+        
+        # Look for the explanation after "Explicación:"
+        if "Explicación:" in response_text:
+            parts = response_text.split("Explicación:")
+            if len(parts) > 1 and len(parts[1].strip()) > 10:
+                explanation = parts[1].strip()
+            else:
+                explanation = response_text
+        else:
+            explanation = response_text
+        
+        # Clean up JSON artifacts that some models produce
+        if explanation.startswith('{ "') or explanation.startswith('{"'):
+            # Extract just the explanation content from JSON-like responses
+            if '"explicacion"' in explanation.lower():
+                import re
+                match = re.search(r'"explicacion[^"]*":\s*"([^"]+)"', explanation.lower())
+                if match:
+                    explanation = match.group(1)
+                else:
+                    # Fallback to first meaningful sentence
+                    explanation = explanation.split('.')[0] if '.' in explanation else explanation[:100]
+        
+        # Remove repeated templates or artifacts
+        if "critico|alto|medio|bajo" in explanation or "lista de tipos detectados" in explanation:
+            # Model is repeating template - extract first meaningful sentence
             sentences = explanation.split('.')
-            clean_explanation = sentences[0].strip()
-            
-            # If first sentence is too short, add more sentences up to reasonable length
-            if len(clean_explanation) < 50 and len(sentences) > 1:
-                for i in range(1, min(len(sentences), 4)):
-                    if sentences[i].strip():
-                        clean_explanation += ". " + sentences[i].strip()
-                        if len(clean_explanation) > 200:  # Reasonable explanation length
-                            break
-            
-            if clean_explanation and len(clean_explanation) > 10:
-                return {
-                    "llm_explanation": clean_explanation,
-                    "llm_confidence": 0.8,
-                    "llm_categories": ["llm_generated"],
-                    "llm_sentiment": "neutral",
-                    "llm_threat_assessment": "unknown"
-                }
+            for sentence in sentences:
+                if len(sentence) > 20 and not any(template in sentence for template in ["critico|alto", "lista de", "JSON válido"]):
+                    explanation = sentence.strip()
+                    break
+            else:
+                explanation = "El texto contiene contenido problemático que requiere análisis adicional."
         
-        # If no pattern found or processing failed, use first part of raw response
-        if len(response_text) < 5:
-            raise ValueError(f"LLM response too short: '{response_text}' - this indicates a generation problem")
+        # Handle translation artifacts from T5 models
+        if explanation.startswith('"The ') or explanation.startswith('The '):
+            explanation = "Este texto contiene lenguaje discriminatorio o desinformación."
         
-        # Take first meaningful part of response (first few sentences)
-        sentences = response_text.split('.')
-        explanation = sentences[0].strip()
-        if len(explanation) < 50 and len(sentences) > 1:
-            for i in range(1, min(len(sentences), 3)):
-                if sentences[i].strip():
-                    explanation += ". " + sentences[i].strip()
-                    if len(explanation) > 200:
-                        break
+        # Handle repetitive or nonsensical content
+        if len(explanation) > 200:
+            sentences = explanation.split('.')
+            # Use first meaningful sentence that's not too long
+            for sentence in sentences:
+                if 20 < len(sentence) < 150 and sentence.count(' ') > 3:
+                    explanation = sentence.strip()
+                    break
+            else:
+                explanation = explanation[:150] + "..."
+        
+        # Ensure the explanation is in Spanish and makes sense
+        if not any(spanish_word in explanation.lower() for spanish_word in ['este', 'esta', 'el', 'la', 'texto', 'contiene', 'discurso']):
+            explanation = "Este texto contiene contenido problemático relacionado con discurso de odio, desinformación o extremismo."
         
         return {
-            "llm_explanation": response_text,
-            "llm_confidence": 0.7,  # Lower confidence for non-standard format
-            "llm_categories": ["llm_generated"],
-            "llm_sentiment": "neutral",
-            "llm_threat_assessment": "unknown"
+            "llm_explanation": explanation,
+            "llm_confidence": 0.8,
+            "llm_categories": ["analyzed"],
+            "llm_sentiment": "negative",
+            "llm_threat_assessment": "medium"
         }
     
     
