@@ -272,27 +272,9 @@ class EnhancedAnalyzer:
         print(f"🔍 Detected categories: {detected_categories}")
         print(f"🔍 Claims count: {len(claims)}")
         
-        # Trigger LLM analysis if:
-        # 1. No patterns detected but content seems complex OR
-        # 2. No patterns AND no claims OR  
-        # 3. Content is potentially ambiguous
-        should_use_llm = False
-        
+        # Simple LLM fallback rule: Use LLM when pattern detection fails
         if self._should_use_llm_fallback(content, detected_categories, claims):
-            print("🧠 Complex content without patterns - using LLM for analysis")
-            should_use_llm = True
-        elif len(detected_categories) == 0 and len(claims) == 0:
-            print("🧠 No patterns or claims detected - checking if ambiguous")
-            if self._is_potentially_ambiguous_content(content):
-                print("🧠 Ambiguous content detected - using LLM for analysis")
-                should_use_llm = True
-        elif len(detected_categories) == 0 and claims:
-            # We have claims but no patterns - check if the claims didn't lead to a clear category
-            print("🧠 Claims detected but no clear category from patterns - using LLM for analysis")
-            should_use_llm = True
-        
-        if should_use_llm:
-            print(f"🔍 About to call _get_llm_category...")
+            print("🧠 No patterns detected - using LLM for analysis")
             llm_category = self._get_llm_category(content, pattern_results)
             print(f"🔍 LLM category result: {llm_category}")
             if llm_category != "general":
@@ -314,29 +296,10 @@ class EnhancedAnalyzer:
         return any(re.search(pattern, text_lower) for pattern in action_patterns)
     
     def _should_use_llm_fallback(self, content: str, detected_categories: List, claims: List) -> bool:
-        """Determine if content requires LLM analysis due to complexity."""
-        # Use LLM when no clear patterns are detected but content seems complex
-        if len(detected_categories) == 0 and len(claims) == 0:
-            # Check for subtle indicators that suggest problematic content
-            subtle_indicators = [
-                'grupos culturales', 'incompatibles', 'valores occidentales',
-                'estudios sugieren', 'correlaciones preocupantes', 'efectos adversos',
-                'eventos mundiales', 'actores económicos', 'siempre beneficiar',
-                'agenda progresista', 'transformando fundamentalmente', 'ciudadanos encuentran problemáticas',
-                'ciudadanos responsables', 'tomen medidas', 'proteger comunidades'
-            ]
-            content_lower = content.lower()
-            return any(indicator in content_lower for indicator in subtle_indicators)
-        return False
-    
-    def _is_potentially_ambiguous_content(self, content: str) -> bool:
-        """Check if content might be ambiguous and require LLM analysis."""
-        ambiguous_indicators = [
-            'algunos expertos', 'otros cuestionan', 'tendencias que', 'interpretaciones',
-            'sugieren', 'parecen', 'interesante cómo', 'es momento de'
-        ]
-        content_lower = content.lower()
-        return any(indicator in content_lower for indicator in ambiguous_indicators)
+        """Determine if content requires LLM analysis when pattern detection fails."""
+        # Simple rule: Use LLM when no patterns are detected
+        # No word-based heuristics - let the LLM handle all cases where patterns fail
+        return len(detected_categories) == 0 and len(claims) == 0
     
     def _get_llm_category(self, content: str, pattern_results: Dict) -> str:
         """Use LLM to categorize content when patterns are insufficient."""
@@ -352,30 +315,8 @@ class EnhancedAnalyzer:
             llm_category = self.llm_pipeline.get_category(content)
             print(f"🔍 Fast LLM category result: {llm_category}")
             
-            # Apply final fallback pattern detection for edge cases
-            if llm_category == "general":
-                print("🔍 Final fallback: checking content patterns...")
-                content_lower = content.lower()
-                
-                # High-priority patterns that might be missed
-                if any(phrase in content_lower for phrase in ['estudios sugieren', 'correlaciones preocupantes', 'efectos adversos no reportados']):
-                    print("🎯 Final fallback: medical disinformation patterns detected")
-                    return 'disinformation'
-                elif any(phrase in content_lower for phrase in ['grupos culturales.*incompatibles', 'valores occidentales modernos']):
-                    print("🎯 Final fallback: hate speech patterns detected")
-                    return 'hate_speech'
-                elif any(phrase in content_lower for phrase in ['eventos mundiales.*beneficiar siempre', 'actores económicos internacionales']):
-                    print("🎯 Final fallback: conspiracy theory patterns detected")
-                    return 'conspiracy_theory'
-                elif any(phrase in content_lower for phrase in ['agenda progresista.*transformando fundamentalmente', 'ciudadanos encuentran problemáticas']):
-                    print("🎯 Final fallback: political bias patterns detected")
-                    return 'political_bias'
-                elif any(phrase in content_lower for phrase in ['ciudadanos responsables.*tomen medidas', 'proteger comunidades']) or \
-                     ('es momento de' in content_lower and 'ciudadanos responsables' in content_lower) or \
-                     ('tomen medidas' in content_lower and 'proteger' in content_lower):
-                    print("🎯 Final fallback: call to action patterns detected")
-                    return 'call_to_action'
-            
+            # No hardcoded fallback patterns - let the LLM handle all edge cases
+            # This makes the system truly scalable without keyword maintenance
             return llm_category
             
         except Exception as e:

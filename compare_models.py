@@ -372,7 +372,7 @@ def main():
     parser.add_argument('--ollama', action='store_true', help='Test only Ollama models (requires Ollama server)')
     parser.add_argument('--all', action='store_true', help='Test ALL available models (slow!)')
     parser.add_argument('--quick', action='store_true', help='Quick test with 2 fastest models only')
-    parser.add_argument('--max-examples', type=int, default=3, help='Maximum number of examples to test (default: 3 for speed)')
+    parser.add_argument('--max-examples', type=int, default=1, help='Maximum number of examples to test (default: 1 for speed)')
     parser.add_argument('--save-results', action='store_true', help='Save detailed results to JSON')
     
     args = parser.parse_args()
