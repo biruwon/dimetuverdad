@@ -1,487 +1,346 @@
 """
-Advanced claim detection and fact-checking pipeline for Spanish content.
-Specializes in detecting verifiable claims, misinformation patterns, and fact-check opportunities.
+Spanish claim detection system for identifying verifiable statements.
+Detects factual claims, statistics, and verifiable assertions in Spanish text.
 """
 
 import re
-import json
-from typing import List, Dict, Tuple, Optional, Set
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 from enum import Enum
-from datetime import datetime
 
 class ClaimType(Enum):
-    STATISTICAL = "estadística"
-    FACTUAL = "factual"
-    PREDICTION = "predicción"
-    HISTORICAL = "histórica"
-    SCIENTIFIC = "científica"
-    LEGAL = "legal"
-    ECONOMIC = "económica"
-    MEDICAL = "médica"
-    ELECTORAL = "electoral"
-    POLICY = "política_pública"
-    CONSPIRACY = "conspiración"
-    TESTIMONIAL = "testimonial"
+    ESTADISTICA = "estadística"
+    MEDICA = "médica"
+    ECONOMICA = "económica"
+    HISTORICA = "histórica"
+    CIENTIFICA = "científica"
+    POLITICA = "política"
+    SOCIAL = "social"
+    DEMOGRAFICA = "demográfica"
+    GENERAL = "general"
 
 class VerifiabilityLevel(Enum):
-    HIGH = "alta"          # Easily verifiable with official sources
-    MEDIUM = "media"       # Verifiable with some research
-    LOW = "baja"          # Difficult to verify
-    NONE = "no_verificable" # Opinion or subjective statement
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
 
-class ClaimUrgency(Enum):
-    CRITICAL = "crítica"   # Immediate fact-checking needed
-    HIGH = "alta"         # Should be fact-checked soon
-    MEDIUM = "media"      # Worth fact-checking
-    LOW = "baja"          # Less urgent
+class UrgencyLevel(Enum):
+    URGENT = "urgent"
+    NORMAL = "normal"
+    LOW = "low"
 
 @dataclass
-class DetectedClaim:
+class Claim:
     text: str
     claim_type: ClaimType
     verifiability: VerifiabilityLevel
-    urgency: ClaimUrgency
+    urgency: UrgencyLevel
     confidence: float
     key_entities: List[str]
-    numerical_data: List[str]
-    temporal_references: List[str]
-    source_indicators: List[str]
     verification_keywords: List[str]
-    context: str
 
 class SpanishClaimDetector:
     """
-    Advanced claim detection system optimized for Spanish political and social content.
-    Focuses on identifying verifiable statements that may require fact-checking.
+    Detects and classifies factual claims in Spanish text.
+    Identifies statements that can be fact-checked and verified.
     """
     
     def __init__(self):
         self.claim_patterns = self._initialize_claim_patterns()
         self.entity_patterns = self._initialize_entity_patterns()
-        self.temporal_patterns = self._initialize_temporal_patterns()
-        self.source_patterns = self._initialize_source_patterns()
-        self.urgency_amplifiers = self._initialize_urgency_amplifiers()
-        self.misinformation_flags = self._initialize_misinformation_flags()
-    
-    def _initialize_claim_patterns(self) -> Dict[ClaimType, List[Tuple[str, float]]]:
-        """Initialize patterns for different types of claims."""
+        self.urgency_indicators = self._initialize_urgency_indicators()
+        
+    def _initialize_claim_patterns(self) -> Dict[ClaimType, List[Dict]]:
+        """Initialize patterns for detecting different types of claims."""
         return {
-            ClaimType.STATISTICAL: [
-                (r'\b\d+(?:[,.]\d+)*\s*%\b', 0.9),  # Percentages
-                (r'\b\d+(?:[,.]\d+)*\s*(?:millones?|miles?|billones?)\b', 0.8),  # Large numbers
-                (r'\b(?:aumentó|disminuyó|creció|bajó)\s+(?:un?\s+)?\d+', 0.8),  # Statistical changes
-                (r'\b(?:datos?|estadísticas?|cifras?|números?)\s+(?:oficiales?|del?\s+gobierno)\b', 0.7),
-                (r'\b(?:según|de\s+acuerdo\s+a)\s+(?:estudios?|informes?|encuestas?)\b', 0.7),
-                (r'\b\d+\s+de\s+cada\s+\d+\b', 0.8),  # Ratios
-                (r'\b(?:la\s+mayoría|la\s+minoría|el\s+\d+%)\s+de\s+(?:los?\s+)?españoles\b', 0.7)
+            ClaimType.ESTADISTICA: [
+                {
+                    'pattern': r'\b(\d+(?:[.,]\d+)*)\s*%\s+(?:de\s+)?(?:los\s+)?(\w+)',
+                    'weight': 0.9,
+                    'description': 'Porcentajes con grupos'
+                },
+                {
+                    'pattern': r'\b(?:según|conforme\s+a|de\s+acuerdo\s+con)\s+(?:el\s+)?(\w+),?\s+(\d+(?:[.,]\d+)*)',
+                    'weight': 0.8,
+                    'description': 'Estadísticas con fuente'
+                },
+                {
+                    'pattern': r'\b(\d+(?:[.,]\d+)*)\s+(?:millones?|miles?|euros?|personas?|casos?)\s+(?:de\s+)?(\w+)',
+                    'weight': 0.7,
+                    'description': 'Cifras absolutas'
+                },
+                {
+                    'pattern': r'\b(?:aumentó|disminuyó|creció|bajó)\s+(?:un\s+)?(\d+(?:[.,]\d+)*)\s*%',
+                    'weight': 0.8,
+                    'description': 'Cambios porcentuales'
+                }
             ],
             
-            ClaimType.FACTUAL: [
-                (r'\b(?:es\s+(?:un\s+)?hecho|es\s+verdad|es\s+falso|es\s+mentira)\s+que\b', 0.9),
-                (r'\b(?:confirmó|desmintió|reveló|anunció|declaró)\s+que\b', 0.8),
-                (r'\b(?:se\s+ha\s+(?:confirmado|demostrado|probado))\s+que\b', 0.8),
-                (r'\b(?:la\s+realidad\s+es|lo\s+cierto\s+es|en\s+realidad)\b', 0.7),
-                (r'\b(?:está\s+(?:confirmado|demostrado|probado))\s+que\b', 0.8),
-                (r'\b(?:nadie\s+puede\s+negar|es\s+innegable)\s+que\b', 0.7)
+            ClaimType.MEDICA: [
+                {
+                    'pattern': r'\b(?:vacunas?|medicamentos?|tratamientos?)\s+(?:causan?|provocan?|generan?)\s+(\w+)',
+                    'weight': 0.9,
+                    'description': 'Efectos médicos causales'
+                },
+                {
+                    'pattern': r'\b(?:covid|coronavirus|pandemia)\s+(?:es|fue|será)\s+(\w+)',
+                    'weight': 0.8,
+                    'description': 'Afirmaciones sobre COVID'
+                },
+                {
+                    'pattern': r'\b(?:estudios?|investigación|ciencia)\s+(?:demuestra|prueba|confirma)\s+que\s+(.+)',
+                    'weight': 0.8,
+                    'description': 'Referencias a estudios'
+                },
+                {
+                    'pattern': r'\b(?:efectos?\s+(?:secundarios?|adversos?))\s+(?:de\s+)?(.+)',
+                    'weight': 0.7,
+                    'description': 'Efectos secundarios'
+                }
             ],
             
-            ClaimType.PREDICTION: [
-                (r'\b(?:va\s+a|van\s+a|será|serán|ocurrirá|pasará)\b', 0.6),
-                (r'\b(?:en\s+(?:el\s+)?futuro|dentro\s+de|para\s+el?\s+año)\b', 0.7),
-                (r'\b(?:predicción|pronóstico|previsión|estimación)\b', 0.8),
-                (r'\b(?:se\s+espera|se\s+prevé|se\s+anticipa)\s+que\b', 0.7),
-                (r'\b(?:muy\s+pronto|en\s+breve|próximamente)\b', 0.6)
+            ClaimType.ECONOMICA: [
+                {
+                    'pattern': r'\b(?:pib|inflación|desempleo|paro)\s+(?:es|está|alcanza)\s+(?:del?\s+)?(\d+(?:[.,]\d+)*)\s*%',
+                    'weight': 0.9,
+                    'description': 'Indicadores económicos'
+                },
+                {
+                    'pattern': r'\b(?:salario|sueldo|pensión)\s+(?:medio|promedio)\s+(?:es|está|alcanza)\s+(\d+(?:[.,]\d+)*)\s*euros?',
+                    'weight': 0.8,
+                    'description': 'Datos salariales'
+                },
+                {
+                    'pattern': r'\b(?:presupuesto|gasto|inversión)\s+(?:de|en)\s+(.+?)\s+(?:es|será|alcanza)\s+(\d+(?:[.,]\d+)*)',
+                    'weight': 0.8,
+                    'description': 'Datos presupuestarios'
+                }
             ],
             
-            ClaimType.HISTORICAL: [
-                (r'\b(?:en\s+el?\s+año\s+\d{4}|hace\s+\d+\s+años?)\b', 0.7),
-                (r'\b(?:durante\s+(?:el?\s+)?(?:franquismo|dictadura|transición))\b', 0.8),
-                (r'\b(?:historia|históricamente|en\s+el?\s+pasado)\b', 0.6),
-                (r'\b(?:guerra\s+civil|segunda\s+república|restauración)\b', 0.8),
-                (r'\b(?:nunca\s+antes|por\s+primera\s+vez|sin\s+precedentes)\b', 0.7)
+            ClaimType.HISTORICA: [
+                {
+                    'pattern': r'\b(?:en\s+)?(\d{4})\s+(?:ocurrió|sucedió|pasó)\s+(.+)',
+                    'weight': 0.8,
+                    'description': 'Eventos históricos fechados'
+                },
+                {
+                    'pattern': r'\b(?:franco|dictadura|guerra\s+civil)\s+(?:causó|mató|asesinó)\s+(\d+(?:[.,]\d+)*)',
+                    'weight': 0.9,
+                    'description': 'Cifras históricas polémicas'
+                },
+                {
+                    'pattern': r'\b(?:durante|bajo)\s+(?:el\s+)?(\w+)\s+(?:murieron|fallecieron)\s+(\d+(?:[.,]\d+)*)',
+                    'weight': 0.8,
+                    'description': 'Víctimas históricas'
+                }
             ],
             
-            ClaimType.MEDICAL: [
-                (r'\b(?:vacunas?|vacunación|inmunización)\b', 0.8),
-                (r'\b(?:coronavirus|covid|pandemia|epidemia)\b', 0.8),
-                (r'\b(?:efectos?\s+secundarios?|reacciones?\s+adversas?)\b', 0.8),
-                (r'\b(?:medicamentos?|fármacos?|tratamientos?)\b', 0.7),
-                (r'\b(?:oms|organización\s+mundial\s+de\s+la\s+salud)\b', 0.7),
-                (r'\b(?:estudios?\s+(?:médicos?|clínicos?|científicos?))\b', 0.8)
+            ClaimType.CIENTIFICA: [
+                {
+                    'pattern': r'\b(?:la\s+ciencia|científicos?|investigadores?)\s+(?:dice|afirma|demuestra)\s+que\s+(.+)',
+                    'weight': 0.8,
+                    'description': 'Afirmaciones científicas'
+                },
+                {
+                    'pattern': r'\b(?:está\s+(?:científicamente\s+)?(?:probado|demostrado))\s+que\s+(.+)',
+                    'weight': 0.9,
+                    'description': 'Pruebas científicas'
+                },
+                {
+                    'pattern': r'\b(?:cambio\s+climático|calentamiento\s+global)\s+(?:es|no\s+es)\s+(.+)',
+                    'weight': 0.8,
+                    'description': 'Afirmaciones climáticas'
+                }
             ],
             
-            ClaimType.LEGAL: [
-                (r'\b(?:ley|leyes|legislación|normativa)\b', 0.7),
-                (r'\b(?:tribunal|juzgado|sentencia|fallo)\b', 0.8),
-                (r'\b(?:constitución|constitucional|inconstitucional)\b', 0.8),
-                (r'\b(?:delito|crimen|ilegal|legal|jurídico)\b', 0.7),
-                (r'\b(?:fiscal|fiscalía|juez|magistrado)\b', 0.7),
-                (r'\b(?:demanda|querella|denuncia|acusación)\b', 0.8)
+            ClaimType.POLITICA: [
+                {
+                    'pattern': r'\b(?:gobierno|ministro|presidente)\s+(\w+)\s+(?:dijo|afirmó|prometió)\s+(.+)',
+                    'weight': 0.7,
+                    'description': 'Declaraciones políticas'
+                },
+                {
+                    'pattern': r'\b(?:ley|decreto|normativa)\s+(?:establece|dice|prohibe)\s+(.+)',
+                    'weight': 0.8,
+                    'description': 'Contenido legislativo'
+                },
+                {
+                    'pattern': r'\b(?:encuesta|sondeo|polling)\s+(?:dice|muestra|revela)\s+(.+)',
+                    'weight': 0.7,
+                    'description': 'Resultados de encuestas'
+                }
             ],
             
-            ClaimType.ECONOMIC: [
-                (r'\b(?:pib|producto\s+interior\s+bruto)\b', 0.8),
-                (r'\b(?:inflación|deflación|crisis\s+económica)\b', 0.8),
-                (r'\b(?:presupuestos?|déficit|deuda\s+pública)\b', 0.8),
-                (r'\b(?:euros?|millones?\s+de\s+euros?|miles\s+de\s+millones)\b', 0.7),
-                (r'\b(?:impuestos?|tributos?|hacienda)\b', 0.7),
-                (r'\b(?:desempleo|paro|empleo|trabajo)\b', 0.7)
-            ],
-            
-            ClaimType.ELECTORAL: [
-                (r'\b(?:elecciones?|electorales?|votación|votos?)\b', 0.8),
-                (r'\b(?:candidatos?|partidos?\s+políticos?)\b', 0.7),
-                (r'\b(?:encuestas?\s+electorales?|sondeos?)\b', 0.8),
-                (r'\b(?:campaña\s+electoral|propaganda\s+electoral)\b', 0.8),
-                (r'\b(?:escaños?|diputados?|senadores?)\b', 0.7),
-                (r'\b(?:gobierno|oposición|coalición)\b', 0.6)
-            ],
-            
-            ClaimType.CONSPIRACY: [
-                (r'\b(?:conspiración|complot|encubrimiento)\b', 0.8),
-                (r'\b(?:ocultan|esconden|manipulan)\s+(?:la\s+)?(?:verdad|información)\b', 0.8),
-                (r'\b(?:no\s+quieren\s+que\s+sepas|te\s+ocultan)\b', 0.9),
-                (r'\b(?:élite|élites)\s+(?:mundial|global|oculta)\b', 0.8),
-                (r'\b(?:control\s+mental|lavado\s+de\s+cerebro|manipulación\s+mediática)\b', 0.9)
+            ClaimType.DEMOGRAFICA: [
+                {
+                    'pattern': r'\b(?:población|habitantes)\s+(?:de\s+)?(\w+)\s+(?:es|son|alcanza)\s+(\d+(?:[.,]\d+)*)',
+                    'weight': 0.8,
+                    'description': 'Datos poblacionales'
+                },
+                {
+                    'pattern': r'\b(?:inmigrantes?|extranjeros?)\s+(?:representan|son)\s+(?:el\s+)?(\d+(?:[.,]\d+)*)\s*%',
+                    'weight': 0.9,
+                    'description': 'Porcentajes de inmigración'
+                },
+                {
+                    'pattern': r'\b(?:natalidad|mortalidad|fertilidad)\s+(?:es|está)\s+(?:en\s+)?(\d+(?:[.,]\d+)*)',
+                    'weight': 0.8,
+                    'description': 'Tasas demográficas'
+                }
             ]
         }
     
-    def _initialize_entity_patterns(self) -> List[Tuple[str, str]]:
-        """Initialize patterns for detecting key entities in claims."""
+    def _initialize_entity_patterns(self) -> List[str]:
+        """Initialize patterns for extracting key entities from claims."""
         return [
-            # Government entities
-            (r'\b(?:gobierno|ejecutivo|ministerio|ministro)\b', 'government'),
-            (r'\b(?:congreso|senado|parlamento|cortes)\b', 'legislature'),
-            (r'\b(?:tribunal\s+(?:supremo|constitucional)|audiencia\s+nacional)\b', 'judiciary'),
-            
-            # Political parties
-            (r'\b(?:psoe|pp|vox|podemos|ciudadanos|cs)\b', 'political_party'),
-            
-            # International entities
-            (r'\b(?:ue|unión\s+europea|europa|bruselas)\b', 'international'),
-            (r'\b(?:otan|nato|estados\s+unidos|eeuu)\b', 'international'),
-            (r'\b(?:oms|onu|naciones\s+unidas)\b', 'international_org'),
-            
-            # Institutions
-            (r'\b(?:banco\s+(?:de\s+)?españa|bce|banco\s+central)\b', 'financial'),
-            (r'\b(?:ine|instituto\s+nacional\s+de\s+estadística)\b', 'statistical'),
-            (r'\b(?:sanidad|ministerio\s+de\s+sanidad)\b', 'health'),
-            
-            # Media
-            (r'\b(?:medios?\s+de\s+comunicación|prensa|televisión|radio)\b', 'media'),
-            (r'\b(?:rtve|antena\s+3|telecinco|la\s+sexta)\b', 'media_outlet'),
-            
-            # Geographic
-            (r'\b(?:españa|madrid|barcelona|valencia|sevilla)\b', 'geographic'),
-            (r'\b(?:cataluña|euskadi|galicia|andalucía)\b', 'region'),
+            r'\b(?:españa|madrid|barcelona|valencia|sevilla|bilbao)\b',
+            r'\b(?:europa|eeuu|china|rusia|francia|alemania)\b',
+            r'\b(?:covid|coronavirus|omicron|delta|vacuna)\b',
+            r'\b(?:psoe|pp|vox|podemos|ciudadanos)\b',
+            r'\b(?:sánchez|feijóo|abascal|iglesias)\b',
+            r'\b(?:gobierno|congreso|senado|tribunal)\b',
+            r'\b(?:oms|ue|otan|onu|fmi)\b',
+            r'\b\d{4}\b',  # Years
+            r'\b\d+(?:[.,]\d+)*\s*(?:%|euros?|millones?|miles?)\b'  # Numbers with units
         ]
     
-    def _initialize_temporal_patterns(self) -> List[str]:
-        """Initialize patterns for detecting temporal references."""
+    def _initialize_urgency_indicators(self) -> List[Dict]:
+        """Initialize patterns for detecting urgency in claims."""
         return [
-            r'\b(?:hoy|ayer|mañana|ahora|actualmente)\b',
-            r'\b(?:este|esta|próximo|próxima)\s+(?:año|mes|semana|lunes|martes|miércoles|jueves|viernes|sábado|domingo)\b',
-            r'\b(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(?:de\s+)?\d{4}\b',
-            r'\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b',
-            r'\b(?:hace|dentro\s+de)\s+\d+\s+(?:días?|semanas?|meses?|años?)\b',
-            r'\b(?:desde|hasta|entre)\s+(?:el?\s+)?\d{4}\b',
-            r'\b(?:en\s+)?(?:el?\s+)?(?:año\s+)?\d{4}\b'
+            {'pattern': r'\b(?:urgente|inmediatamente|ya|ahora)\b', 'weight': 1.0},
+            {'pattern': r'\b(?:crisis|emergencia|peligro|riesgo)\b', 'weight': 0.8},
+            {'pattern': r'\b(?:importante|crucial|vital|necesario)\b', 'weight': 0.6},
+            {'pattern': r'[!]{2,}', 'weight': 0.7},
+            {'pattern': r'\b(?:hoy|mañana|esta\s+semana)\b', 'weight': 0.5}
         ]
     
-    def _initialize_source_patterns(self) -> List[Tuple[str, float]]:
-        """Initialize patterns for detecting source citations and credibility indicators."""
-        return [
-            (r'\b(?:según|de\s+acuerdo\s+(?:a|con)|conforme\s+a)\b', 0.8),
-            (r'\b(?:fuentes?\s+(?:oficiales?|gubernamentales?|fidedignas?))\b', 0.9),
-            (r'\b(?:estudio|informe|investigación|análisis)\s+(?:oficial|del?\s+gobierno)\b', 0.9),
-            (r'\b(?:datos?\s+(?:oficiales?|del?\s+ine|del?\s+gobierno))\b', 0.9),
-            (r'\b(?:ha\s+(?:dicho|declarado|afirmado|confirmado))\b', 0.7),
-            (r'\b(?:medios?\s+de\s+comunicación|prensa|periodistas?)\b', 0.6),
-            (r'\b(?:redes?\s+sociales?|twitter|facebook|telegram)\b', 0.3),
-            (r'\b(?:he\s+leído|me\s+han\s+dicho|dicen\s+que)\b', 0.2),
-            (r'\b(?:expertos?|especialistas?|científicos?)\b', 0.8),
-            (r'\b(?:universidades?|centros?\s+de\s+investigación)\b', 0.8)
-        ]
-    
-    def _initialize_urgency_amplifiers(self) -> List[Tuple[str, float]]:
-        """Initialize patterns that increase claim urgency."""
-        return [
-            (r'\b(?:urgente|emergencia|crisis|alerta)\b', 2.0),
-            (r'\b(?:inmediatamente|ahora\s+mismo|ya|cuanto\s+antes)\b', 1.5),
-            (r'\b(?:peligro|riesgo|amenaza|grave)\b', 1.8),
-            (r'\b(?:todos?\s+(?:los?\s+)?españoles?\s+deben\s+saber)\b', 1.7),
-            (r'\b(?:ocultan|esconden|censuran)\b', 1.6),
-            (r'\b(?:última\s+hora|breaking|noticia\s+urgente)\b', 1.8),
-            (r'[!]{3,}', 1.3),
-            (r'[🔴⚠️🚨💥]', 1.2)
-        ]
-    
-    def _initialize_misinformation_flags(self) -> List[Tuple[str, float]]:
-        """Initialize patterns that flag potential misinformation."""
-        return [
-            (r'\b(?:no\s+quieren\s+que\s+sepas|te\s+ocultan|la\s+verdad\s+que)\b', 0.9),
-            (r'\b(?:medios?\s+(?:manipulados?|comprados?|vendidos?))\b', 0.8),
-            (r'\b(?:(?:ellos?|élites?)\s+controlan)\b', 0.8),
-            (r'\b(?:despierta|abre\s+los\s+ojos|no\s+seas?\s+borrego)\b', 0.7),
-            (r'\b(?:dictadura\s+(?:sanitaria|mediática))\b', 0.8),
-            (r'\b(?:nueva\s+normalidad|nuevo\s+orden\s+mundial)\b', 0.8),
-            (r'\b(?:plandemia|casodemia|bozalemia)\b', 0.9),
-            (r'\b(?:microchips?\s+en\s+las?\s+vacunas?)\b', 0.9),
-            (r'\b(?:5g\s+(?:mata|controla|manipula))\b', 0.9)
-        ]
-    
-    def detect_claims(self, text: str) -> List[DetectedClaim]:
+    def detect_claims(self, text: str) -> List[Claim]:
         """
-        Detect and analyze verifiable claims in Spanish text.
-        Returns list of detected claims with analysis.
+        Detect and classify factual claims in the given text.
         """
         if not text or len(text.strip()) < 10:
             return []
         
+        text_lower = text.lower()
         claims = []
-        sentences = self._split_into_sentences(text)
         
-        for sentence in sentences:
-            if len(sentence.strip()) < 15:  # Skip very short sentences
-                continue
+        # Detect claims by type
+        for claim_type, patterns in self.claim_patterns.items():
+            for pattern_info in patterns:
+                pattern = pattern_info['pattern']
+                weight = pattern_info['weight']
+                description = pattern_info['description']
                 
-            claim_analysis = self._analyze_sentence_for_claims(sentence, text)
-            if claim_analysis:
-                claims.extend(claim_analysis)
+                matches = list(re.finditer(pattern, text, re.IGNORECASE))
+                for match in matches:
+                    claim_text = match.group(0)
+                    
+                    # Extract key entities
+                    entities = self._extract_entities(claim_text)
+                    
+                    # Determine verifiability
+                    verifiability = self._assess_verifiability(claim_type, claim_text, entities)
+                    
+                    # Determine urgency
+                    urgency = self._assess_urgency(claim_text)
+                    
+                    # Generate verification keywords
+                    verification_keywords = self._generate_verification_keywords(claim_type, entities)
+                    
+                    claim = Claim(
+                        text=claim_text.strip(),
+                        claim_type=claim_type,
+                        verifiability=verifiability,
+                        urgency=urgency,
+                        confidence=round(weight, 3),
+                        key_entities=entities,
+                        verification_keywords=verification_keywords
+                    )
+                    
+                    claims.append(claim)
         
-        # Deduplicate and sort by confidence
+        # Remove duplicates and sort by confidence
         unique_claims = self._deduplicate_claims(claims)
         unique_claims.sort(key=lambda x: x.confidence, reverse=True)
         
-        return unique_claims[:10]  # Return top 10 claims
+        return unique_claims[:10]  # Return top 10 most confident claims
     
-    def _split_into_sentences(self, text: str) -> List[str]:
-        """Split text into sentences for individual analysis."""
-        # Simple sentence splitting for Spanish
-        sentences = re.split(r'[.!?]+\s+', text)
-        return [s.strip() for s in sentences if s.strip()]
-    
-    def _analyze_sentence_for_claims(self, sentence: str, full_context: str) -> List[DetectedClaim]:
-        """Analyze a single sentence for verifiable claims."""
-        sentence_lower = sentence.lower()
-        detected_claims = []
-        
-        # Check each claim type
-        for claim_type, patterns in self.claim_patterns.items():
-            type_confidence = 0.0
-            matched_patterns = []
-            
-            for pattern, weight in patterns:
-                matches = re.findall(pattern, sentence_lower, re.IGNORECASE)
-                if matches:
-                    type_confidence += len(matches) * weight
-                    matched_patterns.extend(matches)
-            
-            if type_confidence > 0.5:  # Threshold for considering it a claim
-                # Extract additional information
-                entities = self._extract_entities(sentence)
-                numerical_data = self._extract_numerical_data(sentence)
-                temporal_refs = self._extract_temporal_references(sentence)
-                source_indicators = self._extract_source_indicators(sentence)
-                verification_keywords = self._extract_verification_keywords(sentence)
-                
-                # Determine verifiability
-                verifiability = self._assess_verifiability(
-                    claim_type, entities, numerical_data, source_indicators
-                )
-                
-                # Calculate urgency
-                urgency = self._calculate_urgency(sentence, full_context, claim_type)
-                
-                # Final confidence calculation
-                final_confidence = min(1.0, type_confidence / 2.0)  # Normalize
-                
-                detected_claims.append(DetectedClaim(
-                    text=sentence.strip(),
-                    claim_type=claim_type,
-                    verifiability=verifiability,
-                    urgency=urgency,
-                    confidence=round(final_confidence, 3),
-                    key_entities=entities,
-                    numerical_data=numerical_data,
-                    temporal_references=temporal_refs,
-                    source_indicators=source_indicators,
-                    verification_keywords=verification_keywords,
-                    context=self._extract_context(full_context, sentence)
-                ))
-        
-        return detected_claims
-    
-    def _extract_entities(self, sentence: str) -> List[str]:
-        """Extract key entities from the sentence."""
+    def _extract_entities(self, text: str) -> List[str]:
+        """Extract key entities from claim text."""
         entities = []
-        sentence_lower = sentence.lower()
+        text_lower = text.lower()
         
-        for pattern, entity_type in self.entity_patterns:
-            matches = re.findall(pattern, sentence_lower, re.IGNORECASE)
-            for match in matches:
-                entities.append(f"{entity_type}:{match}")
+        for pattern in self.entity_patterns:
+            matches = re.findall(pattern, text_lower, re.IGNORECASE)
+            entities.extend(matches)
         
-        return entities[:5]  # Limit to top 5
+        return list(set(entities))[:5]  # Return unique entities, max 5
     
-    def _extract_numerical_data(self, sentence: str) -> List[str]:
-        """Extract numerical data that could be fact-checked."""
-        patterns = [
-            r'\b\d+(?:[,.]\d+)*\s*%',  # Percentages
-            r'\b\d+(?:[,.]\d+)*\s*(?:millones?|miles?|billones?)',  # Large numbers
-            r'\b\d+(?:[,.]\d+)*\s*euros?',  # Money
-            r'\b\d{1,2}(?:[,.]\d+)?\s*(?:grados?|°C)',  # Temperature
-            r'\b\d+\s+de\s+cada\s+\d+',  # Ratios
-            r'\b\d{4}',  # Years
+    def _assess_verifiability(self, claim_type: ClaimType, text: str, entities: List[str]) -> VerifiabilityLevel:
+        """Assess how verifiable a claim is."""
+        text_lower = text.lower()
+        
+        # High verifiability indicators
+        high_indicators = [
+            r'\b(?:según|conforme|de\s+acuerdo\s+con)\s+(?:el\s+)?(?:ine|oms|ue|gobierno|ministerio)\b',
+            r'\b(?:estudio|investigación|informe)\s+(?:de|del)\s+(\w+)\b',
+            r'\b\d{4}\b',  # Specific years
+            r'\b\d+(?:[.,]\d+)*\s*(?:%|euros?|millones?)\b'  # Specific numbers
         ]
         
-        numerical_data = []
-        for pattern in patterns:
-            matches = re.findall(pattern, sentence, re.IGNORECASE)
-            numerical_data.extend(matches)
-        
-        return numerical_data[:5]
-    
-    def _extract_temporal_references(self, sentence: str) -> List[str]:
-        """Extract temporal references for verification context."""
-        temporal_refs = []
-        sentence_lower = sentence.lower()
-        
-        for pattern in self.temporal_patterns:
-            matches = re.findall(pattern, sentence_lower, re.IGNORECASE)
-            temporal_refs.extend(matches)
-        
-        return temporal_refs[:3]
-    
-    def _extract_source_indicators(self, sentence: str) -> List[str]:
-        """Extract source credibility indicators."""
-        source_indicators = []
-        sentence_lower = sentence.lower()
-        
-        for pattern, credibility in self.source_patterns:
-            matches = re.findall(pattern, sentence_lower, re.IGNORECASE)
-            for match in matches:
-                source_indicators.append(f"{credibility}:{match}")
-        
-        return source_indicators[:3]
-    
-    def _extract_verification_keywords(self, sentence: str) -> List[str]:
-        """Extract keywords relevant for verification."""
-        verification_patterns = [
-            r'\b(?:confirmó|desmintió|verificó|comprobó|investigó)\b',
-            r'\b(?:según|conforme|de\s+acuerdo)\b',
-            r'\b(?:oficial|oficialmente|autoridades?)\b',
-            r'\b(?:datos?|estadísticas?|informes?|estudios?)\b'
+        # Low verifiability indicators
+        low_indicators = [
+            r'\b(?:dicen|se\s+dice|se\s+comenta|rumores?)\b',
+            r'\b(?:parece|aparentemente|probablemente)\b',
+            r'\b(?:algunos|muchos|varios)\s+(?:expertos?|estudios?)\b'
         ]
         
-        keywords = []
-        sentence_lower = sentence.lower()
+        high_score = sum(1 for pattern in high_indicators if re.search(pattern, text_lower))
+        low_score = sum(1 for pattern in low_indicators if re.search(pattern, text_lower))
         
-        for pattern in verification_patterns:
-            matches = re.findall(pattern, sentence_lower, re.IGNORECASE)
-            keywords.extend(matches)
-        
-        return keywords[:5]
-    
-    def _assess_verifiability(
-        self, 
-        claim_type: ClaimType, 
-        entities: List[str], 
-        numerical_data: List[str], 
-        source_indicators: List[str]
-    ) -> VerifiabilityLevel:
-        """Assess how easily verifiable a claim is."""
-        score = 0
-        
-        # Statistical and factual claims with numbers are highly verifiable
-        if claim_type in [ClaimType.STATISTICAL, ClaimType.ECONOMIC, ClaimType.ELECTORAL]:
-            score += 3
-        
-        # Claims with numerical data are more verifiable
-        if numerical_data:
-            score += 2
-        
-        # Claims with official entities are more verifiable
-        official_entities = [e for e in entities if 'government' in e or 'statistical' in e]
-        if official_entities:
-            score += 2
-        
-        # Claims with credible sources are more verifiable
-        credible_sources = [s for s in source_indicators if s.startswith('0.8') or s.startswith('0.9')]
-        if credible_sources:
-            score += 2
-        
-        # Conspiracy claims are less verifiable
-        if claim_type == ClaimType.CONSPIRACY:
-            score -= 2
-        
-        # Testimonial claims are less verifiable
-        if claim_type == ClaimType.TESTIMONIAL:
-            score -= 1
-        
-        if score >= 5:
+        if high_score >= 2 or (high_score >= 1 and claim_type in [ClaimType.ESTADISTICA, ClaimType.ECONOMICA]):
             return VerifiabilityLevel.HIGH
-        elif score >= 3:
-            return VerifiabilityLevel.MEDIUM
-        elif score >= 1:
+        elif low_score >= 1:
             return VerifiabilityLevel.LOW
         else:
-            return VerifiabilityLevel.NONE
+            return VerifiabilityLevel.MEDIUM
     
-    def _calculate_urgency(self, sentence: str, full_context: str, claim_type: ClaimType) -> ClaimUrgency:
-        """Calculate the urgency of fact-checking this claim."""
-        urgency_score = 1.0
+    def _assess_urgency(self, text: str) -> UrgencyLevel:
+        """Assess the urgency level of a claim."""
+        text_lower = text.lower()
+        urgency_score = 0.0
         
-        # Check urgency amplifiers
-        sentence_lower = sentence.lower()
-        for pattern, multiplier in self.urgency_amplifiers:
-            if re.search(pattern, sentence_lower, re.IGNORECASE):
-                urgency_score *= multiplier
+        for indicator in self.urgency_indicators:
+            if re.search(indicator['pattern'], text_lower):
+                urgency_score += indicator['weight']
         
-        # Check misinformation flags
-        for pattern, flag_score in self.misinformation_flags:
-            if re.search(pattern, sentence_lower, re.IGNORECASE):
-                urgency_score *= (1 + flag_score)
-        
-        # Certain claim types are more urgent
-        if claim_type in [ClaimType.MEDICAL, ClaimType.CONSPIRACY]:
-            urgency_score *= 1.5
-        
-        if claim_type == ClaimType.ELECTORAL:
-            urgency_score *= 1.3
-        
-        # Viral indicators (caps, multiple exclamations)
-        if re.search(r'[A-Z]{4,}', sentence):
-            urgency_score *= 1.2
-        
-        if re.search(r'[!]{2,}', sentence):
-            urgency_score *= 1.1
-        
-        if urgency_score >= 4.0:
-            return ClaimUrgency.CRITICAL
-        elif urgency_score >= 2.5:
-            return ClaimUrgency.HIGH
-        elif urgency_score >= 1.5:
-            return ClaimUrgency.MEDIUM
+        if urgency_score >= 1.0:
+            return UrgencyLevel.URGENT
+        elif urgency_score >= 0.5:
+            return UrgencyLevel.NORMAL
         else:
-            return ClaimUrgency.LOW
+            return UrgencyLevel.LOW
     
-    def _extract_context(self, full_text: str, sentence: str, window: int = 100) -> str:
-        """Extract surrounding context for the claim."""
-        try:
-            start_pos = full_text.find(sentence)
-            if start_pos == -1:
-                return sentence
-            
-            context_start = max(0, start_pos - window)
-            context_end = min(len(full_text), start_pos + len(sentence) + window)
-            
-            return full_text[context_start:context_end].strip()
-        except:
-            return sentence
+    def _generate_verification_keywords(self, claim_type: ClaimType, entities: List[str]) -> List[str]:
+        """Generate keywords useful for fact-checking the claim."""
+        keywords = list(entities)
+        
+        type_keywords = {
+            ClaimType.ESTADISTICA: ['estadística', 'datos', 'cifras', 'ine'],
+            ClaimType.MEDICA: ['medicina', 'salud', 'oms', 'sanidad'],
+            ClaimType.ECONOMICA: ['economía', 'finanzas', 'banco', 'pib'],
+            ClaimType.HISTORICA: ['historia', 'archivo', 'documento', 'fecha'],
+            ClaimType.CIENTIFICA: ['ciencia', 'investigación', 'estudio', 'peer-review'],
+            ClaimType.POLITICA: ['política', 'gobierno', 'congreso', 'oficial'],
+            ClaimType.DEMOGRAFICA: ['población', 'censo', 'demografía', 'ine']
+        }
+        
+        if claim_type in type_keywords:
+            keywords.extend(type_keywords[claim_type])
+        
+        return list(set(keywords))[:8]  # Return unique keywords, max 8
     
-    def _deduplicate_claims(self, claims: List[DetectedClaim]) -> List[DetectedClaim]:
+    def _deduplicate_claims(self, claims: List[Claim]) -> List[Claim]:
         """Remove duplicate claims based on text similarity."""
         unique_claims = []
         seen_texts = set()
@@ -495,32 +354,29 @@ class SpanishClaimDetector:
         
         return unique_claims
     
-    def get_high_priority_claims(self, text: str) -> List[DetectedClaim]:
-        """Get only high-priority claims that need immediate attention."""
-        all_claims = self.detect_claims(text)
-        high_priority = [
-            claim for claim in all_claims 
-            if (claim.urgency in [ClaimUrgency.CRITICAL, ClaimUrgency.HIGH] or
-                claim.verifiability == VerifiabilityLevel.HIGH or
-                claim.confidence >= 0.7)
-        ]
-        return high_priority
+    def has_verifiable_claims(self, text: str) -> bool:
+        """Check if text contains any verifiable claims."""
+        claims = self.detect_claims(text)
+        return len(claims) > 0
+    
+    def get_primary_claim_type(self, text: str) -> Optional[ClaimType]:
+        """Get the most prominent claim type in the text."""
+        claims = self.detect_claims(text)
+        if not claims:
+            return None
+        return claims[0].claim_type
 
-# Convenience function
-def detect_spanish_claims(text: str) -> List[DetectedClaim]:
-    """Quick claim detection function."""
-    detector = SpanishClaimDetector()
-    return detector.detect_claims(text)
-
-# Test the claim detector
+# Test function
 if __name__ == "__main__":
     test_texts = [
-        "El 80% de los inmigrantes ilegales cometen delitos según datos oficiales del gobierno",
-        "Sánchez ha confirmado que va a subir los impuestos un 15% el próximo año",
-        "Los medios ocultan que las vacunas contienen microchips para controlarnos",
-        "Hoy hace sol en Madrid y es perfecto para pasear",
-        "Según un estudio de la Universidad Complutense, el desempleo bajó un 3% en 2023",
-        "¡URGENTE! Descubren que el 5G mata a los pájaros y nos van a hacer lo mismo"
+        "El 85% de los inmigrantes no trabajan según el INE",
+        "Las vacunas COVID causan miocarditis en el 2% de los casos",
+        "El PIB español creció un 3.2% el año pasado",
+        "Franco mató a 500.000 personas durante la dictadura",
+        "Los científicos demuestran que el cambio climático es una mentira",
+        "Sánchez prometió bajar los impuestos pero los subió un 15%",
+        "La población de Madrid alcanza los 7 millones de habitantes",
+        "Estudios secretos confirman que los microchips controlan la mente"
     ]
     
     detector = SpanishClaimDetector()
@@ -528,13 +384,10 @@ if __name__ == "__main__":
     for text in test_texts:
         print(f"\n--- Texto: {text}")
         claims = detector.detect_claims(text)
-        if claims:
-            for i, claim in enumerate(claims[:2]):
-                print(f"{i+1}. Tipo: {claim.claim_type.value}")
-                print(f"   Verificabilidad: {claim.verifiability.value}")
-                print(f"   Urgencia: {claim.urgency.value}")
-                print(f"   Confianza: {claim.confidence}")
-                if claim.numerical_data:
-                    print(f"   Datos numéricos: {claim.numerical_data}")
-        else:
-            print("   Sin afirmaciones verificables detectadas")
+        for claim in claims:
+            print(f"Tipo: {claim.claim_type.value}")
+            print(f"Verificabilidad: {claim.verifiability.value}")
+            print(f"Urgencia: {claim.urgency.value}")
+            print(f"Confianza: {claim.confidence}")
+            if claim.key_entities:
+                print(f"Entidades: {', '.join(claim.key_entities)}")

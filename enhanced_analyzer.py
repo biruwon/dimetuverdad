@@ -125,8 +125,8 @@ class EnhancedAnalyzer:
         # Pipeline Step 3: Content insights extraction
         insights = self._extract_content_insights(content, pattern_results)
         
-        # Pipeline Step 4: Text generation and explanation
-        llm_explanation = self._generate_explanation(content, category, pattern_results, insights)
+        # Pipeline Step 4: Smart LLM integration for uncertain cases
+        llm_explanation = self._generate_explanation_with_smart_llm(content, category, pattern_results, insights)
         
         # Pipeline Step 5: Create final analysis structure
         analysis_data = self._build_analysis_data(pattern_results, insights)
@@ -149,78 +149,109 @@ class EnhancedAnalyzer:
     
     def _run_pattern_analysis(self, content: str) -> Dict:
         """
-        Pipeline Step 1: Run all pattern analyzers once and consolidate results.
-        This eliminates duplication by doing all pattern analysis in one place.
-        """
-        # Run all analyzers once
-        far_right_result = self.far_right_analyzer.analyze_text(content)
-        topic_results = self.topic_classifier.classify_topic(content)
-        claims = self.claim_detector.detect_claims(content)
+        Pipeline Step 1: Intelligent pattern analysis leveraging each component's strengths.
         
-        # Consolidate results
-        return {
-            'far_right': far_right_result,
-            'topics': topic_results,
-            'claims': claims,
-            'pattern_matches': far_right_result.get('pattern_matches', [])
-        }
+        Component Strengths:
+        - FarRightAnalyzer: Hate speech, extremism patterns, threat detection
+        - TopicClassifier: Political context, discourse categorization
+        - ClaimDetector: Factual statements, verifiability assessment
+        """
+        results = {}
+        
+        # Phase 1: Quick political context assessment (fastest component)
+        topic_results = self.topic_classifier.classify_topic(content)
+        results['topics'] = topic_results
+        
+        # Extract political context for guiding other analyzers
+        political_context = topic_results[0] if topic_results else None
+        is_political_content = political_context and political_context.category.value != "no_político"
+        
+        # Phase 2: Far-right pattern analysis (strength: extremism detection)
+        far_right_result = self.far_right_analyzer.analyze_text(content)
+        results['far_right'] = far_right_result
+        
+        # Phase 3: Claims analysis (strength: factual verification needs)
+        # Prioritize claim detection if political content or patterns detected
+        should_analyze_claims = (
+            is_political_content or 
+            far_right_result.get('has_patterns', False) or
+            len(content) > 100  # Longer content more likely to have claims
+        )
+        
+        if should_analyze_claims:
+            claims = self.claim_detector.detect_claims(content)
+            results['claims'] = claims
+        else:
+            results['claims'] = []
+        
+        # Phase 4: Create enriched pattern matches combining all components
+        pattern_matches = far_right_result.get('pattern_matches', [])
+        
+        # Enrich with topic context
+        if is_political_content:
+            pattern_matches.append({
+                'category': 'political_context',
+                'matched_text': political_context.category.value,
+                'description': f'Contexto político: {political_context.subcategory}',
+                'context': content[:50] + '...'
+            })
+        
+        results['pattern_matches'] = pattern_matches
+        
+        return results
     
     def _categorize_content(self, content: str, pattern_results: Dict) -> str:
         """
-        Pipeline Step 2: Determine content category using consolidated pattern results.
+        Pipeline Step 2: Determine content category using pattern results.
         """
-        content_lower = content.lower()
         far_right_result = pattern_results['far_right']
+        claims = pattern_results['claims']
         
-        # Check for hate speech indicators (highest priority)
-        hate_indicators = [
-            'raza inferior', 'sangre pura', 'eliminar', 'deportar', 'virus', 'infectan',
-            'supremacía', 'superioridad', 'inferioridad racial', 'genéticamente inferior'
-        ]
-        if any(indicator in content_lower for indicator in hate_indicators):
+        detected_categories = far_right_result.get('categories', [])
+        
+        # Priority 1: Hate speech and violence incitement (highest severity)
+        if any(cat in detected_categories for cat in ['hate_speech', 'violence_incitement']):
             return "hate_speech"
         
-        # Check for disinformation indicators
-        disinfo_indicators = [
-            'microchips', 'vacunas', 'controlarnos', 'agenda globalista', 'élite',
-            'datos oficiales son mentira', 'gobierno oculta', 'estudio secreto',
-            'medios mainstream ocultan'
-        ]
-        if any(indicator in content_lower for indicator in disinfo_indicators):
-            return "disinformation"
+        # Priority 2: Disinformation (conspiracy patterns about medical/health topics)
+        if 'conspiracy' in detected_categories:
+            # Check if it's health/medical related disinformation
+            text_lower = content.lower()
+            health_keywords = ['vacuna', 'covid', 'medicina', 'salud', 'microchip', 'control']
+            if any(keyword in text_lower for keyword in health_keywords):
+                return "disinformation"
         
-        # Check for conspiracy theories
-        conspiracy_indicators = [
-            'nuevo orden mundial', 'illuminati', 'soros', 'plan kalergi', 'reemplazar',
-            'orquestado', 'controlarnos', 'élite globalista'
-        ]
-        if any(indicator in content_lower for indicator in conspiracy_indicators):
+        # Priority 3: Conspiracy theories
+        if 'conspiracy' in detected_categories:
             return "conspiracy_theory"
         
-        # Check for calls to action
-        action_indicators = [
-            'concentración', 'manifestación', 'calles', 'resistencia', 'actuar',
-            'organizad', 'difunde', 'comparte', 'despertad', 'todos unidos'
-        ]
-        if any(indicator in content_lower for indicator in action_indicators):
+        # Priority 4: Calls to action (check for action patterns)
+        if any(cat in detected_categories for cat in ['anti_government']) and self._has_action_language(content):
             return "call_to_action"
         
-        # Check for political bias
-        political_indicators = [
-            'socialistas han destruido', 'dictadura comunista', 'régimen de sánchez',
-            'patriotas debemos', 'franco', 'democracia ha fracasado', 'vox puede salvar'
-        ]
-        if any(indicator in content_lower for indicator in political_indicators):
+        # Priority 5: Political bias (any far-right pattern detected)
+        if detected_categories:
             return "political_bias"
         
-        # Use far-right score for general classification
-        if far_right_result.get('score', 0) > 0.6:
-            return "political_bias"
-        elif far_right_result.get('score', 0) > 0.3:
-            return "political_bias"
+        # Priority 6: Political claims without patterns
+        if claims:
+            political_claims = [c for c in claims if c.claim_type.value == 'política']
+            if political_claims:
+                return "political_bias"
         
-        # Normal content
         return "general"
+    
+    def _has_action_language(self, text: str) -> bool:
+        """Quick check for action/mobilization language."""
+        import re
+        action_patterns = [
+            r'\b(?:concentración|manifestación|calles|resistencia)\b',
+            r'\b(?:organizad|difunde|comparte|despertad)\b',
+            r'\b(?:todos unidos|hay que actuar)\b'
+        ]
+        
+        text_lower = text.lower()
+        return any(re.search(pattern, text_lower) for pattern in action_patterns)
     
     def _extract_content_insights(self, content: str, pattern_results: Dict) -> Dict:
         """
@@ -240,47 +271,161 @@ class EnhancedAnalyzer:
             'calls_to_action': calls_to_action
         }
     
-    def _generate_explanation(self, content: str, category: str, 
-                            pattern_results: Dict, insights: Dict) -> str:
+    def _generate_explanation_with_smart_llm(self, content: str, category: str, 
+                                           pattern_results: Dict, insights: Dict) -> str:
         """
-        Pipeline Step 4: Generate comprehensive explanation for the detected content.
+        Pipeline Step 4: Smart LLM integration - use LLM only when patterns are ambiguous.
+        
+        LLM Strategy:
+        - Clear patterns detected: Use pattern-based explanation
+        - Multiple conflicting patterns: Use LLM for disambiguation  
+        - No clear patterns: Use LLM for analysis
         """
+        # Build base explanation from patterns
+        base_explanation = self._generate_pattern_based_explanation(category, pattern_results, insights)
+        
+        # Check if we have clear, unambiguous results
+        detected_categories = pattern_results['far_right'].get('categories', [])
+        has_patterns = len(detected_categories) > 0
+        has_multiple_patterns = len(detected_categories) > 1
+        claims = pattern_results.get('claims', [])
+        
+        # Decision: When to use LLM (without any scoring)
+        if not has_patterns and not claims and category == "general":
+            # No patterns detected: Simple content, skip LLM
+            print("✅ Clear general content - using pattern-based analysis")
+            return base_explanation
+        
+        elif has_patterns and not has_multiple_patterns:
+            # Single clear pattern: Pattern analysis is sufficient
+            print("🎯 Clear single pattern - using pattern-based analysis")
+            return base_explanation
+        
+        elif has_multiple_patterns or (claims and has_patterns):
+            # Multiple patterns or patterns + claims: Use LLM for enhancement
+            print("🤖 Multiple patterns detected - using LLM for enhancement")
+            return self._enhance_explanation_with_llm(content, category, pattern_results, base_explanation)
+        
+        else:
+            # Ambiguous cases: Use LLM for primary analysis
+            print("🧠 Ambiguous content - using LLM for analysis")
+            return self._primary_llm_analysis(content, category, pattern_results, base_explanation)
+    
+    def _generate_pattern_based_explanation(self, category: str, pattern_results: Dict, insights: Dict) -> str:
+        """Generate explanation based purely on pattern analysis."""
         explanation_parts = []
         
-        # 1. Category-based explanation
+        # Category explanation
         if category != "general":
-            category_explanation = self._generate_category_explanation(category, content)
+            category_explanation = self._generate_category_explanation(category, "")
             explanation_parts.append(f"📂 Categorización: {category_explanation}")
         
-        # 2. Pattern analysis explanation
-        far_right_result = pattern_results['far_right']
-        if far_right_result.get('score', 0) > 0.3:
-            pattern_explanation = self._generate_pattern_explanation(far_right_result, content)
+        # Pattern explanation
+        detected_categories = pattern_results['far_right'].get('categories', [])
+        if detected_categories:
+            pattern_explanation = self._generate_pattern_explanation(pattern_results['far_right'], "")
             explanation_parts.append(f"🔍 Patrones detectados: {pattern_explanation}")
         
-        # 3. Claims analysis explanation
-        claims = pattern_results['claims']
+        # Claims explanation
+        claims = pattern_results.get('claims', [])
         if claims:
             claims_explanation = self._generate_claims_explanation(claims)
             explanation_parts.append(f"📋 Afirmaciones: {claims_explanation}")
         
-        # 4. Content insights explanation
+        # Content insights
         if insights['targeted_groups']:
             explanation_parts.append(f"👥 Grupos objetivo: {', '.join(insights['targeted_groups'])}")
         
         if insights['calls_to_action']:
             explanation_parts.append("📢 Contiene llamadas a la acción o movilización")
         
-        # 5. Use LLM for enhanced explanation if available
-        if self.use_llm and self.llm_pipeline:
-            try:
-                llm_explanation = self._get_llm_explanation(content, category, explanation_parts)
-                if llm_explanation:
-                    explanation_parts.append(f"🤖 Análisis avanzado: {llm_explanation}")
-            except Exception as e:
-                print(f"❌ Error en LLM: {e}")
-        
         return " | ".join(explanation_parts) if explanation_parts else "Contenido analizado sin patrones específicos detectados."
+    
+    def _enhance_explanation_with_llm(self, content: str, category: str, 
+                                    pattern_results: Dict, base_explanation: str) -> str:
+        """Use LLM to enhance and validate pattern-based analysis."""
+        if not self.use_llm or not self.llm_pipeline:
+            return base_explanation
+        
+        try:
+            # Create focused prompt context for enhancement
+            from enhanced_prompts import AnalysisType
+            
+            # Determine analysis type based on detected patterns
+            analysis_type = self._determine_llm_analysis_type(category, pattern_results)
+            
+            # Create uncertainty context
+            uncertainty_context = self.llm_pipeline.prompt_generator.create_uncertainty_context(pattern_results)
+            
+            # Get LLM enhancement
+            llm_result = self.llm_pipeline.analyze_content(content, {
+                'category': category,
+                'detected_categories': pattern_results['far_right'].get('categories', []),
+                'uncertainty_areas': uncertainty_context.uncertainty_areas
+            }, analysis_type)
+            
+            llm_enhancement = llm_result.get('llm_explanation', '')
+            
+            if llm_enhancement and len(llm_enhancement.strip()) > 10:
+                return f"{base_explanation} | 🤖 Análisis avanzado: {llm_enhancement}"
+            else:
+                return base_explanation
+                
+        except Exception as e:
+            print(f"⚠️ Error en mejora LLM: {e}")
+            return base_explanation
+    
+    def _primary_llm_analysis(self, content: str, category: str, 
+                            pattern_results: Dict, base_explanation: str) -> str:
+        """Use LLM as primary analysis method for ambiguous cases."""
+        if not self.use_llm or not self.llm_pipeline:
+            return f"{base_explanation} | ⚠️ Análisis incierto - se recomienda revisión manual"
+        
+        try:
+            from enhanced_prompts import AnalysisType
+            
+            # Use comprehensive analysis for uncertain cases
+            analysis_type = AnalysisType.COMPREHENSIVE
+            
+            # Create uncertainty context highlighting what patterns couldn't determine
+            uncertainty_context = self.llm_pipeline.prompt_generator.create_uncertainty_context(pattern_results)
+            
+            llm_result = self.llm_pipeline.analyze_content(content, {
+                'category': category,
+                'analysis_mode': 'primary',
+                'uncertainty_areas': uncertainty_context.uncertainty_areas
+            }, analysis_type)
+            
+            llm_explanation = llm_result.get('llm_explanation', '')
+            
+            if llm_explanation and len(llm_explanation.strip()) > 10:
+                return f"🧠 Análisis principal: {llm_explanation}"
+            else:
+                return f"{base_explanation} | ⚠️ Análisis LLM falló - se recomienda revisión manual"
+                
+        except Exception as e:
+            print(f"❌ Error en análisis primario LLM: {e}")
+            return f"{base_explanation} | ❌ Error LLM - se recomienda revisión manual"
+    
+    def _determine_llm_analysis_type(self, category: str, pattern_results: Dict):
+        """Determine the best LLM analysis type based on detected patterns."""
+        from enhanced_prompts import AnalysisType
+        
+        detected_categories = pattern_results['far_right'].get('categories', [])
+        
+        # Map content categories to LLM analysis types
+        if category == "hate_speech" or any(cat in detected_categories for cat in ['hate_speech', 'violence_incitement']):
+            return AnalysisType.HATE_SPEECH
+        elif category == "disinformation" or 'conspiracy' in detected_categories:
+            return AnalysisType.MISINFORMATION
+        elif category == "conspiracy_theory":
+            return AnalysisType.MISINFORMATION
+        elif pattern_results.get('claims'):
+            return AnalysisType.CLAIM_VERIFICATION
+        elif category == "political_bias":
+            return AnalysisType.POLITICAL_BIAS
+        else:
+            return AnalysisType.COMPREHENSIVE
     
     def _build_analysis_data(self, pattern_results: Dict, insights: Dict) -> Dict:
         """
@@ -311,16 +456,24 @@ class EnhancedAnalyzer:
 
     def _generate_pattern_explanation(self, far_right_result: Dict, content: str) -> str:
         """Generate explanation for detected patterns."""
-        patterns = far_right_result.get('pattern_matches', [])
-        if not patterns:
+        detected_categories = far_right_result.get('categories', [])
+        
+        if not detected_categories:
             return "Contenido con características de sesgo político"
         
-        pattern_descriptions = []
-        for pattern in patterns[:3]:  # Limit to top 3 patterns
-            if 'category' in pattern:
-                pattern_descriptions.append(pattern['category'])
+        # Map categories to Spanish descriptions
+        category_descriptions = {
+            'hate_speech': 'discurso de odio',
+            'xenophobia': 'xenofobia',
+            'nationalism': 'nacionalismo extremo',
+            'conspiracy': 'teorías conspiratorias',
+            'violence_incitement': 'incitación a la violencia',
+            'anti_government': 'retórica anti-gobierno',
+            'historical_revisionism': 'revisionismo histórico'
+        }
         
-        return f"Patrones de {', '.join(pattern_descriptions)}"
+        descriptions = [category_descriptions.get(cat, cat) for cat in detected_categories[:3]]
+        return f"Patrones de {', '.join(descriptions)}"
     
     def _generate_claims_explanation(self, claims: List) -> str:
         """Generate explanation for detected claims."""
@@ -365,52 +518,46 @@ class EnhancedAnalyzer:
     
 
     def _extract_targeted_groups(self, text: str, far_right_result: Dict) -> List[str]:
-        """Extract groups that are being targeted in the content."""
+        """Extract targeted groups based on actual matched text, not generic categories."""
+        pattern_matches = far_right_result.get('pattern_matches', [])
+        
         targeted_groups = []
         text_lower = text.lower()
         
-        # Common targets in Spanish far-right discourse
-        target_patterns = {
-            'inmigrantes': ['inmigr', 'extranjeros', 'ilegales', 'invasor'],
-            'musulmanes': ['islam', 'muslim', 'moro', 'árabe'],
-            'izquierda': ['zurd', 'rojo', 'communist', 'marxist'],
-            'gobierno': ['sánchez', 'gobierno', 'psoe', 'socialista'],
-            'élites': ['élite', 'soros', 'globalist', 'davos'],
-            'medios': ['medios', 'prensa', 'periodist', 'televisión'],
-            'lgbtq': ['gay', 'lgbt', 'homosexual', 'trans'],
-            'feministas': ['feminazi', 'feminista', 'hembrista']
-        }
+        # Extract groups based on what was actually mentioned in the text
+        for match in pattern_matches:
+            matched_text = match.get('matched_text', '').lower()
+            context = match.get('context', '').lower()
+            full_context = matched_text + ' ' + context
+            
+            # Look for specific group mentions in the matched text and context
+            if any(term in full_context for term in ['sánchez', 'psoe', 'gobierno', 'socialista']):
+                targeted_groups.append('gobierno')
+            if any(term in full_context for term in ['inmigr', 'extranjero', 'moro', 'ilegal']):
+                targeted_groups.append('inmigrantes')
+            if any(term in full_context for term in ['islam', 'muslim', 'musulm']):
+                targeted_groups.append('musulmanes')
+            if any(term in full_context for term in ['zurd', 'rojo', 'marxist', 'communist']):
+                targeted_groups.append('izquierda')
+            if any(term in full_context for term in ['soros', 'élite', 'globalist']):
+                targeted_groups.append('élites')
+            if any(term in full_context for term in ['medios', 'prensa', 'televisión', 'periodist']):
+                targeted_groups.append('medios')
+            if any(term in full_context for term in ['gay', 'lgbt', 'trans', 'homosexual']):
+                targeted_groups.append('lgbtq')
+            if any(term in full_context for term in ['feminazi', 'feminista', 'hembrista']):
+                targeted_groups.append('feministas')
         
-        for group, patterns in target_patterns.items():
-            if any(pattern in text_lower for pattern in patterns):
-                targeted_groups.append(group)
-        
-        return targeted_groups[:5]  # Limit to top 5
+        return list(set(targeted_groups))[:5]  # Remove duplicates, limit to 5
     
     def _detect_calls_to_action(self, text: str, far_right_result: Dict) -> bool:
-        """Detect calls to action in the content."""
-        action_patterns = [
-            r'\b(?:vamos|venid|salid|marchad|concentrad)\b',
-            r'\b(?:hay que|debemos|tenemos que)\s+(?:luchar|actuar|resistir)\b',
-            r'\b(?:todos? a|todas? a)\s+(?:las calles|manifestarse|protestar)\b',
-            r'\b(?:es hora de|momento de)\s+(?:actuar|levantarse|despertar)\b',
-            r'\b(?:únete|acompáñanos|súmate)\b',
-            r'\b(?:no más|basta|stop)\b',
-            r'\b(?:¡despertad!|¡reaccionad!|¡luchad!)\b'
-        ]
+        """Detect calls to action using pattern analysis results."""
+        detected_categories = far_right_result.get('categories', [])
         
-        import re
-        text_lower = text.lower()
-        
-        for pattern in action_patterns:
-            if re.search(pattern, text_lower, re.IGNORECASE):
-                return True
-        
-        # Check for imperative mood and urgency markers
-        if far_right_result['score'] > 0.5:
-            urgency_markers = ['!!', 'urgent', 'ya', 'ahora', 'inmediatamente']
-            if any(marker in text_lower for marker in urgency_markers):
-                return True
+        # Check for action-oriented pattern categories
+        if any(cat in detected_categories for cat in ['violence_incitement', 'anti_government']):
+            # Additional check for explicit action language
+            return self._has_action_language(text)
         
         return False
     
@@ -760,7 +907,6 @@ if __name__ == '__main__':
             
             print("✅ LLM Analysis Results:")
             print(f"   💭 Explanation: {result.get('llm_explanation', 'N/A')}")
-            print(f"   🎯 Confidence: {result.get('llm_confidence', 0.0):.2f}")
             print(f"   📊 Sentiment: {result.get('llm_sentiment', 'N/A')}")
             print(f"   ⏱️ Processing time: {end_time - start_time:.2f}s")
             
