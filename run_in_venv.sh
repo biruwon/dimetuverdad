@@ -40,18 +40,6 @@ fetch(){
   "$PY" "$ROOT_DIR/fetch_tweets.py"
 }
 
-analyze_db(){
-  ensure_venv
-  echo "Running analysis on posts stored in DB (fast mode: skip retrieval)."
-  "$PY" -c "import analyze_posts, sys; analyze_posts.main([], skip_retrieval=True, skip_save=False)" || true
-}
-
-analyze_default(){
-  ensure_venv
-  echo "Running analysis on embedded default posts (fast mode)."
-  "$PY" "$ROOT_DIR/default_posts.py"
-}
-
 case "${1-}" in
   install)
     install
@@ -62,16 +50,13 @@ case "${1-}" in
   analyze-db)
     analyze_db
     ;;
-  analyze-default)
-    analyze_default
-    ;;
   full)
     install || true
     fetch
     analyze_db
     ;;
   *)
-    echo "Usage: $0 {install|fetch|analyze-db|analyze-default|full}"
+    echo "Usage: $0 {install|fetch|analyze-db|full}"
     exit 1
     ;;
 esac
