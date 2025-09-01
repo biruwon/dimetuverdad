@@ -155,7 +155,7 @@ class LLMModelConfig:
         
         "hate-speech-spanish": {
             "model_name": "finiteautomata/beto-sentiment-analysis",
-            "description": "Spanish sentiment analysis model",
+            "description": "Spanish hate speech detection model",
             "size_gb": 0.4,
             "speed": "fast",
             "quality": "very_good",
@@ -390,12 +390,40 @@ class LLMModelConfig:
             "speed": "medium",
             "quality": "excellent",
             "free": True,
-            "task_type": "generation",
+            "task_type": "generation",  # Primary task
             "primary_task": "generation",
+            "secondary_tasks": ["classification"],  # Can also do classification via prompting
             "pipeline_type": "ollama",  # Special pipeline type for Ollama
             "complexity_level": "full",  # Large models can handle full complexity
             "generation_params": {
                 "temperature": 0.3,
+                "max_tokens": 512
+            },
+            "max_input_length": 8000,  # Generous context window
+            "language": "multilingual",
+            "requires_tokenizer_config": False,
+            "response_parser": "ollama_chat",
+            "prompt_removal_strategy": None,
+            "model_type": "chat",
+            "ollama_config": {
+                "base_url": "http://localhost:11434/v1",
+                "api_key": "ollama"
+            }
+        },
+        "llama3.1-8b": {
+            "model_name": "llama3.1:8b",
+            "description": "Llama 3.1 8B via Ollama - fast and capable for both generation and classification",
+            "size_gb": 8.0,  # Approximate size
+            "speed": "fast",
+            "quality": "very_good",
+            "free": True,
+            "task_type": "generation",  # Primary task
+            "primary_task": "generation", 
+            "secondary_tasks": ["classification"],  # Can also do classification via prompting
+            "pipeline_type": "ollama",  # Special pipeline type for Ollama
+            "complexity_level": "full",  # Large models can handle full complexity
+            "generation_params": {
+                "temperature": 0.2,
                 "max_tokens": 512
             },
             "max_input_length": 8000,  # Generous context window
@@ -578,8 +606,7 @@ class ResponseParser:
                 categories = ["general"]
             
             return {
-                "llm_categories": categories,
-                "llm_sentiment": "negative" if final_score > 0.4 else "neutral" if final_score > 0.2 else "positive"
+                "llm_categories": categories
             }
         except Exception as e:
             print(f"⚠️ Classification parsing error: {e}")
@@ -885,15 +912,21 @@ class EnhancedLLMPipeline:
                 return "general"
             
             # === CLASSIFICATION MODEL FALLBACK ===
-            # Use classification model as additional verification
-            if self.classification_model:
+            # Use classification model as additional verification only if we don't have Ollama
+            if self.classification_model and not self.ollama_client:
                 class_result = self._classify_content(text)
                 categories = class_result.get("llm_categories", [])
-                sentiment = class_result.get("llm_sentiment", "neutral")
                 
                 # Only trust the classification model for hate speech detection
-                if ('hate_speech' in categories or 'toxic_content' in categories) and sentiment == "negative":
+                if ('hate_speech' in categories or 'toxic_content' in categories):
                     return "hate_speech"
+            
+            # For Ollama models, use direct Ollama classification instead of pattern detection
+            elif self.ollama_client:
+                ollama_result = self._classify_with_ollama(text)
+                ollama_categories = ollama_result.get("llm_categories", [])
+                if ollama_categories:
+                    return ollama_categories[0]
             
             # Default fallback
             return "general"
@@ -955,7 +988,6 @@ class EnhancedLLMPipeline:
         result = {
             "llm_explanation": "",
             "llm_categories": [],
-            "llm_sentiment": "neutral",
             "llm_analysis_type": "comprehensive",
             "processing_time": 0.0,
             "model_info": self.get_model_info()
@@ -997,31 +1029,23 @@ class EnhancedLLMPipeline:
             print(f"⚠️ Enhanced analysis error: {e}")
             result["llm_explanation"] = f"Error en análisis LLM avanzado: {str(e)}"
             result["processing_time"] = time.time() - start_time
-            
-            # Provide basic fallback analysis
-            result["llm_sentiment"] = "neutral"
         
         return result
     
     def _determine_analysis_type(self, context: Dict) -> AnalysisType:
         """Determine the optimal analysis type based on context."""
         far_right_score = context.get('far_right_score', 0.0)
-        threat_level = context.get('threat_level', 'LOW')
         claims_count = context.get('claims_count', 0)
         
-        # High threat situations need threat assessment
-        if threat_level in ['CRITICAL', 'HIGH'] or far_right_score > 0.7:
-            return AnalysisType.THREAT_ASSESSMENT
+        # High-risk content needs detailed analysis
+        if far_right_score > 0.7:
+            return AnalysisType.COMPREHENSIVE
         
-        # Many claims need verification focus
-        if claims_count >= 3:
+        # Content with claims needs verification focus
+        if claims_count > 0:
             return AnalysisType.CLAIM_VERIFICATION
         
-        # Medium threat might be misinformation
-        if far_right_score > 0.4 or 'conspir' in str(context).lower():
-            return AnalysisType.MISINFORMATION
-        
-        # Default to comprehensive analysis
+        # Default comprehensive analysis
         return AnalysisType.COMPREHENSIVE
     
     def _run_enhanced_analysis(self, text: str, analysis_type: AnalysisType, prompt_context) -> Dict:
@@ -1057,15 +1081,13 @@ class EnhancedLLMPipeline:
                     
                     return {
                         "llm_explanation": explanation,
-                        "llm_categories": categories,
-                        "llm_sentiment": classification_result.get("llm_sentiment", "neutral")
+                        "llm_categories": categories
                     }
                 else:
                     # Even if no specific categories, classification ran successfully
                     return {
                         "llm_explanation": "Clasificación rápida completada sin detectar problemas significativos.",
-                        "llm_categories": ["normal_content"],
-                        "llm_sentiment": "neutral"
+                        "llm_categories": ["normal_content"]
                     }
             
             # For generation models, use text generation
@@ -1138,8 +1160,7 @@ class EnhancedLLMPipeline:
             print(f"⚠️ Enhanced analysis error: {e}")
             return {
                 "llm_explanation": f"Error en análisis: {str(e)}",
-                "llm_categories": [],
-                "llm_sentiment": "neutral"
+                "llm_categories": []
             }
     
     def _extract_text_response(self, generated_text: str, prompt: str) -> Dict:
@@ -1160,13 +1181,16 @@ class EnhancedLLMPipeline:
         
         return {
             "llm_explanation": explanation,
-            "llm_categories": ["analyzed"],
-            "llm_sentiment": "negative"
+            "llm_categories": ["analyzed"]
         }
     
     
     def _classify_content(self, text: str) -> Dict:
         """Fast content classification using configuration-driven parsing."""
+        # Check if we have an Ollama model that can do classification
+        if not self.classification_model and self.ollama_client:
+            return self._classify_with_ollama(text)
+        
         if not self.classification_model:
             return {"llm_categories": []}
         
@@ -1187,6 +1211,49 @@ class EnhancedLLMPipeline:
             print(f"⚠️ Classification error: {e}")
         
         return {"llm_categories": []}
+    
+    def _classify_with_ollama(self, text: str) -> Dict:
+        """Perform classification using Ollama model through prompting."""
+        try:
+            classification_prompt = f"""
+Analiza el siguiente texto en español y clasifícalo en una de estas categorías:
+- hate_speech: Discurso de odio, discriminación, deshumanización
+- disinformation: Información falsa, datos inventados, afirmaciones sin evidencia  
+- conspiracy_theory: Teorías conspiratorias, narrativas sin base empírica
+- political_bias: Sesgo político extremo, retórica partidista
+- call_to_action: Llamadas a movilización o acción específica
+- general: Contenido normal sin elementos problemáticos
+
+Texto a analizar: "{text}"
+
+Responde SOLO con el nombre de la categoría (por ejemplo: hate_speech). No incluyas explicaciones.
+"""
+
+            response = self.ollama_client.chat.completions.create(
+                model=self.ollama_model_name,
+                messages=[
+                    {"role": "system", "content": "Eres un clasificador experto de contenido en español. Responde solo con la categoría exacta."},
+                    {"role": "user", "content": classification_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=20
+            )
+            
+            category = response.choices[0].message.content.strip().lower()
+            
+            # Validate category
+            valid_categories = ["hate_speech", "disinformation", "conspiracy_theory", "political_bias", "call_to_action", "general"]
+            if category in valid_categories:
+                return {
+                    "llm_categories": [category],
+                    "llm_confidence": 0.8,  # Default confidence for Ollama
+                }
+            else:
+                return {"llm_categories": ["general"]}
+                
+        except Exception as e:
+            print(f"⚠️ Ollama classification error: {e}")
+            return {"llm_categories": []}
     
     def cleanup_memory(self):
         """Clean up GPU/memory resources."""

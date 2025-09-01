@@ -18,7 +18,6 @@ class TestExample:
     id: str
     text: str
     category: str
-    expected_threat_level: str
     description: str
     far_right_score: float = 0.5
     has_claims: bool = False
@@ -35,9 +34,6 @@ class ModelResult:
     
     # LLM outputs
     llm_explanation: str = ""
-    llm_confidence: float = 0.0
-    llm_threat_assessment: str = "low"
-    llm_sentiment: str = "neutral"
     llm_categories: List[str] = None
     
     def __post_init__(self):
@@ -59,7 +55,6 @@ class ModelComparator:
                 id="hate_001",
                 text="Los musulmanes son una raza inferior que viene a destruir nuestra cultura cristiana.",
                 category="hate_speech",
-                expected_threat_level="high",
                 description="Explicit racial hate speech against Muslims",
                 far_right_score=0.85,
                 has_claims=False
@@ -70,7 +65,6 @@ class ModelComparator:
                 id="disinfo_001",
                 text="El 85% de los inmigrantes no trabajan y cobran ayudas del estado. Estudio secreto del gobierno lo confirma.",
                 category="disinformation",
-                expected_threat_level="medium",
                 description="False statistics about immigration",
                 far_right_score=0.70,
                 has_claims=True
@@ -81,7 +75,6 @@ class ModelComparator:
                 id="conspiracy_001",
                 text="Soros financia la inmigración para reemplazar a los europeos. Es el plan Kalergi en acción.",
                 category="conspiracy_theory",
-                expected_threat_level="medium",
                 description="Great replacement conspiracy theory",
                 far_right_score=0.78,
                 has_claims=True
@@ -92,7 +85,6 @@ class ModelComparator:
                 id="action_001",
                 text="¡CONCENTRACIÓN HOY 18:00 en Cibeles! Hay que salir a las calles a defender España de la invasión.",
                 category="call_to_action",
-                expected_threat_level="high",
                 description="Urgent mobilization with location and time",
                 far_right_score=0.75,
                 has_claims=False
@@ -103,7 +95,6 @@ class ModelComparator:
                 id="bias_001",
                 text="España necesita un líder fuerte como Franco que ponga orden. La democracia ha fracasado.",
                 category="political_bias",
-                expected_threat_level="medium",
                 description="Authoritarian nostalgia",
                 far_right_score=0.80,
                 has_claims=False
@@ -114,7 +105,6 @@ class ModelComparator:
                 id="normal_001",
                 text="Qué día tan bonito hace hoy en Madrid. Me voy a dar un paseo por el Retiro con la familia.",
                 category="general",
-                expected_threat_level="low",
                 description="Normal everyday content",
                 far_right_score=0.0,
                 has_claims=False
@@ -198,7 +188,7 @@ class ModelComparator:
                 
                 # Show quick result
                 if result.success:
-                    print(f"      ✅ {result.processing_time:.2f}s - {result.llm_threat_assessment} threat")
+                    print(f"      ✅ {result.processing_time:.2f}s")
                 else:
                     print(f"      ❌ Failed: {result.error}")
             
@@ -221,7 +211,6 @@ class ModelComparator:
             # Create analysis context
             analysis_context = {
                 'far_right_score': example.far_right_score,
-                'threat_level': example.expected_threat_level.upper(),
                 'claims_count': 2 if example.has_claims else 0,
                 'category': example.category
             }
@@ -237,9 +226,6 @@ class ModelComparator:
                 processing_time=processing_time,
                 success=True,
                 llm_explanation=result.get('llm_explanation', ''),
-                llm_confidence=result.get('llm_confidence', 0.0),
-                llm_threat_assessment=result.get('llm_threat_assessment', 'low'),
-                llm_sentiment=result.get('llm_sentiment', 'neutral'),
                 llm_categories=result.get('llm_categories', [])
             )
         except Exception as e:
@@ -275,12 +261,10 @@ class ModelComparator:
             
             if successful_results:
                 avg_time = sum(r.processing_time for r in successful_results) / len(successful_results)
-                avg_confidence = sum(r.llm_confidence for r in successful_results) / len(successful_results)
                 
                 model_stats[model_name] = {
                     "success_rate": len(successful_results) / len(results),
                     "avg_processing_time": round(avg_time, 3),
-                    "avg_confidence": round(avg_confidence, 2),
                     "total_tests": len(results),
                     "failed_tests": len(results) - len(successful_results)
                 }
@@ -288,7 +272,6 @@ class ModelComparator:
                 model_stats[model_name] = {
                     "success_rate": 0.0,
                     "avg_processing_time": 0.0,
-                    "avg_confidence": 0.0,
                     "total_tests": len(results),
                     "failed_tests": len(results)
                 }
@@ -306,9 +289,6 @@ class ModelComparator:
             
             if result.success:
                 focused_result.update({
-                    "llm_threat_assessment": result.llm_threat_assessment,
-                    "llm_confidence": round(result.llm_confidence, 2),
-                    "llm_sentiment": result.llm_sentiment,
                     "llm_categories": result.llm_categories,
                     "llm_explanation": result.llm_explanation
                 })
@@ -346,7 +326,6 @@ class ModelComparator:
             print(f"{i}. {model_name}")
             print(f"   ✅ Éxito: {stats['success_rate']:.1%} ({stats['total_tests'] - stats['failed_tests']}/{stats['total_tests']})")
             print(f"   ⏱️ Tiempo promedio: {stats['avg_processing_time']:.3f}s")
-            print(f"   🎯 Confianza promedio: {stats['avg_confidence']:.2f}")
             
             if stats['failed_tests'] > 0:
                 print(f"   ❌ Fallos: {stats['failed_tests']}")

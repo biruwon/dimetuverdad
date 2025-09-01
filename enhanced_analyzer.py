@@ -86,12 +86,23 @@ class EnhancedAnalyzer:
         if use_llm:
             print("- ⏳ Cargando modelo LLM para análisis avanzado...")
             try:
-                self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
-                print("- ✓ Modelo LLM cargado correctamente")
+                # Use llama3.1-8b as the recommended default model for best performance
+                self.llm_pipeline = EnhancedLLMPipeline(
+                    model_priority=model_priority,
+                    specific_models={'generation': 'llama3.1-8b'}
+                )
+                print("- ✓ Modelo LLM llama3.1-8b cargado correctamente")
             except Exception as e:
                 print(f"- ⚠️ Error cargando LLM: {e}")
-                self.llm_pipeline = None
-                self.use_llm = False
+                print("- 🔄 Intentando con modelo de respaldo...")
+                try:
+                    # Fallback to flan-t5-small if Ollama is not available
+                    self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
+                    print("- ✓ Modelo de respaldo cargado correctamente")
+                except Exception as e2:
+                    print(f"- ❌ Error cargando modelo de respaldo: {e2}")
+                    self.llm_pipeline = None
+                    self.use_llm = False
     
     def analyze_content(self, 
                              tweet_id: str,
