@@ -17,6 +17,8 @@ class FarRightCategory(Enum):
     ANTI_GOVERNMENT = "anti_government"
     HISTORICAL_REVISIONISM = "historical_revisionism"
     HEALTH_DISINFORMATION = "health_disinformation"
+    POLITICAL_BIAS = "political_bias"
+    CALL_TO_ACTION = "call_to_action"
     GENERAL = "general"
 
 @dataclass
@@ -228,6 +230,62 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\b(?:vacunas?|medicamentos?)\s+.*(?:según\s+estudios\s+que|investigaciones\s+que)\s+.*(?:médicos|gobierno)\s+(?:no\s+quieren|ocultan)',
                     'description': 'Vacunas con teorías conspirativas'
+                }
+            ],
+            'political_bias': [
+                {
+                    'pattern': r'\b(?:socialistas?|comunistas?|marxistas?)\s+(?:han\s+)?(?:destruido|destruyen|arruinado|arruinan)\s+(?:España|el\s+país)',
+                    'description': 'Retórica anti-izquierda extrema'
+                },
+                {
+                    'pattern': r'\b(?:solo|únicamente)\s+(?:vox|partido\s+patriótico)\s+(?:puede\s+)?(?:salvar|defender|proteger)\s+(?:España|la\s+patria)',
+                    'description': 'Exclusivismo político extremo'
+                },
+                {
+                    'pattern': r'\b(?:agenda|ideología)\s+(?:marxista|comunista|progre)\s+(?:está\s+)?(?:destruyendo|infectando|corrompiendo)',
+                    'description': 'Demonización ideológica'
+                },
+                {
+                    'pattern': r'\b(?:invasión|dictadura)\s+(?:comunista|socialista|progre)\s+(?:en\s+)?(?:España|nuestro\s+país)',
+                    'description': 'Retórica de invasión política'
+                },
+                {
+                    'pattern': r'\b(?:traidores?|vendidos?)\s+(?:al\s+)?(?:globalismo|comunismo|soros)',
+                    'description': 'Acusaciones de traición política'
+                },
+                {
+                    'pattern': r'\b(?:régimen|dictadura)\s+(?:de\s+)?(?:sánchez|socialista|rojo)',
+                    'description': 'Gobierno como dictadura'
+                }
+            ],
+            'call_to_action': [
+                {
+                    'pattern': r'\b(?:concentración|manifestación|protesta)\s+(?:hoy|mañana|el\s+\w+)\s+(?:a\s+las\s+)?\d{1,2}:\d{2}',
+                    'description': 'Convocatoria específica a movilización'
+                },
+                {
+                    'pattern': r'\b(?:hay\s+que|tenemos\s+que|debemos)\s+(?:salir\s+a\s+las\s+calles|movilizarnos|actuar)',
+                    'description': 'Llamada a movilización'
+                },
+                {
+                    'pattern': r'\b(?:únete|participa|ven)\s+(?:a\s+la\s+)?(?:manifestación|concentración|protesta)',
+                    'description': 'Invitación directa a protesta'
+                },
+                {
+                    'pattern': r'\b(?:todos?\s+unidos?|juntos\s+podemos|la\s+unión\s+hace\s+la\s+fuerza)',
+                    'description': 'Llamada a unidad y acción'
+                },
+                {
+                    'pattern': r'\b(?:defender|proteger|salvar)\s+(?:España|la\s+patria|nuestro\s+país)\s+(?:de\s+la\s+)?(?:invasión|destrucción)',
+                    'description': 'Llamada a defensa nacional'
+                },
+                {
+                    'pattern': r'\b(?:es\s+hora\s+de|momento\s+de)\s+(?:actuar|levantarse|despertar|luchar)',
+                    'description': 'Urgencia de acción'
+                },
+                {
+                    'pattern': r'\b(?:comparte|difunde|reenvía)\s+(?:para\s+que|hasta\s+que)\s+(?:todos?\s+)?(?:sepan|despierten)',
+                    'description': 'Llamada a difusión'
                 }
             ]
         }

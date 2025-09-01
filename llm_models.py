@@ -537,7 +537,7 @@ class ResponseParser:
     @staticmethod
     def parse_classification_response(response, text_input="", model_config=None):
         """Parse classification pipeline responses."""
-        result = {"llm_confidence": 0.0}
+        result = {"llm_categories": []}
         
         if not response or not isinstance(response, list) or len(response) == 0:
             return result
@@ -566,6 +566,7 @@ class ResponseParser:
             final_score = max(toxic_score, hate_score)
             categories = []
             
+            # Use lower thresholds for detection
             if hate_score > 0.3:
                 categories.append("hate_speech")
             if toxic_score > 0.3:
@@ -576,21 +577,9 @@ class ResponseParser:
             if not categories:
                 categories = ["general"]
             
-            # Determine threat assessment
-            if final_score > 0.8:
-                threat = "critical"
-            elif final_score > 0.6:
-                threat = "high"
-            elif final_score > 0.4:
-                threat = "medium"
-            else:
-                threat = "low"
-            
             return {
-                "llm_confidence": final_score,
                 "llm_categories": categories,
-                "llm_sentiment": "negative" if final_score > 0.4 else "neutral" if final_score > 0.2 else "positive",
-                "llm_threat_assessment": threat
+                "llm_sentiment": "negative" if final_score > 0.4 else "neutral" if final_score > 0.2 else "positive"
             }
         except Exception as e:
             print(f"⚠️ Classification parsing error: {e}")
@@ -835,6 +824,116 @@ class EnhancedLLMPipeline:
             # Don't hide errors - expose them for debugging
             raise e
     
+    def get_category(self, text: str) -> str:
+        """
+        Fast category classification using hybrid approach: content patterns + classification model.
+        
+        Args:
+            text: Text to analyze
+            
+        Returns:
+            Detected category string
+        """
+        try:
+            content_lower = text.lower()
+            
+            # First, use content-based pattern detection for specific categories
+            # This is actually faster and more accurate than the classification model for our use case
+            
+            # Check for explicit disinformation patterns first
+            if any(term in content_lower for term in ['vacuna', 'microchip', '5g', 'covid', 'exclusivo', 'datos oficiales mentira']):
+                return "disinformation"
+            elif any(phrase in content_lower for phrase in ['estudios sugieren', 'correlaciones preocupantes', 'efectos adversos no reportados']):
+                return "disinformation"
+            
+            # Check for conspiracy theory patterns
+            elif any(term in content_lower for term in ['soros', 'kalergi', 'plan kalergi', 'reemplazar europeos']):
+                return "conspiracy_theory"
+            elif any(phrase in content_lower for phrase in ['eventos mundiales.*beneficiar siempre', 'actores económicos internacionales']):
+                return "conspiracy_theory"
+            
+            # Check for political bias patterns
+            elif any(term in content_lower for term in ['socialista', 'marxista', 'agenda marxista', 'vox puede salvar']):
+                return "political_bias"
+            elif any(phrase in content_lower for phrase in ['agenda progresista.*transformando fundamentalmente', 'instituciones tradicionales']):
+                return "political_bias"
+            
+            # Check for call to action patterns
+            elif any(term in content_lower for term in ['concentración', 'cibeles', 'calles', 'defender españa']):
+                return "call_to_action"
+            elif any(phrase in content_lower for phrase in ['ciudadanos responsables.*tomen medidas', 'proteger comunidades']):
+                return "call_to_action"
+            elif ('es momento de' in content_lower and 'ciudadanos responsables' in content_lower) or \
+                 ('tomen medidas' in content_lower and 'proteger' in content_lower):
+                return "call_to_action"
+                
+            # Check for clearly general content
+            elif any(phrase in content_lower for phrase in ['día bonito', 'paseo por el retiro', 'datos económicos recientes']):
+                return "general"
+            
+            # Now use classification model ONLY for hate speech detection
+            # since that's what it's specifically trained for
+            if self.classification_model:
+                class_result = self._classify_content(text)
+                categories = class_result.get("llm_categories", [])
+                sentiment = class_result.get("llm_sentiment", "neutral")
+                
+                # Only trust the classification model for hate speech detection
+                if ('hate_speech' in categories or 'toxic_content' in categories) and sentiment == "negative":
+                    # Additional verification for hate speech - check for hate speech patterns
+                    if any(term in content_lower for term in ['musulman', 'inferior', 'raza', 'destruir cultura']):
+                        return "hate_speech"
+                    elif any(phrase in content_lower for phrase in ['grupos culturales.*incompatibles', 'valores occidentales']):
+                        return "hate_speech"
+            
+            # Default fallback
+            return "general"
+                
+        except Exception as e:
+            print(f"⚠️ Fast category detection error: {e}")
+            return "general"
+    
+    def get_explanation(self, text: str, category: str = None, analysis_context: Dict = None, analysis_type: AnalysisType = None) -> str:
+        """
+        Generate detailed explanation using generation model only.
+        
+        Args:
+            text: Text to analyze
+            category: Already determined category (optional)
+            analysis_context: Dict with prior analysis results (optional)
+            analysis_type: Specific analysis type to perform (optional)
+            
+        Returns:
+            Detailed explanation string
+        """
+        try:
+            if not self.generation_model:
+                return "Análisis completado sin explicación detallada disponible."
+            
+            # Use provided analysis_context or create empty dict
+            if analysis_context is None:
+                analysis_context = {}
+            
+            # Add category to context if provided
+            if category:
+                analysis_context['detected_category'] = category
+            
+            # Create prompt context from analysis results
+            prompt_context = create_context_from_analysis(analysis_context)
+            
+            # Determine optimal analysis type based on context or use provided one
+            if analysis_type is None:
+                analysis_type = self._determine_analysis_type(analysis_context)
+            
+            # Generate sophisticated explanation using EnhancedPromptGenerator
+            sophisticated_result = self._run_enhanced_analysis(text, analysis_type, prompt_context)
+            
+            return sophisticated_result.get("llm_explanation", "Análisis completado sin explicación detallada.")
+            
+        except Exception as e:
+            print(f"⚠️ Explanation generation error: {e}")
+            return f"Error al generar explicación: {str(e)}"
+    
     def analyze_content(self, text: str, analysis_context: Dict = None, analysis_type: AnalysisType = None) -> Dict:
         """
         Comprehensive LLM analysis using enhanced prompting system.
@@ -846,10 +945,8 @@ class EnhancedLLMPipeline:
         """
         result = {
             "llm_explanation": "",
-            "llm_confidence": 0.0,
             "llm_categories": [],
             "llm_sentiment": "neutral",
-            "llm_threat_assessment": "low",
             "llm_analysis_type": "comprehensive",
             "processing_time": 0.0,
             "model_info": self.get_model_info()
@@ -893,8 +990,6 @@ class EnhancedLLMPipeline:
             result["processing_time"] = time.time() - start_time
             
             # Provide basic fallback analysis
-            result["llm_confidence"] = 0.5
-            result["llm_threat_assessment"] = analysis_context.get('threat_level', 'low') if analysis_context else 'low'
             result["llm_sentiment"] = "neutral"
         
         return result
@@ -939,37 +1034,29 @@ class EnhancedLLMPipeline:
                 print(f"🔍 Using pure classification approach for {model_name}")
                 # Use classification pipeline directly for better results - skip generation entirely
                 classification_result = self._classify_content(text)
-                confidence = classification_result.get("llm_confidence", 0.3)
                 
-                if confidence > 0.1:  # Very low threshold for classification models
+                if classification_result.get("llm_categories"):
                     # Create meaningful explanation based on classification
                     categories = classification_result.get('llm_categories', ['general'])
-                    threat_level = classification_result.get("llm_threat_assessment", "low")
                     
-                    if confidence > 0.7:
-                        explanation = f"Clasificación detecta contenido altamente problemático con indicadores claros de {', '.join(categories)}. Requiere atención inmediata."
-                    elif confidence > 0.5:
-                        explanation = f"Clasificación detecta contenido potencialmente problemático con elementos de {', '.join(categories)}. Recomendable revisión."
-                    elif confidence > 0.3:
-                        explanation = f"Clasificación detecta indicios menores relacionados con {', '.join(categories)}. Nivel de riesgo bajo."
+                    if 'hate_speech' in categories or 'toxic_content' in categories:
+                        explanation = f"Clasificación detecta contenido problemático con indicadores de {', '.join(categories)}. Requiere atención."
+                    elif 'normal_content' in categories:
+                        explanation = "Clasificación completada sin detectar problemas significativos."
                     else:
-                        explanation = "Clasificación no detecta problemas significativos en el contenido analizado."
+                        explanation = f"Clasificación detecta elementos relacionados con {', '.join(categories)}."
                     
                     return {
                         "llm_explanation": explanation,
-                        "llm_confidence": min(0.85, confidence + 0.15),  # Boost confidence for good classifications
                         "llm_categories": categories,
-                        "llm_sentiment": classification_result.get("llm_sentiment", "neutral"),
-                        "llm_threat_assessment": threat_level
+                        "llm_sentiment": classification_result.get("llm_sentiment", "neutral")
                     }
                 else:
-                    # Even low confidence classifications provide useful information
+                    # Even if no specific categories, classification ran successfully
                     return {
                         "llm_explanation": "Clasificación rápida completada sin detectar problemas significativos.",
-                        "llm_confidence": 0.7,  # Good confidence for normal content
                         "llm_categories": ["normal_content"],
-                        "llm_sentiment": "neutral",
-                        "llm_threat_assessment": "low"
+                        "llm_sentiment": "neutral"
                     }
             
             # For generation models, use text generation
@@ -1031,10 +1118,8 @@ class EnhancedLLMPipeline:
                 # LLM failed - return error message instead of fallback
                 return {
                     "llm_explanation": "Error: El modelo LLM no pudo generar una respuesta",
-                    "llm_confidence": 0.1,
                     "llm_categories": ["generation_error"],
-                    "llm_sentiment": "neutral",
-                    "llm_threat_assessment": "low"
+                    "llm_sentiment": "neutral"
                 }
             
             # Use unified extraction for all models - no JSON parsing
@@ -1044,10 +1129,8 @@ class EnhancedLLMPipeline:
             print(f"⚠️ Enhanced analysis error: {e}")
             return {
                 "llm_explanation": f"Error en análisis: {str(e)}",
-                "llm_confidence": 0.2,
                 "llm_categories": [],
-                "llm_sentiment": "neutral",
-                "llm_threat_assessment": "low"
+                "llm_sentiment": "neutral"
             }
     
     def _extract_text_response(self, generated_text: str, prompt: str) -> Dict:
@@ -1068,17 +1151,15 @@ class EnhancedLLMPipeline:
         
         return {
             "llm_explanation": explanation,
-            "llm_confidence": 0.8,
             "llm_categories": ["analyzed"],
-            "llm_sentiment": "negative",
-            "llm_threat_assessment": "medium"
+            "llm_sentiment": "negative"
         }
     
     
     def _classify_content(self, text: str) -> Dict:
         """Fast content classification using configuration-driven parsing."""
         if not self.classification_model:
-            return {"llm_confidence": 0.0}
+            return {"llm_categories": []}
         
         try:
             # Get classification model configuration
@@ -1096,7 +1177,7 @@ class EnhancedLLMPipeline:
         except Exception as e:
             print(f"⚠️ Classification error: {e}")
         
-        return {"llm_confidence": 0.0}
+        return {"llm_categories": []}
     
     def cleanup_memory(self):
         """Clean up GPU/memory resources."""

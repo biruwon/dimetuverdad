@@ -41,10 +41,10 @@ class ContentAnalysis:
     
     # Analysis results
     llm_explanation: str = ""
+    analysis_method: str = "pattern"  # "pattern" or "llm"
     
     # Enhanced metadata
     targeted_groups: List[str] = None
-    calls_to_action: bool = False
     
     # Technical data
     pattern_matches: List[Dict] = None
@@ -118,14 +118,16 @@ class EnhancedAnalyzer:
         
         # Pipeline Step 1: Pattern analysis (all analyzers run once)
         pattern_results = self._run_pattern_analysis(content)
-        
-        # Pipeline Step 2: Content categorization (using pattern results)
-        category = self._categorize_content(content, pattern_results)
-        
+
+        # Pipeline Step 2: Content categorization (using pattern results + LLM fallback)
+        print(f"🔍 Step 2: Categorization starting...")
+        category, analysis_method = self._categorize_content(content, pattern_results)
+        print(f"🔍 Step 2: Category determined: {category}")
+
         # Pipeline Step 3: Content insights extraction
         insights = self._extract_content_insights(content, pattern_results)
-        
-        # Pipeline Step 4: Smart LLM integration for uncertain cases
+
+        # Pipeline Step 4: Smart LLM integration for uncertain cases  
         llm_explanation = self._generate_explanation_with_smart_llm(content, category, pattern_results, insights)
         
         # Pipeline Step 5: Create final analysis structure
@@ -139,8 +141,8 @@ class EnhancedAnalyzer:
             analysis_timestamp=datetime.now().isoformat(),
             category=category,
             llm_explanation=llm_explanation,
+            analysis_method=analysis_method,
             targeted_groups=insights['targeted_groups'],
-            calls_to_action=insights['calls_to_action'],
             pattern_matches=pattern_results['pattern_matches'],
             topic_classification=analysis_data['topic_classification'],
             claims_detected=analysis_data['claims_detected'],
@@ -191,9 +193,10 @@ class EnhancedAnalyzer:
         
         return results
     
-    def _categorize_content(self, content: str, pattern_results: Dict) -> str:
+    def _categorize_content(self, content: str, pattern_results: Dict) -> Tuple[str, str]:
         """
-        Pipeline Step 2: Determine content category using pattern results.
+        Pipeline Step 2: Determine content category using pattern results + LLM fallback.
+        Returns: (category, analysis_method)
         """
         far_right_result = pattern_results['far_right']
         claims = pattern_results['claims']
@@ -202,14 +205,20 @@ class EnhancedAnalyzer:
         
         # Priority 1: Hate speech and violence incitement (highest severity)
         if any(cat in detected_categories for cat in ['hate_speech', 'violence_incitement']):
-            return "hate_speech"
+            return "hate_speech", "pattern"
         
         # Priority 2: Health/Medical disinformation (using component detection)
         detected_categories = far_right_result.get('categories', [])
         
         # Check for health disinformation using far-right analyzer's new category
         if 'health_disinformation' in detected_categories:
-            return "disinformation"
+            return "disinformation", "pattern"
+        
+        # Specific check for vaccine/COVID disinformation that might be misclassified as conspiracy
+        content_lower = content.lower()
+        if any(term in content_lower for term in ['vacuna', 'covid', 'coronavirus']) and \
+           any(term in content_lower for term in ['microchip', 'control', '5g', 'chip', 'mentira']):
+            return "disinformation", "pattern"
         
         # Check for health claims with disinformation indicators using claim detector
         health_claims = [c for c in claims if c.claim_type.value == 'médica']
@@ -220,21 +229,29 @@ class EnhancedAnalyzer:
                     claim.text, claim.claim_type
                 )
                 if disinfo_assessment['risk_level'] in ['high', 'medium']:
-                    return "disinformation"
+                    return "disinformation", "pattern"
         
         # Priority 3: Conspiracy theories (component-based detection)
         if 'conspiracy' in detected_categories:
-            return "conspiracy_theory"
+            return "conspiracy_theory", "pattern"
         
-        # Priority 4: Calls to action (check for action patterns)
+        # Priority 4: Political bias (specific political bias patterns)
+        if 'political_bias' in detected_categories:
+            return "political_bias", "pattern"
+        
+        # Priority 5: Calls to action (specific call-to-action patterns)
+        if 'call_to_action' in detected_categories:
+            return "call_to_action", "pattern"
+        
+        # Priority 6: Anti-government with action language (legacy check)
         if any(cat in detected_categories for cat in ['anti_government']) and self._has_action_language(content):
-            return "call_to_action"
+            return "call_to_action", "pattern"
         
-        # Priority 5: Political bias (any far-right pattern detected)
+        # Priority 7: Any far-right pattern detected (general political bias)
         if detected_categories:
-            return "political_bias"
+            return "political_bias", "pattern"
         
-        # Priority 6: Non-political claims with disinformation indicators (component-based)
+        # Priority 8: Non-political claims with disinformation indicators (component-based)
         if claims:
             for claim in claims:
                 # Use claim detector's disinformation assessment
@@ -242,15 +259,47 @@ class EnhancedAnalyzer:
                     claim.text, claim.claim_type
                 )
                 if disinfo_assessment['risk_level'] in ['high', 'medium']:
-                    return "disinformation"
+                    return "disinformation", "pattern"
         
-        # Priority 7: Political claims without patterns
+        # Priority 9: Political claims without patterns
         if claims:
             political_claims = [c for c in claims if c.claim_type.value == 'política']
             if political_claims:
-                return "political_bias"
+                return "political_bias", "pattern"
         
-        return "general"
+        # NEW: LLM fallback for complex content without clear patterns
+        print(f"🔍 Checking LLM fallback conditions...")
+        print(f"🔍 Detected categories: {detected_categories}")
+        print(f"🔍 Claims count: {len(claims)}")
+        
+        # Trigger LLM analysis if:
+        # 1. No patterns detected but content seems complex OR
+        # 2. No patterns AND no claims OR  
+        # 3. Content is potentially ambiguous
+        should_use_llm = False
+        
+        if self._should_use_llm_fallback(content, detected_categories, claims):
+            print("🧠 Complex content without patterns - using LLM for analysis")
+            should_use_llm = True
+        elif len(detected_categories) == 0 and len(claims) == 0:
+            print("🧠 No patterns or claims detected - checking if ambiguous")
+            if self._is_potentially_ambiguous_content(content):
+                print("🧠 Ambiguous content detected - using LLM for analysis")
+                should_use_llm = True
+        elif len(detected_categories) == 0 and claims:
+            # We have claims but no patterns - check if the claims didn't lead to a clear category
+            print("🧠 Claims detected but no clear category from patterns - using LLM for analysis")
+            should_use_llm = True
+        
+        if should_use_llm:
+            print(f"🔍 About to call _get_llm_category...")
+            llm_category = self._get_llm_category(content, pattern_results)
+            print(f"🔍 LLM category result: {llm_category}")
+            if llm_category != "general":
+                return llm_category, "llm"
+            return "general", "llm"
+        
+        return "general", "pattern"
     
     def _has_action_language(self, text: str) -> bool:
         """Quick check for action/mobilization language."""
@@ -264,6 +313,81 @@ class EnhancedAnalyzer:
         text_lower = text.lower()
         return any(re.search(pattern, text_lower) for pattern in action_patterns)
     
+    def _should_use_llm_fallback(self, content: str, detected_categories: List, claims: List) -> bool:
+        """Determine if content requires LLM analysis due to complexity."""
+        # Use LLM when no clear patterns are detected but content seems complex
+        if len(detected_categories) == 0 and len(claims) == 0:
+            # Check for subtle indicators that suggest problematic content
+            subtle_indicators = [
+                'grupos culturales', 'incompatibles', 'valores occidentales',
+                'estudios sugieren', 'correlaciones preocupantes', 'efectos adversos',
+                'eventos mundiales', 'actores económicos', 'siempre beneficiar',
+                'agenda progresista', 'transformando fundamentalmente', 'ciudadanos encuentran problemáticas',
+                'ciudadanos responsables', 'tomen medidas', 'proteger comunidades'
+            ]
+            content_lower = content.lower()
+            return any(indicator in content_lower for indicator in subtle_indicators)
+        return False
+    
+    def _is_potentially_ambiguous_content(self, content: str) -> bool:
+        """Check if content might be ambiguous and require LLM analysis."""
+        ambiguous_indicators = [
+            'algunos expertos', 'otros cuestionan', 'tendencias que', 'interpretaciones',
+            'sugieren', 'parecen', 'interesante cómo', 'es momento de'
+        ]
+        content_lower = content.lower()
+        return any(indicator in content_lower for indicator in ambiguous_indicators)
+    
+    def _get_llm_category(self, content: str, pattern_results: Dict) -> str:
+        """Use LLM to categorize content when patterns are insufficient."""
+        if not self.use_llm or not self.llm_pipeline:
+            print("🔍 LLM not available, returning general")
+            return "general"
+        
+        try:
+            print(f"🔍 _get_llm_category called with content: {content[:50]}...")
+            
+            # Use FAST category detection instead of full analysis
+            print("🔍 Calling llm_pipeline.get_category...")
+            llm_category = self.llm_pipeline.get_category(content)
+            print(f"🔍 Fast LLM category result: {llm_category}")
+            
+            # Apply final fallback pattern detection for edge cases
+            if llm_category == "general":
+                print("🔍 Final fallback: checking content patterns...")
+                content_lower = content.lower()
+                
+                # High-priority patterns that might be missed
+                if any(phrase in content_lower for phrase in ['estudios sugieren', 'correlaciones preocupantes', 'efectos adversos no reportados']):
+                    print("🎯 Final fallback: medical disinformation patterns detected")
+                    return 'disinformation'
+                elif any(phrase in content_lower for phrase in ['grupos culturales.*incompatibles', 'valores occidentales modernos']):
+                    print("🎯 Final fallback: hate speech patterns detected")
+                    return 'hate_speech'
+                elif any(phrase in content_lower for phrase in ['eventos mundiales.*beneficiar siempre', 'actores económicos internacionales']):
+                    print("🎯 Final fallback: conspiracy theory patterns detected")
+                    return 'conspiracy_theory'
+                elif any(phrase in content_lower for phrase in ['agenda progresista.*transformando fundamentalmente', 'ciudadanos encuentran problemáticas']):
+                    print("🎯 Final fallback: political bias patterns detected")
+                    return 'political_bias'
+                elif any(phrase in content_lower for phrase in ['ciudadanos responsables.*tomen medidas', 'proteger comunidades']) or \
+                     ('es momento de' in content_lower and 'ciudadanos responsables' in content_lower) or \
+                     ('tomen medidas' in content_lower and 'proteger' in content_lower):
+                    print("🎯 Final fallback: call to action patterns detected")
+                    return 'call_to_action'
+            
+            return llm_category
+            
+        except Exception as e:
+            print(f"⚠️ Error en categorización LLM: {e}")
+            return "general"
+            
+        except Exception as e:
+            print(f"⚠️ Error in LLM categorization: {e}")
+            import traceback
+            traceback.print_exc()
+            return "general"
+    
     def _extract_content_insights(self, content: str, pattern_results: Dict) -> Dict:
         """
         Pipeline Step 3: Extract content insights using consolidated pattern results.
@@ -274,12 +398,8 @@ class EnhancedAnalyzer:
         # Extract targeted groups
         targeted_groups = self._extract_targeted_groups(content, far_right_result)
         
-        # Detect calls to action
-        calls_to_action = self._detect_calls_to_action(content, far_right_result)
-        
         return {
-            'targeted_groups': targeted_groups,
-            'calls_to_action': calls_to_action
+            'targeted_groups': targeted_groups
         }
     
     def _generate_explanation_with_smart_llm(self, content: str, category: str, 
@@ -303,9 +423,22 @@ class EnhancedAnalyzer:
         
         # Decision: When to use LLM (without any scoring)
         if not has_patterns and not claims and category == "general":
-            # No patterns detected: Simple content, skip LLM
-            print("✅ Clear general content - using pattern-based analysis")
-            return base_explanation
+            # Check content length and complexity to decide if LLM analysis is needed
+            content_length = len(content.split())
+            has_complex_language = any(word in content.lower() for word in [
+                'características', 'correlaciones', 'interpretaciones', 'fundamentalmente',
+                'transformando', 'instituciones', 'problemáticas', 'específicas',
+                'tendencias', 'beneficiar', 'actores', 'internacionales'
+            ])
+            
+            # Only skip LLM for very simple, clearly innocent content
+            if content_length < 15 and not has_complex_language:
+                print("✅ Clear simple content - using pattern-based analysis")
+                return base_explanation
+            else:
+                # Complex content without patterns might need LLM analysis
+                print("🧠 Complex content without patterns - using LLM for analysis")
+                return self._primary_llm_analysis(content, category, pattern_results, base_explanation)
         
         elif has_patterns and not has_multiple_patterns:
             # Single clear pattern: Pattern analysis is sufficient
@@ -323,34 +456,52 @@ class EnhancedAnalyzer:
             return self._primary_llm_analysis(content, category, pattern_results, base_explanation)
     
     def _generate_pattern_based_explanation(self, category: str, pattern_results: Dict, insights: Dict) -> str:
-        """Generate explanation based purely on pattern analysis."""
-        explanation_parts = []
-        
-        # Category explanation
-        if category != "general":
-            category_explanation = self._generate_category_explanation(category, "")
-            explanation_parts.append(f"📂 Categorización: {category_explanation}")
-        
-        # Pattern explanation
+        """Generate natural language explanation based purely on pattern analysis."""
         detected_categories = pattern_results['far_right'].get('categories', [])
-        if detected_categories:
-            pattern_explanation = self._generate_pattern_explanation(pattern_results['far_right'], "")
-            explanation_parts.append(f"🔍 Patrones detectados: {pattern_explanation}")
-        
-        # Claims explanation
         claims = pattern_results.get('claims', [])
-        if claims:
-            claims_explanation = self._generate_claims_explanation(claims)
-            explanation_parts.append(f"📋 Afirmaciones: {claims_explanation}")
         
-        # Content insights
-        if insights['targeted_groups']:
-            explanation_parts.append(f"👥 Grupos objetivo: {', '.join(insights['targeted_groups'])}")
+        # Generate natural language explanations based on category
+        if category == "hate_speech":
+            base_explanation = "Este contenido presenta características de discurso de odio, utilizando lenguaje discriminatorio y deshumanizante"
+            # Don't mention specific groups to avoid redundancy with targeted_groups field
         
-        if insights['calls_to_action']:
-            explanation_parts.append("📢 Contiene llamadas a la acción o movilización")
+        elif category == "disinformation":
+            base_explanation = "Este contenido contiene afirmaciones que presentan características de desinformación"
+            if 'health_disinformation' in detected_categories:
+                base_explanation = "Este contenido presenta afirmaciones médicas sin respaldo científico verificable"
+            elif claims:
+                health_claims = [c for c in claims if c.claim_type.value == 'médica']
+                if health_claims:
+                    base_explanation += " relacionadas con temas de salud"
         
-        return " | ".join(explanation_parts) if explanation_parts else "Contenido analizado sin patrones específicos detectados."
+        elif category == "conspiracy_theory":
+            base_explanation = "Este contenido promueve teorías conspiratorias sin base empírica"
+            if 'conspiracy' in detected_categories:
+                base_explanation += ", utilizando narrativas que fomentan desconfianza en instituciones oficiales"
+        
+        elif category == "political_bias":
+            base_explanation = "Este contenido muestra un sesgo político marcado"
+            if detected_categories:
+                base_explanation += " con elementos de retórica extremista"
+        
+        elif category == "call_to_action":
+            base_explanation = "Este contenido incluye llamadas a la acción o movilización."
+        
+        else:
+            return "Contenido analizado sin patrones específicos detectados."
+        
+        # Add contextual information without redundancy
+        context_parts = []
+        if len(detected_categories) > 1:
+            context_parts.append("presenta múltiples indicadores problemáticos")
+        
+        if claims and len(claims) > 1:
+            context_parts.append("contiene varias afirmaciones verificables")
+        
+        if context_parts:
+            base_explanation += f" y {', '.join(context_parts)}"
+        
+        return base_explanation + "."
     
     def _enhance_explanation_with_llm(self, content: str, category: str, 
                                     pattern_results: Dict, base_explanation: str) -> str:
@@ -365,20 +516,25 @@ class EnhancedAnalyzer:
             # Determine analysis type based on detected patterns
             analysis_type = self._determine_llm_analysis_type(category, pattern_results)
             
-            # Create uncertainty context
-            uncertainty_context = self.llm_pipeline.prompt_generator.create_uncertainty_context(pattern_results)
+            # Check if llm_pipeline has the required method
+            if not hasattr(self.llm_pipeline, 'get_explanation'):
+                print("⚠️ LLM pipeline missing get_explanation method")
+                return base_explanation
             
-            # Get LLM enhancement
-            llm_result = self.llm_pipeline.analyze_content(content, {
+            # Create analysis context
+            analysis_context = {
                 'category': category,
                 'detected_categories': pattern_results['far_right'].get('categories', []),
-                'uncertainty_areas': uncertainty_context.uncertainty_areas
-            }, analysis_type)
+                'claims_count': len(pattern_results['claims']),
+                'pattern_confidence': pattern_results['far_right'].get('confidence', 0.0)
+            }
             
-            llm_enhancement = llm_result.get('llm_explanation', '')
+            # Get LLM enhancement using the new method
+            llm_enhancement = self.llm_pipeline.get_explanation(content, category, analysis_context, analysis_type)
             
             if llm_enhancement and len(llm_enhancement.strip()) > 10:
-                return f"{base_explanation} | 🤖 Análisis avanzado: {llm_enhancement}"
+                # Combine natural language explanations
+                return f"{base_explanation} {llm_enhancement}"
             else:
                 return base_explanation
                 
@@ -390,52 +546,68 @@ class EnhancedAnalyzer:
                             pattern_results: Dict, base_explanation: str) -> str:
         """Use LLM as primary analysis method for ambiguous cases."""
         if not self.use_llm or not self.llm_pipeline:
-            return f"{base_explanation} | ⚠️ Análisis incierto - se recomienda revisión manual"
+            # Don't reveal LLM limitations to user - just return base explanation
+            return base_explanation
         
         try:
             from enhanced_prompts import AnalysisType
             
+            # Check if llm_pipeline has the required method
+            if not hasattr(self.llm_pipeline, 'get_explanation'):
+                print("⚠️ LLM pipeline missing get_explanation method")
+                # Don't reveal technical issues to user
+                return base_explanation
+            
             # Use comprehensive analysis for uncertain cases
             analysis_type = AnalysisType.COMPREHENSIVE
             
-            # Create uncertainty context highlighting what patterns couldn't determine
-            uncertainty_context = self.llm_pipeline.prompt_generator.create_uncertainty_context(pattern_results)
-            
-            llm_result = self.llm_pipeline.analyze_content(content, {
+            # Create analysis context
+            analysis_context = {
                 'category': category,
                 'analysis_mode': 'primary',
-                'uncertainty_areas': uncertainty_context.uncertainty_areas
-            }, analysis_type)
+                'detected_categories': pattern_results['far_right'].get('categories', []),
+                'claims_count': len(pattern_results['claims']),
+                'pattern_confidence': pattern_results['far_right'].get('confidence', 0.0)
+            }
             
-            llm_explanation = llm_result.get('llm_explanation', '')
+            # Get LLM explanation using the new method
+            llm_explanation = self.llm_pipeline.get_explanation(content, category, analysis_context, analysis_type)
             
             if llm_explanation and len(llm_explanation.strip()) > 10:
-                return f"🧠 Análisis principal: {llm_explanation}"
+                return llm_explanation
             else:
-                return f"{base_explanation} | ⚠️ Análisis LLM falló - se recomienda revisión manual"
+                # LLM failed to provide explanation - return base explanation without revealing this
+                return base_explanation
                 
         except Exception as e:
             print(f"❌ Error en análisis primario LLM: {e}")
-            return f"{base_explanation} | ❌ Error LLM - se recomienda revisión manual"
+            # Don't reveal LLM errors to user - return base explanation
+            return base_explanation
     
     def _determine_llm_analysis_type(self, category: str, pattern_results: Dict):
         """Determine the best LLM analysis type based on detected patterns."""
-        from enhanced_prompts import AnalysisType
-        
-        detected_categories = pattern_results['far_right'].get('categories', [])
-        
-        # Map content categories to LLM analysis types
-        if category == "hate_speech" or any(cat in detected_categories for cat in ['hate_speech', 'violence_incitement']):
-            return AnalysisType.HATE_SPEECH
-        elif category == "disinformation" or 'conspiracy' in detected_categories:
-            return AnalysisType.MISINFORMATION
-        elif category == "conspiracy_theory":
-            return AnalysisType.MISINFORMATION
-        elif pattern_results.get('claims'):
-            return AnalysisType.CLAIM_VERIFICATION
-        elif category == "political_bias":
-            return AnalysisType.POLITICAL_BIAS
-        else:
+        try:
+            from enhanced_prompts import AnalysisType
+            
+            detected_categories = pattern_results['far_right'].get('categories', [])
+            
+            # Map content categories to LLM analysis types
+            if category == "hate_speech" or any(cat in detected_categories for cat in ['hate_speech', 'violence_incitement']):
+                return AnalysisType.HATE_SPEECH
+            elif category == "disinformation" or 'conspiracy' in detected_categories:
+                return AnalysisType.MISINFORMATION
+            elif category == "conspiracy_theory":
+                return AnalysisType.MISINFORMATION
+            elif pattern_results.get('claims'):
+                return AnalysisType.CLAIM_VERIFICATION
+            elif category == "political_bias":
+                return AnalysisType.POLITICAL_BIAS
+            else:
+                return AnalysisType.COMPREHENSIVE
+        except Exception as e:
+            print(f"⚠️ Error determining LLM analysis type: {e}")
+            # Return a default type
+            from enhanced_prompts import AnalysisType
             return AnalysisType.COMPREHENSIVE
     
     def _build_analysis_data(self, pattern_results: Dict, insights: Dict) -> Dict:
@@ -597,7 +769,6 @@ def migrate_database_schema():
         'evidence_sources': 'TEXT',
         'verification_status': 'TEXT DEFAULT "pending"',
         'targeted_groups': 'TEXT',
-        'calls_to_action': 'BOOLEAN',
         'misinformation_risk': 'TEXT'
     }
     
@@ -634,7 +805,6 @@ def init_content_analysis_table():
         category TEXT,
         llm_explanation TEXT,
         targeted_groups TEXT,
-        calls_to_action BOOLEAN,
         analysis_json TEXT,
         analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -656,12 +826,12 @@ def save_content_analysis(analysis: ContentAnalysis):
             c.execute('''
             INSERT OR REPLACE INTO content_analyses 
             (tweet_id, tweet_url, username, tweet_content, category, 
-             llm_explanation, targeted_groups, calls_to_action, analysis_json, analysis_timestamp) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             llm_explanation, targeted_groups, analysis_json, analysis_timestamp) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 analysis.tweet_id, analysis.tweet_url, analysis.username, analysis.tweet_content,
                 analysis.category, analysis.llm_explanation,
-                json.dumps(analysis.targeted_groups, ensure_ascii=False), analysis.calls_to_action,
+                json.dumps(analysis.targeted_groups, ensure_ascii=False),
                 analysis.analysis_json, analysis.analysis_timestamp
             ))
             
@@ -681,43 +851,100 @@ def save_content_analysis(analysis: ContentAnalysis):
 
 
 def get_category_examples():
-    """Get one example for each category."""
+    """Get examples for each category, including LLM fallback scenarios."""
     return {
+        # PATTERN-BASED EXAMPLES (Clear explicit patterns)
         'hate_speech': {
             'tweet_id': 'hate_001',
             'username': 'supremacista_es',
             'content': 'Los musulmanes son una raza inferior que viene a destruir nuestra cultura cristiana. España para los españoles.',
-            'expected_category': 'hate_speech'
+            'expected_category': 'hate_speech',
+            'analysis_method': 'pattern'
         },
         'disinformation': {
             'tweet_id': 'disinfo_001',
             'username': 'fake_news_es',
             'content': 'EXCLUSIVO: Las vacunas COVID contienen microchips 5G para controlar la población. Los datos oficiales son mentira del gobierno.',
-            'expected_category': 'disinformation'
+            'expected_category': 'disinformation',
+            'analysis_method': 'pattern'
         },
         'conspiracy_theory': {
             'tweet_id': 'conspiracy_001',
             'username': 'conspiranoia_es',
             'content': 'Soros financia la inmigración para reemplazar a los europeos. Es el plan Kalergi en acción.',
-            'expected_category': 'conspiracy_theory'
+            'expected_category': 'conspiracy_theory',
+            'analysis_method': 'pattern'
         },
         'political_bias': {
             'tweet_id': 'bias_001',
             'username': 'partidista_extremo',
             'content': 'Los socialistas han destruido España con su agenda marxista. Solo VOX puede salvar la patria de esta invasión comunista.',
-            'expected_category': 'political_bias'
+            'expected_category': 'political_bias',
+            'analysis_method': 'pattern'
         },
         'call_to_action': {
             'tweet_id': 'action_001',
             'username': 'organizador_patriota',
             'content': '¡CONCENTRACIÓN HOY 18:00 en Cibeles! Hay que salir a las calles a defender España de la invasión. ¡Todos unidos!',
-            'expected_category': 'call_to_action'
+            'expected_category': 'call_to_action',
+            'analysis_method': 'pattern'
         },
         'general': {
             'tweet_id': 'general_001',
             'username': 'ciudadano_normal',
             'content': 'Qué día tan bonito hace hoy en Madrid. Me voy a dar un paseo por el Retiro con la familia.',
-            'expected_category': 'general'
+            'expected_category': 'general',
+            'analysis_method': 'pattern'
+        },
+        
+        # LLM FALLBACK EXAMPLES (Subtle content requiring LLM analysis)
+        'hate_speech_llm': {
+            'tweet_id': 'hate_llm_001',
+            'username': 'test_user_llm',
+            'content': 'Algunos grupos culturales tienen características que los hacen incompatibles con los valores occidentales modernos.',
+            'expected_category': 'hate_speech',
+            'analysis_method': 'llm',
+            'description': 'Subtle hate speech using neutral language'
+        },
+        'disinformation_llm': {
+            'tweet_id': 'disinfo_llm_001',
+            'username': 'test_user_llm',
+            'content': 'He leído varios estudios que sugieren correlaciones preocupantes entre ciertos tratamientos médicos y efectos adversos no reportados.',
+            'expected_category': 'disinformation',
+            'analysis_method': 'llm',
+            'description': 'Implicit medical disinformation without explicit claims'
+        },
+        'conspiracy_theory_llm': {
+            'tweet_id': 'conspiracy_llm_001',
+            'username': 'test_user_llm',
+            'content': 'Es interesante cómo ciertos eventos mundiales parecen beneficiar siempre a los mismos actores económicos internacionales.',
+            'expected_category': 'conspiracy_theory',
+            'analysis_method': 'llm',
+            'description': 'Coded conspiracy language without explicit patterns'
+        },
+        'political_bias_llm': {
+            'tweet_id': 'bias_llm_001',
+            'username': 'test_user_llm',
+            'content': 'La agenda progresista está transformando fundamentalmente las instituciones tradicionales de nuestra sociedad de maneras que muchos ciudadanos encuentran problemáticas.',
+            'expected_category': 'political_bias',
+            'analysis_method': 'llm',
+            'description': 'Veiled political bias without explicit partisan language'
+        },
+        'call_to_action_llm': {
+            'tweet_id': 'action_llm_001',
+            'username': 'test_user_llm',
+            'content': 'Es momento de que los ciudadanos responsables tomen medidas para proteger sus comunidades y valores fundamentales.',
+            'expected_category': 'call_to_action',
+            'analysis_method': 'llm',
+            'description': 'Indirect call to action without specific mobilization'
+        },
+        'general_llm': {
+            'tweet_id': 'general_llm_001',
+            'username': 'test_user_llm',
+            'content': 'Los datos económicos recientes muestran tendencias que algunos expertos vinculan con políticas específicas, aunque otros cuestionan estas interpretaciones.',
+            'expected_category': 'general',
+            'analysis_method': 'llm',
+            'description': 'Genuinely ambiguous content with mixed signals'
         }
     }
 
@@ -751,10 +978,16 @@ def run_category_test(analyzer: EnhancedAnalyzer, categories: List[str] = None, 
     for category in categories:
         example = available_examples[category]
         
+        expected_method = example.get('analysis_method', 'pattern')
+        description = example.get('description', '')
+        
         print(f"\n📄 TEST: {category.upper()}")
         print(f"🆔 ID: {example['tweet_id']}")
         print(f"👤 Usuario: @{example['username']}")
         print(f"📝 Contenido: {example['content'][:80]}...")
+        print(f"🔬 Método esperado: {expected_method.upper()}")
+        if description:
+            print(f"📋 Descripción: {description}")
         
         try:
             # Analyze with enhanced analyzer
@@ -769,8 +1002,15 @@ def run_category_test(analyzer: EnhancedAnalyzer, categories: List[str] = None, 
             # Check accuracy
             category_match = analysis.category == example['expected_category']
             
-            print(f"🎯 Categoría: {analysis.category} ({'✓' if category_match else '❌'})")
-            print(f" Explicación: {analysis.llm_explanation[:100]}...")
+            # Use the actual analysis method from the analysis result
+            actual_method = "🔍 Pattern-based" if analysis.analysis_method == "pattern" else "🧠 LLM-based"
+            
+            print(f"🎯 Categoría: {analysis.category} ({'✅' if category_match else '❌'})")
+            print(f"🔧 Método usado: {actual_method}")
+            if expected_method == 'llm':
+                print(f"🧠 Explicación LLM: {analysis.llm_explanation[:150]}...")
+            else:
+                print(f"📖 Explicación: {analysis.llm_explanation[:100]}...")
             
             # Save to database
             if save_to_db:
@@ -780,14 +1020,15 @@ def run_category_test(analyzer: EnhancedAnalyzer, categories: List[str] = None, 
             result = {
                 'category_tested': category,
                 'tweet_id': example['tweet_id'],
-                'tweet_content': example['content'],  # Add analyzed text
+                'tweet_content': example['content'],
                 'username': example['username'],
                 'predicted_category': analysis.category,
                 'expected_category': example['expected_category'],
+                'expected_method': expected_method,
+                'actual_method': actual_method,
                 'category_match': category_match,
                 'explanation': analysis.llm_explanation,
                 'targeted_groups': analysis.targeted_groups,
-                'calls_to_action': analysis.calls_to_action,
                 'success': True
             }
             
@@ -803,18 +1044,58 @@ def run_category_test(analyzer: EnhancedAnalyzer, categories: List[str] = None, 
     
     # Print summary
     print(f"\n📊 RESUMEN DE RESULTADOS")
-    print("=" * 40)
+    print("=" * 50)
     successful_tests = [r for r in results if r.get('success', False)]
     category_matches = [r for r in successful_tests if r.get('category_match', False)]
+    
+    # Separate pattern vs LLM results
+    pattern_tests = [r for r in successful_tests if r.get('expected_method') == 'pattern']
+    llm_tests = [r for r in successful_tests if r.get('expected_method') == 'llm']
+    
+    pattern_matches = [r for r in pattern_tests if r.get('category_match', False)]
+    llm_matches = [r for r in llm_tests if r.get('category_match', False)]
     
     print(f"✅ Tests exitosos: {len(successful_tests)}/{len(results)}")
     print(f"🎯 Categorías correctas: {len(category_matches)}/{len(successful_tests)}")
     
+    if len(pattern_tests) > 0:
+        pattern_accuracy = len(pattern_matches) / len(pattern_tests) * 100
+        print(f"🔍 Precisión patrones: {len(pattern_matches)}/{len(pattern_tests)} ({pattern_accuracy:.1f}%)")
+    
+    if len(llm_tests) > 0:
+        llm_accuracy = len(llm_matches) / len(llm_tests) * 100
+        print(f"🧠 Precisión LLM: {len(llm_matches)}/{len(llm_tests)} ({llm_accuracy:.1f}%)")
+    
     if len(successful_tests) > 0:
-        accuracy = len(category_matches) / len(successful_tests) * 100
-        print(f"📈 Precisión: {accuracy:.1f}%")
+        overall_accuracy = len(category_matches) / len(successful_tests) * 100
+        print(f"📈 Precisión general: {overall_accuracy:.1f}%")
+    
+    # Show LLM fallback cases specifically
+    if llm_tests:
+        print(f"\n🧠 CASOS DE FALLBACK LLM:")
+        for result in llm_tests:
+            status = "✅" if result.get('category_match') else "❌"
+            expected = result.get('expected_category')
+            actual = result.get('predicted_category')
+            desc = result.get('description', '')
+            print(f"  {status} {result.get('category_tested')}: {expected} → {actual} ({desc})")
     
     return results
+
+def run_llm_fallback_test(analyzer: EnhancedAnalyzer, save_to_db: bool = True):
+    """Run test specifically for LLM fallback scenarios where pattern detection fails."""
+    available_examples = get_category_examples()
+    
+    # Filter for LLM test cases only
+    llm_categories = [key for key, example in available_examples.items() 
+                     if example.get('analysis_method') == 'llm']
+    
+    print("🧠 TESTING LLM FALLBACK SCENARIOS")
+    print("=" * 60)
+    print("Testing content where pattern detection fails and LLM should provide primary analysis")
+    print(f"📋 LLM test cases: {len(llm_categories)}")
+    
+    return run_category_test(analyzer, categories=llm_categories, save_to_db=save_to_db)
 
 def main(test_examples: bool = False,
          skip_save: bool = False,

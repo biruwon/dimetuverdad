@@ -24,6 +24,13 @@ class PromptContext:
     political_topic: str
     uncertainty_areas: List[str]
 
+@dataclass 
+class UncertaintyContext:
+    """Context information for uncertain analysis scenarios."""
+    uncertainty_areas: List[str]
+    detected_categories: List[str]
+    total_patterns: int
+
 class EnhancedPromptGenerator:
     """
     Generates sophisticated prompts for LLM analysis based on pattern analysis results.
@@ -181,7 +188,7 @@ class EnhancedPromptGenerator:
         
         return "\n".join(prompt_parts)
     
-    def create_uncertainty_context(self, pattern_results: Dict) -> PromptContext:
+    def create_uncertainty_context(self, pattern_results: Dict) -> UncertaintyContext:
         """
         Create context highlighting areas where pattern analysis shows uncertainty.
         This guides LLM to focus on ambiguous areas.
@@ -193,8 +200,9 @@ class EnhancedPromptGenerator:
         detected_categories = far_right_result.get('categories', [])
         
         # Use simple heuristics instead of confidence scores
-        pattern_matches = far_right_result.get('pattern_matches', {})
-        total_patterns = sum(len(matches) for matches in pattern_matches.values())
+        pattern_matches = far_right_result.get('pattern_matches', [])
+        # pattern_matches is a list, not a dict
+        total_patterns = len(pattern_matches) if isinstance(pattern_matches, list) else 0
         
         if total_patterns == 0:
             uncertainty_areas.append("Clasificación de contenido ambigua - sin patrones claros")
@@ -205,9 +213,20 @@ class EnhancedPromptGenerator:
         # Check for claim verification needs
         claims = pattern_results.get('claims', [])
         if claims:
-            high_verifiability_claims = [c for c in claims if c.verifiability.value == 'high']
+            high_verifiability_claims = [c for c in claims if hasattr(c, 'verifiability') and c.verifiability.value == 'high']
             if high_verifiability_claims:
                 uncertainty_areas.append("Afirmaciones verificables requieren validación")
+        
+        # Check for topic clarity
+        topics = pattern_results.get('topics', [])
+        if topics and len(topics) > 1:
+            uncertainty_areas.append("Múltiples temas políticos detectados")
+        
+        return UncertaintyContext(
+            uncertainty_areas=uncertainty_areas,
+            detected_categories=detected_categories,
+            total_patterns=total_patterns
+        )
         
         # Check for topic clarity
         topics = pattern_results.get('topics', [])
