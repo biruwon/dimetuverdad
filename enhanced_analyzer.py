@@ -171,18 +171,9 @@ class EnhancedAnalyzer:
         results['far_right'] = far_right_result
         
         # Phase 3: Claims analysis (strength: factual verification needs)
-        # Prioritize claim detection if political content or patterns detected
-        should_analyze_claims = (
-            is_political_content or 
-            far_right_result.get('has_patterns', False) or
-            len(content) > 100  # Longer content more likely to have claims
-        )
-        
-        if should_analyze_claims:
-            claims = self.claim_detector.detect_claims(content)
-            results['claims'] = claims
-        else:
-            results['claims'] = []
+        # Always run claims analysis to detect all types of disinformation, not just political
+        claims = self.claim_detector.detect_claims(content)
+        results['claims'] = claims
         
         # Phase 4: Create enriched pattern matches combining all components
         pattern_matches = far_right_result.get('pattern_matches', [])
@@ -213,15 +204,25 @@ class EnhancedAnalyzer:
         if any(cat in detected_categories for cat in ['hate_speech', 'violence_incitement']):
             return "hate_speech"
         
-        # Priority 2: Disinformation (conspiracy patterns about medical/health topics)
-        if 'conspiracy' in detected_categories:
-            # Check if it's health/medical related disinformation
-            text_lower = content.lower()
-            health_keywords = ['vacuna', 'covid', 'medicina', 'salud', 'microchip', 'control']
-            if any(keyword in text_lower for keyword in health_keywords):
-                return "disinformation"
+        # Priority 2: Health/Medical disinformation (using component detection)
+        detected_categories = far_right_result.get('categories', [])
         
-        # Priority 3: Conspiracy theories
+        # Check for health disinformation using far-right analyzer's new category
+        if 'health_disinformation' in detected_categories:
+            return "disinformation"
+        
+        # Check for health claims with disinformation indicators using claim detector
+        health_claims = [c for c in claims if c.claim_type.value == 'médica']
+        if health_claims:
+            for claim in health_claims:
+                # Use the new disinformation assessment from claim detector
+                disinfo_assessment = self.claim_detector.assess_disinformation_indicators(
+                    claim.text, claim.claim_type
+                )
+                if disinfo_assessment['risk_level'] in ['high', 'medium']:
+                    return "disinformation"
+        
+        # Priority 3: Conspiracy theories (component-based detection)
         if 'conspiracy' in detected_categories:
             return "conspiracy_theory"
         
@@ -233,7 +234,17 @@ class EnhancedAnalyzer:
         if detected_categories:
             return "political_bias"
         
-        # Priority 6: Political claims without patterns
+        # Priority 6: Non-political claims with disinformation indicators (component-based)
+        if claims:
+            for claim in claims:
+                # Use claim detector's disinformation assessment
+                disinfo_assessment = self.claim_detector.assess_disinformation_indicators(
+                    claim.text, claim.claim_type
+                )
+                if disinfo_assessment['risk_level'] in ['high', 'medium']:
+                    return "disinformation"
+        
+        # Priority 7: Political claims without patterns
         if claims:
             political_claims = [c for c in claims if c.claim_type.value == 'política']
             if political_claims:

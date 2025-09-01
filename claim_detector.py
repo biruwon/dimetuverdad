@@ -321,6 +321,60 @@ class SpanishClaimDetector:
         else:
             return UrgencyLevel.LOW
     
+    def assess_disinformation_indicators(self, text: str, claim_type: ClaimType) -> Dict:
+        """
+        Assess if a claim shows disinformation indicators.
+        Returns indicators and risk level.
+        """
+        text_lower = text.lower()
+        indicators = []
+        risk_score = 0.0
+        
+        # Disinformation language patterns
+        disinfo_patterns = [
+            {'pattern': r'\b(?:no\s+quieren\s+que\s+sepas|ocultan\s+la\s+verdad|te\s+están\s+engañando)', 'weight': 0.8, 'indicator': 'Lenguaje conspirativo'},
+            {'pattern': r'\b(?:estudios\s+independientes|investigación\s+censurada|científicos\s+silenciados)', 'weight': 0.7, 'indicator': 'Fuentes supuestamente censuradas'},
+            {'pattern': r'\b(?:big\s+pharma|industria\s+farmacéutica|élite\s+médica)\s+(?:oculta|controla|manipula)', 'weight': 0.9, 'indicator': 'Conspiración médica'},
+            {'pattern': r'\b(?:cura|elimina|trata)\s+(?:el\s+)?(?:cáncer|vih|diabetes)\s+en\s+\d+\s+días', 'weight': 1.0, 'indicator': 'Promesa de cura milagrosa'},
+            {'pattern': r'\b(?:remedio|tratamiento)\s+(?:natural|milagroso|secreto)\s+(?:que\s+)?(?:funciona|cura)', 'weight': 0.8, 'indicator': 'Medicina alternativa dudosa'},
+            {'pattern': r'\b(?:según\s+estudios\s+que|investigaciones\s+que)\s+(?:los\s+)?(?:médicos|gobierno|élite)', 'weight': 0.6, 'indicator': 'Estudios sin especificar'},
+            {'pattern': r'\b(?:es\s+un\s+invento|es\s+una\s+mentira|todo\s+es\s+falso)\s+(?:para|de)', 'weight': 0.7, 'indicator': 'Negación categórica'},
+            {'pattern': r'\b(?:despierta|abre\s+los\s+ojos|la\s+realidad\s+es)', 'weight': 0.5, 'indicator': 'Llamada al despertar'}
+        ]
+        
+        for pattern_data in disinfo_patterns:
+            if re.search(pattern_data['pattern'], text_lower):
+                indicators.append(pattern_data['indicator'])
+                risk_score += pattern_data['weight']
+        
+        # Additional risk factors for medical claims
+        if claim_type == ClaimType.MEDICA:
+            medical_red_flags = [
+                r'\b(?:sin\s+efectos\s+secundarios|100%\s+natural|garantizado)',
+                r'\b(?:los\s+médicos\s+odian|la\s+industria\s+no\s+quiere)',
+                r'\b(?:método\s+revolucionario|descubrimiento\s+oculto)'
+            ]
+            for flag in medical_red_flags:
+                if re.search(flag, text_lower):
+                    indicators.append('Banderas rojas médicas')
+                    risk_score += 0.3
+        
+        # Determine risk level
+        if risk_score >= 1.5:
+            risk_level = 'high'
+        elif risk_score >= 0.8:
+            risk_level = 'medium'
+        elif risk_score >= 0.3:
+            risk_level = 'low'
+        else:
+            risk_level = 'none'
+        
+        return {
+            'risk_level': risk_level,
+            'risk_score': risk_score,
+            'indicators': indicators
+        }
+    
     def _generate_verification_keywords(self, claim_type: ClaimType, entities: List[str]) -> List[str]:
         """Generate keywords useful for fact-checking the claim."""
         keywords = list(entities)

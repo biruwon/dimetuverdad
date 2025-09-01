@@ -16,6 +16,7 @@ class FarRightCategory(Enum):
     VIOLENCE_INCITEMENT = "violence_incitement"
     ANTI_GOVERNMENT = "anti_government"
     HISTORICAL_REVISIONISM = "historical_revisionism"
+    HEALTH_DISINFORMATION = "health_disinformation"
     GENERAL = "general"
 
 @dataclass
@@ -49,6 +50,10 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\b(?:virus|infectan|plaga|invasión)\s+(?:musulmán|gitana|extranjera)\b',
                     'description': 'Deshumanización de grupos'
+                },
+                {
+                    'pattern': r'\b(?:los\s+)?(?:inmigrantes|extranjeros|musulmanes)\s+(?:son\s+)?(?:una\s+)?(?:plaga|virus|amenaza|invasión)',
+                    'description': 'Deshumanización de inmigrantes'
                 },
                 {
                     'pattern': r'\b(?:genéticamente|biológicamente)\s+inferior(?:es)?\b',
@@ -115,6 +120,30 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\b(?:datos\s+oficiales\s+son\s+mentira|gobierno\s+oculta|medios\s+mainstream\s+ocultan)\b',
                     'description': 'Desconfianza en información oficial'
+                },
+                {
+                    'pattern': r'\b(?:chemtrails?|estelas\s+químicas)\b.*(?:población|control|veneno|aluminio)',
+                    'description': 'Teoría de chemtrails'
+                },
+                {
+                    'pattern': r'\b(?:industria\s+farmacéutica|big\s+pharma)\s+(?:oculta|esconde|no\s+quiere)',
+                    'description': 'Conspiración farmacéutica'
+                },
+                {
+                    'pattern': r'\b(?:cambio\s+climático|calentamiento\s+global)\s+(?:es\s+(?:un\s+)?(?:invento|mentira|farsa))',
+                    'description': 'Negación del cambio climático'
+                },
+                {
+                    'pattern': r'\b(?:científicos\s+ocultan|estudios\s+independientes|la\s+verdad\s+que\s+no\s+te\s+cuentan)',
+                    'description': 'Desconfianza en ciencia oficial'
+                },
+                {
+                    'pattern': r'\b(?:experimento\s+social|control\s+mental|población\s+mundial)',
+                    'description': 'Teorías de control poblacional'
+                },
+                {
+                    'pattern': r'\b(?:élite\s+global|reptilianos|nuevo\s+orden)\s+(?:controla|domina|manipula)',
+                    'description': 'Conspiración élite global'
                 }
             ],
             'violence_incitement': [
@@ -169,6 +198,36 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\b(?:memoria\s+histórica)\s+(?:falsa|manipulada|sectaria)\b',
                     'description': 'Negación memoria histórica'
+                }
+            ],
+            'health_disinformation': [
+                {
+                    'pattern': r'\b(?:suplemento|remedio)\s+(?:natural|milagroso)\s+(?:cura|trata)\s+(?:el\s+)?(?:cáncer|diabetes|covid)',
+                    'description': 'Curas milagrosas fraudulentas'
+                },
+                {
+                    'pattern': r'\b(?:este|mi)\s+(?:tratamiento|medicina|producto)\s+(?:cura|elimina)\s+(?:el\s+)?(?:cáncer|vih|diabetes)\s+en\s+\d+\s+días',
+                    'description': 'Promesas de cura rápida'
+                },
+                {
+                    'pattern': r'\b(?:medicina\s+alternativa|terapia\s+natural)\s+(?:que\s+)?(?:los\s+)?médicos\s+(?:no\s+quieren|ocultan|prohíben)',
+                    'description': 'Medicina alternativa vs medicina oficial'
+                },
+                {
+                    'pattern': r'\b(?:la\s+verdad\s+sobre|secreto\s+de)\s+(?:las\s+)?(?:vacunas|medicamentos|tratamientos)',
+                    'description': 'Revelaciones sobre medicina'
+                },
+                {
+                    'pattern': r'\b(?:estudios\s+(?:independientes|secretos|censurados))\s+(?:demuestran|revelan|prueban)',
+                    'description': 'Estudios supuestamente censurados'
+                },
+                {
+                    'pattern': r'\b(?:vacunas?)\s+(?:causan|provocan)\s+(?:autismo|cáncer|esterilidad)',
+                    'description': 'Desinformación sobre vacunas'
+                },
+                {
+                    'pattern': r'\b(?:vacunas?|medicamentos?)\s+.*(?:según\s+estudios\s+que|investigaciones\s+que)\s+.*(?:médicos|gobierno)\s+(?:no\s+quieren|ocultan)',
+                    'description': 'Vacunas con teorías conspirativas'
                 }
             ]
         }
