@@ -37,7 +37,7 @@ class ContentAnalysis:
     analysis_timestamp: str
     
     # Content categories (standardized)
-    category: str  # disinformation, hate_speech, political_bias, conspiracy_theory, call_to_action, general
+    category: str  # disinformation, hate_speech, far_right_bias, conspiracy_theory, call_to_action, general
     
     # Analysis results
     llm_explanation: str = ""
@@ -86,12 +86,12 @@ class EnhancedAnalyzer:
         if use_llm:
             print("- ⏳ Cargando modelo LLM para análisis avanzado...")
             try:
-                # Use llama3.1-8b as the recommended default model for best performance
+                # Use gpt-oss-20b as the recommended default model for best performance
                 self.llm_pipeline = EnhancedLLMPipeline(
                     model_priority=model_priority,
-                    specific_models={'generation': 'llama3.1-8b'}
+                    specific_models={'generation': 'gpt-oss-20b'}
                 )
-                print("- ✓ Modelo LLM llama3.1-8b cargado correctamente")
+                print("- ✓ Modelo LLM gpt-oss-20b cargado correctamente")
             except Exception as e:
                 print(f"- ⚠️ Error cargando LLM: {e}")
                 print("- 🔄 Intentando con modelo de respaldo...")
@@ -247,8 +247,8 @@ class EnhancedAnalyzer:
             return "conspiracy_theory", "pattern"
         
         # Priority 4: Political bias (specific political bias patterns)
-        if 'political_bias' in detected_categories:
-            return "political_bias", "pattern"
+        if 'far_right_bias' in detected_categories:
+            return "far_right_bias", "pattern"
         
         # Priority 5: Calls to action (specific call-to-action patterns)
         if 'call_to_action' in detected_categories:
@@ -260,7 +260,7 @@ class EnhancedAnalyzer:
         
         # Priority 7: Any far-right pattern detected (general political bias)
         if detected_categories:
-            return "political_bias", "pattern"
+            return "far_right_bias", "pattern"
         
         # Priority 8: Non-political claims with disinformation indicators (component-based)
         if claims:
@@ -276,7 +276,7 @@ class EnhancedAnalyzer:
         if claims:
             political_claims = [c for c in claims if c.claim_type.value == 'política']
             if political_claims:
-                return "political_bias", "pattern"
+                return "far_right_bias", "pattern"
         
         # NEW: LLM fallback for complex content without clear patterns
         print(f"🔍 Checking LLM fallback conditions...")
@@ -291,7 +291,7 @@ class EnhancedAnalyzer:
             if llm_category != "general":
                 return llm_category, "llm"
             return "general", "llm"
-        
+
         return "general", "pattern"
     
     def _has_action_language(self, text: str) -> bool:
@@ -308,9 +308,9 @@ class EnhancedAnalyzer:
     
     def _should_use_llm_fallback(self, content: str, detected_categories: List, claims: List) -> bool:
         """Determine if content requires LLM analysis when pattern detection fails."""
-        # Simple rule: Use LLM when no patterns are detected
-        # No word-based heuristics - let the LLM handle all cases where patterns fail
-        return len(detected_categories) == 0 and len(claims) == 0
+        # Use LLM when no patterns are detected, regardless of claims
+        # Claims alone don't determine category - context matters
+        return len(detected_categories) == 0
     
     def _get_llm_category(self, content: str, pattern_results: Dict) -> str:
         """Use LLM to categorize content when patterns are insufficient."""
@@ -431,8 +431,8 @@ class EnhancedAnalyzer:
             if 'conspiracy' in detected_categories:
                 base_explanation += ", utilizando narrativas que fomentan desconfianza en instituciones oficiales"
         
-        elif category == "political_bias":
-            base_explanation = "Este contenido muestra un sesgo político marcado"
+        elif category == "far_right_bias":
+            base_explanation = "Este contenido muestra marcos interpretativos de extrema derecha"
             if detected_categories:
                 base_explanation += " con elementos de retórica extremista"
         
@@ -552,8 +552,8 @@ class EnhancedAnalyzer:
                 return AnalysisType.MISINFORMATION
             elif pattern_results.get('claims'):
                 return AnalysisType.CLAIM_VERIFICATION
-            elif category == "political_bias":
-                return AnalysisType.POLITICAL_BIAS
+            elif category == "far_right_bias":
+                return AnalysisType.FAR_RIGHT_BIAS
             else:
                 return AnalysisType.COMPREHENSIVE
         except Exception as e:
@@ -644,7 +644,7 @@ class EnhancedAnalyzer:
             "hate_speech": "Detectado discurso de odio con lenguaje discriminatorio",
             "disinformation": "Identificada posible desinformación o contenido falso",
             "conspiracy_theory": "Detectadas teorías conspiratorias sin evidencia",
-            "political_bias": "Contenido con sesgo político marcado",
+            "far_right_bias": "Contenido con marcos interpretativos de extrema derecha",
             "call_to_action": "Detectada llamada a la acción o movilización"
         }
         
@@ -695,6 +695,15 @@ class EnhancedAnalyzer:
             return self._has_action_language(text)
         
         return False
+
+    def cleanup_resources(self):
+        """Clean up any resources used by the analyzer."""
+        try:
+            if hasattr(self, 'llm_pipeline') and self.llm_pipeline:
+                if hasattr(self.llm_pipeline, 'cleanup'):
+                    self.llm_pipeline.cleanup()
+        except Exception as e:
+            print(f"⚠️ Warning during cleanup: {e}")
     
 
 # Database functions for content analysis workflow
@@ -827,11 +836,11 @@ def get_category_examples():
             'expected_category': 'conspiracy_theory',
             'analysis_method': 'pattern'
         },
-        'political_bias': {
+        'far_right_bias': {
             'tweet_id': 'bias_001',
             'username': 'partidista_extremo',
             'content': 'Los socialistas han destruido España con su agenda marxista. Solo VOX puede salvar la patria de esta invasión comunista.',
-            'expected_category': 'political_bias',
+            'expected_category': 'far_right_bias',
             'analysis_method': 'pattern'
         },
         'call_to_action': {
@@ -874,13 +883,13 @@ def get_category_examples():
             'analysis_method': 'llm',
             'description': 'Coded conspiracy language without explicit patterns'
         },
-        'political_bias_llm': {
+        'far_right_bias_llm': {
             'tweet_id': 'bias_llm_001',
             'username': 'test_user_llm',
             'content': 'La agenda progresista está transformando fundamentalmente las instituciones tradicionales de nuestra sociedad de maneras que muchos ciudadanos encuentran problemáticas.',
-            'expected_category': 'political_bias',
+            'expected_category': 'far_right_bias',
             'analysis_method': 'llm',
-            'description': 'Veiled political bias without explicit partisan language'
+            'description': 'Veiled far-right bias without explicit partisan language'
         },
         'call_to_action_llm': {
             'tweet_id': 'action_llm_001',
@@ -1095,7 +1104,7 @@ if __name__ == '__main__':
                        help='Test LLM pipeline with sample content and exit')
     parser.add_argument('--categories', nargs='*', 
                        choices=['hate_speech', 'disinformation', 'conspiracy_theory', 
-                               'political_bias', 'call_to_action', 'general'],
+                               'far_right_bias', 'call_to_action', 'general'],
                        help='Specific categories to test (default: all categories)')
     parser.add_argument('--list-categories', action='store_true',
                        help='Show available categories and exit')

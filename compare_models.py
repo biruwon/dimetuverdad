@@ -90,11 +90,11 @@ class ModelComparator:
                 has_claims=False
             ),
             
-            # === POLITICAL BIAS ===
+            # === FAR-RIGHT BIAS ===
             TestExample(
                 id="bias_001",
                 text="España necesita un líder fuerte como Franco que ponga orden. La democracia ha fracasado.",
-                category="political_bias",
+                category="far_right_bias",
                 description="Authoritarian nostalgia",
                 far_right_score=0.80,
                 has_claims=False

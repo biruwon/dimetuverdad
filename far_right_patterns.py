@@ -17,7 +17,7 @@ class FarRightCategory(Enum):
     ANTI_GOVERNMENT = "anti_government"
     HISTORICAL_REVISIONISM = "historical_revisionism"
     HEALTH_DISINFORMATION = "health_disinformation"
-    POLITICAL_BIAS = "political_bias"
+    FAR_RIGHT_BIAS = "far_right_bias"
     CALL_TO_ACTION = "call_to_action"
     GENERAL = "general"
 
@@ -146,6 +146,18 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\b(?:élite\s+global|reptilianos|nuevo\s+orden)\s+(?:controla|domina|manipula)',
                     'description': 'Conspiración élite global'
+                },
+                {
+                    'pattern': r'\b(?:no\s+es\s+casualidad|no\s+es\s+coincidencia)\s+que\b.*\b(?:siempre|siempre\s+están|benefician|mismos)\b',
+                    'description': 'Patrones de intencionalidad oculta'
+                },
+                {
+                    'pattern': r'\b(?:mismos?\s+(?:grupos?|empresas?|personas?|corporaciones?))\s+(?:que\s+)?(?:se\s+)?(?:benefician|controlan|dominan)\b.*\b(?:eventos?|situaciones?|crisis)\b',
+                    'description': 'Beneficiarios recurrentes sospechosos'
+                },
+                {
+                    'pattern': r'\b(?:siempre\s+están|siempre\s+aparecen|siempre\s+salen\s+ganando)\s+en\s+(?:posiciones?\s+de\s+)?(?:control|poder|ventaja)\b',
+                    'description': 'Patrones de control sistemático'
                 }
             ],
             'violence_incitement': [
@@ -232,7 +244,7 @@ class FarRightAnalyzer:
                     'description': 'Vacunas con teorías conspirativas'
                 }
             ],
-            'political_bias': [
+            'far_right_bias': [
                 {
                     'pattern': r'\b(?:socialistas?|comunistas?|marxistas?)\s+(?:han\s+)?(?:destruido|destruyen|arruinado|arruinan)\s+(?:España|el\s+país)',
                     'description': 'Retórica anti-izquierda extrema'
@@ -256,6 +268,18 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\b(?:régimen|dictadura)\s+(?:de\s+)?(?:sánchez|socialista|rojo)',
                     'description': 'Gobierno como dictadura'
+                },
+                {
+                    'pattern': r'\b(?:agenda|movimiento|ideología)\s+(?:progresista|izquierdista|de\s+izquierdas?)\s+(?:está\s+)?(?:transformando|cambiando|modificando|alterando)\b',
+                    'description': 'Transformación ideológica percibida como amenaza'
+                },
+                {
+                    'pattern': r'\b(?:instituciones?\s+)?(?:tradicionales?|históricas?|establecidas?)\s+(?:están\s+siendo|son)\s+(?:atacadas?|destruidas?|modificadas?|transformadas?)\b',
+                    'description': 'Instituciones tradicionales bajo amenaza'
+                },
+                {
+                    'pattern': r'\b(?:nuestras?\s+)?(?:instituciones?|estructuras?|bases?)\s+(?:fundamentales?|básicas?|tradicionales?)\s+(?:están\s+en\s+peligro|bajo\s+ataque)\b',
+                    'description': 'Instituciones fundamentales amenazadas'
                 }
             ],
             'call_to_action': [
@@ -286,6 +310,18 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\b(?:comparte|difunde|reenvía)\s+(?:para\s+que|hasta\s+que)\s+(?:todos?\s+)?(?:sepan|despierten)',
                     'description': 'Llamada a difusión'
+                },
+                {
+                    'pattern': r'\b(?:es\s+)?(?:momento|hora|tiempo)\s+(?:de\s+)?(?:que\s+)?(?:los\s+)?(?:ciudadanos?|personas?|gente)\s+(?:responsables?|comprometidas?|conscientes?)\s+(?:tomen|hagamos?|realicemos?)\s+(?:medidas?|acciones?|algo)\b',
+                    'description': 'Llamada a responsabilidad cívica activa'
+                },
+                {
+                    'pattern': r'\b(?:tomar|adoptar|implementar)\s+(?:medidas?|acciones?|decisiones?)\s+(?:para\s+)?(?:proteger|defender|salvaguardar)\s+(?:nuestras?\s+)?(?:comunidades?|familias?|sociedad)\b',
+                    'description': 'Medidas de protección comunitaria'
+                },
+                {
+                    'pattern': r'\b(?:ciudadanos?|personas?|gente)\s+(?:responsables?|comprometidas?|conscientes?)\s+(?:deben|tienen\s+que|necesitan)\s+(?:actuar|hacer\s+algo|tomar\s+acción)\b',
+                    'description': 'Deber cívico de actuar'
                 }
             ]
         }

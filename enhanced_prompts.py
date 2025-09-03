@@ -12,8 +12,9 @@ class AnalysisType(Enum):
     THREAT_ASSESSMENT = "threat_assessment"
     MISINFORMATION = "misinformation"
     CLAIM_VERIFICATION = "claim_verification"
-    POLITICAL_BIAS = "political_bias"
+    FAR_RIGHT_BIAS = "far_right_bias"
     HATE_SPEECH = "hate_speech"
+    CLASSIFICATION = "classification"  # Added for classification tasks
 
 @dataclass
 class PromptContext:
@@ -88,7 +89,7 @@ class EnhancedPromptGenerator:
                 ]
             },
             
-            AnalysisType.POLITICAL_BIAS: {
+            AnalysisType.FAR_RIGHT_BIAS: {
                 "system": f"{self.base_context} Evalúa el sesgo político y la retórica partidista.",
                 "focus": "análisis de sesgo político",
                 "questions": [
@@ -106,6 +107,24 @@ class EnhancedPromptGenerator:
                     "¿Se atacan grupos por características protegidas?",
                     "¿Cuál es la severidad del discurso de odio?"
                 ]
+            },
+            
+            AnalysisType.CLASSIFICATION: {
+                "system": f"{self.base_context} Analiza el contenido para comprender su estructura comunicativa y propósito.",
+                "focus": "análisis de características comunicativas",
+                "categories": {
+                    "hate_speech": "Comunicación que establece jerarquías entre grupos sociales o expresa incompatibilidad cultural fundamental. Características: lenguaje que sugiere diferencias irreconciliables, expresiones de superioridad/inferioridad grupal, narrativas de amenaza identitaria.",
+                    
+                    "disinformation": "Comunicación que presenta afirmaciones fácticas sin evidencia documentada. Características: datos sin fuente verificable, interpretaciones especulativas presentadas como hechos, críticas sistemáticas a instituciones informativas.",
+                    
+                    "conspiracy_theory": "Comunicación que propone explicaciones causales no evidenciadas sobre eventos complejos. Características: patrones de control oculto, atribución de intencionalidad coordinada sin pruebas, narrativas de manipulación encubierta.",
+                    
+                    "far_right_bias": "Comunicación con marcos interpretativos de extrema derecha que presenta transformaciones sociales como amenazas a valores tradicionales. Características: lenguaje de pérdida cultural, narrativas de amenaza identitaria, marcos de preservación de tradiciones.",
+                    
+                    "call_to_action": "Comunicación orientada a generar respuesta colectiva inmediata. Características: lenguaje de urgencia temporal, invitaciones a participación activa, marcos de responsabilidad cívica que requieren acción.",
+                    
+                    "general": "Comunicación descriptiva, informativa o conversacional sin características problemáticas identificables."
+                }
             }
         }
     
@@ -188,6 +207,40 @@ class EnhancedPromptGenerator:
         
         return "\n".join(prompt_parts)
     
+    def generate_classification_prompt(self, text: str, model_type: str = "ollama") -> str:
+        """
+        Generate targeted classification prompt with specific pattern matching.
+        """
+        prompt_parts = [
+            f'TEXTO: "{text}"',
+            "",
+            "ANÁLISIS PASO A PASO:",
+            "",
+            "PASO 1 - Detectar frases clave específicas:",
+            "- 'He leído varios estudios' SIN citar fuentes específicas → disinformation",
+            "- 'Es interesante cómo' + patrones sistemáticos → conspiracy_theory", 
+            "- 'Resulta interesante observar cómo' + beneficios sospechosos → conspiracy_theory",
+            "- 'sistema educativo actual impone perspectiva ideológica' → far_right_bias",
+            "- 'agenda progresista transformando' → far_right_bias",
+            "- 'valores tradicionales siendo erosionados' → far_right_bias",
+            "- 'grupos culturales incompatibles' → hate_speech",
+            "- 'Es momento de que ciudadanos tomen medidas' → call_to_action",
+            "",
+            "PASO 2 - Si no hay frases exactas, buscar patrones conceptuales:",
+            "- Referencias vagas a estudios/informes sin especificar → disinformation",
+            "- Preguntar sobre 'coincidencias' o beneficios sistemáticos → conspiracy_theory",
+            "- Críticas a instituciones educativas por sesgo ideológico → far_right_bias",
+            "- Incompatibilidad cultural entre grupos → hate_speech",
+            "- Llamadas a acción defensiva → call_to_action",
+            "",
+            "PASO 3 - Solo si NO hay NINGÚN patrón problemático:",
+            "- Contenido sobre clima, familia, comida, deportes → general",
+            "",
+            "RESPUESTA (evalúa en este orden):"
+        ]
+        
+        return "\n".join(prompt_parts)
+    
     def create_uncertainty_context(self, pattern_results: Dict) -> UncertaintyContext:
         """
         Create context highlighting areas where pattern analysis shows uncertainty.
@@ -226,19 +279,6 @@ class EnhancedPromptGenerator:
             uncertainty_areas=uncertainty_areas,
             detected_categories=detected_categories,
             total_patterns=total_patterns
-        )
-        
-        # Check for topic clarity
-        topics = pattern_results.get('topics', [])
-        if topics and len(topics) > 1:
-            uncertainty_areas.append("Múltiples temas políticos - necesita foco principal")
-        
-        return PromptContext(
-            detected_categories=detected_categories,
-            targeted_groups=pattern_results.get('targeted_groups', []),
-            claims_count=len(claims),
-            political_topic=topics[0].category.value if topics else "no_político",
-            uncertainty_areas=uncertainty_areas
         )
 
 def create_context_from_analysis(analysis_results: Dict) -> PromptContext:
