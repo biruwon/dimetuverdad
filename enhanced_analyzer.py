@@ -246,11 +246,20 @@ class EnhancedAnalyzer:
         if 'conspiracy' in detected_categories:
             return "conspiracy_theory", "pattern"
         
-        # Priority 4: Political bias (specific political bias patterns)
+        # Priority 4: Handle overlapping far-right bias and call to action
+        if 'far_right_bias' in detected_categories and 'call_to_action' in detected_categories:
+            # Prioritize call_to_action if explicit mobilization language is present
+            mobilization_terms = ['movilizaos', 'organizaos', 'retirad', 'sacad', 'boicot', 'todos a', 'mañana', 'actuad ya', 'convocatoria', 'difunde']
+            if any(term in content.lower() for term in mobilization_terms):
+                return "call_to_action", "pattern"
+            else:
+                return "far_right_bias", "pattern"
+        
+        # Priority 5: Political bias (specific political bias patterns)
         if 'far_right_bias' in detected_categories:
             return "far_right_bias", "pattern"
         
-        # Priority 5: Calls to action (specific call-to-action patterns)
+        # Priority 6: Calls to action (specific call-to-action patterns)
         if 'call_to_action' in detected_categories:
             return "call_to_action", "pattern"
         

@@ -1244,7 +1244,7 @@ class EnhancedLLMPipeline:
                 response = self.ollama_client.chat.completions.create(
                     model=self.ollama_model_name,
                     messages=[
-                        {"role": "system", "content": "Eres un clasificador de contenido especializado en detectar contenido problemático sutil. Responde únicamente con: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general. Usa 'general' SOLO para contenido verdaderamente neutral (clima, comida, entretenimiento). Si detectas cualquier insinuación problemática, elige la categoría específica más apropiada."},
+                        {"role": "system", "content": "Eres un clasificador de contenido especializado en detectar contenido problemático político y social. Responde únicamente con: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general. \n\nIMPORTANTE: Sé MENOS conservador con contenido político. Si detectas:\n- Narrativas de invasión migratoria → far_right_bias\n- Críticas a 'progres', 'woke', feminismo → far_right_bias\n- Llamadas a organizarse, movilizarse, boicotear → call_to_action\n- Insinuaciones sobre élites o control → conspiracy_theory\n\nUsa 'general' SOLO para contenido completamente neutral (clima, comida, entretenimiento personal). Para contenido con matices políticos, elige la categoría específica más apropiada."},
                         {"role": "user", "content": classification_prompt}
                     ],
                     **generation_params
