@@ -46,7 +46,7 @@ class FarRightAnalyzer:
                     'description': 'Lenguaje de superioridad racial'
                 },
                 {
-                    'pattern': r'\b(?:eliminar|deportar|expulsar)\s+(?:a\s+)?(?:los\s+)?(?:musulmanes|gitanos|moros|negros)\b',
+                    'pattern': r'\b(?:eliminar|deportar|expulsar)\s+.*\b(?:musulmanes?|gitanos?|moros?|negros?)\b|\b(?:musulmanes?|gitanos?|moros?|negros?)\b.*\b(?:eliminar|deportar|expulsar)\b',
                     'description': 'Llamadas a eliminación de grupos'
                 },
                 {
@@ -54,30 +54,42 @@ class FarRightAnalyzer:
                     'description': 'Deshumanización de grupos'
                 },
                 {
-                    'pattern': r'\b(?:los\s+)?(?:inmigrantes|extranjeros|musulmanes)\s+(?:son\s+)?(?:una\s+)?(?:plaga|virus|amenaza|invasión)',
+                    'pattern': r'\b(?:inmigrantes?|extranjeros?|musulmanes?|moros?)\b.*\b(?:plaga|virus|amenaza|invasión)\b|\b(?:plaga|virus|amenaza|invasión)\b.*\b(?:inmigrantes?|extranjeros?|musulmanes?|moros?)\b',
                     'description': 'Deshumanización de inmigrantes'
                 },
                 {
                     'pattern': r'\b(?:genéticamente|biológicamente)\s+inferior(?:es)?\b',
                     'description': 'Determinismo biológico'
+                },
+                {
+                    'pattern': r'\b(?:gitanos?|negros?|árabes?)\s+(?:son\s+)?(?:genéticamente|por\s+naturaleza)\s+(?:ladrones?|mentirosos?|violentos?|criminales?)',
+                    'description': 'Determinismo racial/étnico'
+                },
+                {
+                    'pattern': r'\bfeminazis?\b.*\b(?:plaga|virus|exterminar|eliminar)\b|\b(?:plaga|virus|exterminar|eliminar)\b.*\bfeminazis?\b',
+                    'description': 'Deshumanización de feministas con lenguaje violento'
                 }
             ],
             'xenophobia': [
                 {
-                    'pattern': r'\b(?:invasión|avalancha|ola)\s+(?:de\s+)?(?:inmigrantes|extranjeros)\b',
+                    'pattern': r'\b(?:invasión|invad\w+|avalancha|ola)\b.*\b(?:inmigrantes?|extranjeros?|moros?|musulmanes?|menas?)\b|\b(?:inmigrantes?|extranjeros?|moros?|musulmanes?|menas?)\b.*\b(?:invasión|invad\w+|avalancha|ola)\b',
                     'description': 'Inmigración como invasión'
+                },
+                {
+                    'pattern': r'\b(?:inmigración\s+masiva|invasión)\s+(?:es\s+(?:una\s+)?)?(?:planificada|organizada|coordinada)',
+                    'description': 'Inmigración como plan coordinado'
                 },
                 {
                     'pattern': r'\b(?:España|Europa)\s+para\s+(?:los\s+)?españoles?\b',
                     'description': 'Nacionalismo excluyente'
                 },
                 {
-                    'pattern': r'\b(?:fuera|expulsar|deportar)\s+(?:a\s+)?(?:los\s+)?(?:moros|extranjeros|ilegales)\b',
+                    'pattern': r'\b(?:fuera|expuls\w+|deport\w+)\b.*\b(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\b|\b(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\b.*\b(?:fuera|expuls\w+|deport\w+)\b',
                     'description': 'Llamadas a expulsión'
                 },
                 {
-                    'pattern': r'\b(?:reemplaz|sustitu)(?:ar|ción)\s+(?:población|demográfica?)\b',
-                    'description': 'Teoría del gran reemplazo'
+                    'pattern': r'\b(?:menas?|sudacas?)\b.*\b(?:robar|traficar|vagos?|delincuentes?)\b|\b(?:robar|traficar|vagos?|delincuentes?)\b.*\b(?:menas?|sudacas?)\b',
+                    'description': 'Estereotipos criminales sobre inmigrantes'
                 }
             ],
             'nationalism': [
@@ -124,6 +136,10 @@ class FarRightAnalyzer:
                     'description': 'Desconfianza en información oficial'
                 },
                 {
+                    'pattern': r'\b(?:medios|prensa|televisión)\s+(?:ocultan|esconden|mienten|manipulan)\b.*\b(?:verdad|realidad|datos)\b|\b(?:verdad|realidad|datos)\b.*\b(?:medios|prensa|televisión)\s+(?:ocultan|esconden|mienten|manipulan)\b',
+                    'description': 'Medios ocultan información'
+                },
+                {
                     'pattern': r'\b(?:chemtrails?|estelas\s+químicas)\b.*(?:población|control|veneno|aluminio)',
                     'description': 'Teoría de chemtrails'
                 },
@@ -132,8 +148,20 @@ class FarRightAnalyzer:
                     'description': 'Conspiración farmacéutica'
                 },
                 {
+                    'pattern': r'\b(?:medios|empresas|corporaciones)\s+(?:están\s+)?(?:comprados|compradas|controlados|controladas)\b',
+                    'description': 'Medios/empresas controlados por élites'
+                },
+                {
                     'pattern': r'\b(?:cambio\s+climático|calentamiento\s+global)\s+(?:es\s+(?:un\s+)?(?:invento|mentira|farsa))',
                     'description': 'Negación del cambio climático'
+                },
+                {
+                    'pattern': r'\b(?:mayor|gran|gran)\s+(?:engaño|mentira|farsa|estafa)\s+de\s+la\s+historia',
+                    'description': 'Gran engaño/mentira histórica'
+                },
+                {
+                    'pattern': r'\b(?:engaño|mentira|farsa)\s+(?:de|del)\s+(?:la\s+historia|siglo|mundo)',
+                    'description': 'Engaño histórico/mundial'
                 },
                 {
                     'pattern': r'\b(?:científicos\s+ocultan|estudios\s+independientes|la\s+verdad\s+que\s+no\s+te\s+cuentan)',
@@ -158,6 +186,14 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\b(?:siempre\s+están|siempre\s+aparecen|siempre\s+salen\s+ganando)\s+en\s+(?:posiciones?\s+de\s+)?(?:control|poder|ventaja)\b',
                     'description': 'Patrones de control sistemático'
+                },
+                {
+                    'pattern': r'\b(?:calentamiento\s+global|cambio\s+climático)\s+(?:es\s+(?:una\s+)?)?(?:mentira|farsa|engaño)',
+                    'description': 'Negación del cambio climático específica'
+                },
+                {
+                    'pattern': r'\b(?:big\s+pharma|industria\s+farmacéutica)\s+(?:lleva\s+\d+\s+años\s+)?(?:ocultando|escondiendo)\s+(?:la\s+cura)',
+                    'description': 'Big Pharma oculta curas'
                 }
             ],
             'violence_incitement': [
@@ -246,8 +282,12 @@ class FarRightAnalyzer:
             ],
             'far_right_bias': [
                 {
-                    'pattern': r'\b(?:socialistas?|comunistas?|marxistas?)\s+(?:han\s+)?(?:destruido|destruyen|arruinado|arruinan)\s+(?:España|el\s+país)',
+                    'pattern': r'\b(?:socialistas?|comunistas?|marxistas?|rojos?)\s+(?:han\s+)?(?:destruido|destruyen|arruinado|arruinan|convertido)\s+(?:España|el\s+país|nuestro\s+país)',
                     'description': 'Retórica anti-izquierda extrema'
+                },
+                {
+                    'pattern': r'\b(?:feminazis?|feministas?\s+extremistas?)\b.*\b(?:destruido|destruyen|arruinado|han\s+destruido)\b|\b(?:destruido|destruyen|arruinado|han\s+destruido)\b.*\b(?:feminazis?|feministas?\s+extremistas?)\b',
+                    'description': 'Retórica anti-feminista extrema'
                 },
                 {
                     'pattern': r'\b(?:solo|únicamente)\s+(?:vox|partido\s+patriótico)\s+(?:puede\s+)?(?:salvar|defender|proteger)\s+(?:España|la\s+patria)',
@@ -262,6 +302,10 @@ class FarRightAnalyzer:
                     'description': 'Retórica de invasión política'
                 },
                 {
+                    'pattern': r'\b(?:han\s+)?convertido\s+(?:España|el\s+país)\s+en\s+(?:venezuela|cuba|la\s+urss)',
+                    'description': 'Comparaciones con regímenes socialistas'
+                },
+                {
                     'pattern': r'\b(?:traidores?|vendidos?)\s+(?:al\s+)?(?:globalismo|comunismo|soros)',
                     'description': 'Acusaciones de traición política'
                 },
@@ -274,8 +318,24 @@ class FarRightAnalyzer:
                     'description': 'Transformación ideológica percibida como amenaza'
                 },
                 {
+                    'pattern': r'\b(?:agenda|ideología)\s+(?:woke|progre|de\s+género)\s+(?:está\s+)?(?:destruyendo|arruinando|infectando)',
+                    'description': 'Agenda woke/progresista destructiva'
+                },
+                {
+                    'pattern': r'\b(?:woke|progre)\s+(?:está\s+)?(?:destruyendo|arruinando|infectando|atacando)',
+                    'description': 'Ideología woke destructiva'
+                },
+                {
                     'pattern': r'\b(?:instituciones?\s+)?(?:tradicionales?|históricas?|establecidas?)\s+(?:están\s+siendo|son)\s+(?:atacadas?|destruidas?|modificadas?|transformadas?)\b',
                     'description': 'Instituciones tradicionales bajo amenaza'
+                },
+                {
+                    'pattern': r'\b(?:feminismo|feministas?)\s+(?:es\s+)?(?:cáncer|plaga|virus|destrucción)',
+                    'description': 'Feminismo como enfermedad/destrucción'
+                },
+                {
+                    'pattern': r'\b(?:mujeres?|tías)\s+(?:están\s+para)\s+(?:fregar|parir|callarse|servir)',
+                    'description': 'Roles de género tradicionales extremos'
                 },
                 {
                     'pattern': r'\b(?:nuestras?\s+)?(?:instituciones?|estructuras?|bases?)\s+(?:fundamentales?|básicas?|tradicionales?)\s+(?:están\s+en\s+peligro|bajo\s+ataque)\b',
@@ -284,8 +344,12 @@ class FarRightAnalyzer:
             ],
             'call_to_action': [
                 {
-                    'pattern': r'\b(?:concentración|manifestación|protesta)\s+(?:hoy|mañana|el\s+\w+)\s+(?:a\s+las\s+)?\d{1,2}:\d{2}',
+                    'pattern': r'\b(?:concentración|manifestación|protesta|convocatoria)\s+(?:urgente\s+)?(?:hoy|mañana|el\s+\w+)?\s*(?:a\s+las\s+)?(?:\d{1,2}:\d{2}[hH]?|\d{1,2}[hH])?',
                     'description': 'Convocatoria específica a movilización'
+                },
+                {
+                    'pattern': r'\btodos\s+a\s+\w+\s+(?:hoy|mañana|ahora)',
+                    'description': 'Convocatoria masiva con ubicación y tiempo'
                 },
                 {
                     'pattern': r'\b(?:hay\s+que|tenemos\s+que|debemos)\s+(?:salir\s+a\s+las\s+calles|movilizarnos|actuar)',
@@ -322,6 +386,38 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\b(?:ciudadanos?|personas?|gente)\s+(?:responsables?|comprometidas?|conscientes?)\s+(?:deben|tienen\s+que|necesitan)\s+(?:actuar|hacer\s+algo|tomar\s+acción)\b',
                     'description': 'Deber cívico de actuar'
+                },
+                {
+                    'pattern': r'\b(?:patriotas?|españoles?\s+de\s+bien)\s*!+\s+(?:es\s+hora\s+de|momento\s+de)\s+(?:organizarse|unirse|actuar)',
+                    'description': 'Llamada a organización patriótica'
+                },
+                {
+                    'pattern': r'\b(?:colegios?|escuelas?)\s+(?:están\s+)?(?:adoctrinando|manipulando|lavando\s+el\s+cerebro)',
+                    'description': 'Adoctrinamiento en educación'
+                },
+                {
+                    'pattern': r'\b(?:adoctrinando|adoctrinan|adoctrinar)\s+(?:a\s+)?(?:nuestros?\s+)?(?:niños?|hijos?)',
+                    'description': 'Adoctrinamiento infantil'
+                },
+                {
+                    'pattern': r'\b(?:retirad|sacad)\s+(?:a\s+)?(?:vuestros?\s+)?(?:hijos?|niños?)\s+(?:de\s+(?:los\s+)?colegios?)',
+                    'description': 'Llamada a retirar hijos de colegios'
+                },
+                {
+                    'pattern': r'\b(?:basta\s+ya|ya\s+basta)\b.*\b(?:unirse|salir\s+a\s+las\s+calles|actuar)',
+                    'description': 'Llamada urgente a acción callejera'
+                },
+                {
+                    'pattern': r'\b(?:verdaderos?\s+españoles?|patriotas?)\s+(?:debemos|tenemos\s+que)\s+(?:recuperar|defender)',
+                    'description': 'Llamada a acción patriótica'
+                },
+                {
+                    'pattern': r'\bmovilizaos\b|\bmovilízaos\b',
+                    'description': 'Llamada directa a movilización'
+                },
+                {
+                    'pattern': r'\bsacad\s+(?:a\s+)?(?:vuestros?\s+)?(?:hijos?|niños?)\s+de\s+(?:esos\s+)?(?:colegios?)',
+                    'description': 'Retirar hijos de colegios específicos'
                 }
             ]
         }

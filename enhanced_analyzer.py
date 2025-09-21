@@ -215,7 +215,8 @@ class EnhancedAnalyzer:
         detected_categories = far_right_result.get('categories', [])
         
         # Priority 1: Hate speech and violence incitement (highest severity)
-        if any(cat in detected_categories for cat in ['hate_speech', 'violence_incitement']):
+        # Map xenophobia and related patterns to hate_speech category
+        if any(cat in detected_categories for cat in ['hate_speech', 'violence_incitement', 'xenophobia']):
             return "hate_speech", "pattern"
         
         # Priority 2: Health/Medical disinformation (using component detection)
@@ -267,9 +268,18 @@ class EnhancedAnalyzer:
         if any(cat in detected_categories for cat in ['anti_government']) and self._has_action_language(content):
             return "call_to_action", "pattern"
         
-        # Priority 7: Any far-right pattern detected (general political bias)
+        # Priority 7: Map remaining patterns to appropriate categories
         if detected_categories:
-            return "far_right_bias", "pattern"
+            # Explicit mapping for specific pattern types
+            if any(cat in detected_categories for cat in ['xenophobia', 'nationalism', 'historical_revisionism']):
+                return "hate_speech", "pattern"
+            elif any(cat in detected_categories for cat in ['conspiracy', 'health_disinformation', 'anti_government']):
+                return "conspiracy_theory", "pattern" 
+            elif 'call_to_action' in detected_categories:
+                return "call_to_action", "pattern"
+            else:
+                # Default to far_right_bias for other detected patterns
+                return "far_right_bias", "pattern"
         
         # Priority 8: Non-political claims with disinformation indicators (component-based)
         if claims:
