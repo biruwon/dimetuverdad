@@ -339,7 +339,6 @@ class EnhancedAnalyzer:
             
             # Use FAST category detection instead of full analysis
             llm_category = self.llm_pipeline.get_category(content)
-            print(f"🔍 Fast LLM category result: {llm_category}")
             
             # No hardcoded fallback patterns - let the LLM handle all edge cases
             # This makes the system truly scalable without keyword maintenance
@@ -511,39 +510,83 @@ class EnhancedAnalyzer:
             return base_explanation
         
         try:
-            from enhanced_prompts import AnalysisType
             
-            # Check if llm_pipeline has the required method
-            if not hasattr(self.llm_pipeline, 'get_explanation'):
-                print("⚠️ LLM pipeline missing get_explanation method")
-                # Don't reveal technical issues to user
-                return base_explanation
-            
-            # Use comprehensive analysis for uncertain cases
-            analysis_type = AnalysisType.COMPREHENSIVE
-            
-            # Create analysis context
+            # Create analysis context with comprehensive information
             analysis_context = {
                 'category': category,
                 'analysis_mode': 'primary',
                 'detected_categories': pattern_results['far_right'].get('categories', []),
                 'claims_count': len(pattern_results['claims']),
-                'pattern_confidence': pattern_results['far_right'].get('confidence', 0.0)
+                'pattern_confidence': pattern_results['far_right'].get('confidence', 0.0),
+                'has_patterns': len(pattern_results['far_right'].get('categories', [])) > 0
             }
             
-            # Get LLM explanation using the new method
+            # Use comprehensive analysis for uncertain cases
+            from enhanced_prompts import AnalysisType
+            analysis_type = AnalysisType.COMPREHENSIVE
+            
+            # Get LLM explanation using the existing method
             llm_explanation = self.llm_pipeline.get_explanation(content, category, analysis_context, analysis_type)
             
             if llm_explanation and len(llm_explanation.strip()) > 10:
                 return llm_explanation
             else:
-                # LLM failed to provide explanation - return base explanation without revealing this
-                return base_explanation
+                # LLM failed to provide explanation - generate a comprehensive pattern-based one
+                print("⚠️ LLM explanation was empty, using enhanced pattern analysis")
+                return self._generate_enhanced_pattern_explanation(content, category, pattern_results)
                 
         except Exception as e:
             print(f"❌ Error en análisis primario LLM: {e}")
-            # Don't reveal LLM errors to user - return base explanation
-            return base_explanation
+            # Don't reveal LLM errors to user - return enhanced pattern explanation
+            return self._generate_enhanced_pattern_explanation(content, category, pattern_results)
+    
+    def _generate_enhanced_pattern_explanation(self, content: str, category: str, pattern_results: Dict) -> str:
+        """Generate a comprehensive explanation when LLM is not available or fails."""
+        detected_categories = pattern_results['far_right'].get('categories', [])
+        claims = pattern_results.get('claims', [])
+        
+        # Generate detailed explanations based on what was actually detected
+        if category == "far_right_bias":
+            explanation_parts = []
+            
+            # Check what specific patterns were detected for far-right bias
+            pattern_matches = pattern_results['far_right'].get('pattern_matches', [])
+            
+            # Analyze the specific type of bias detected
+            content_lower = content.lower()
+            
+            if any('sustitución' in content_lower for word in ['sustitución', 'sustitu']):
+                explanation_parts.append("presenta narrativas sobre sustitución poblacional")
+            
+            if any(word in content_lower for word in ['inmigr', 'extranjero', 'moro']):
+                explanation_parts.append("contiene referencias a inmigración con posible sesgo")
+            
+            if any(word in content_lower for word in ['muslim', 'islám', 'tradiciones culturales']):
+                explanation_parts.append("incluye generalizaciones sobre grupos culturales o religiosos")
+            
+            if any(word in content_lower for word in ['efecto llamada', 'política', 'brussels', 'comisión europea']):
+                explanation_parts.append("enmarca políticas oficiales desde perspectivas potencialmente sesgadas")
+            
+            if explanation_parts:
+                base = "Este contenido muestra características de sesgo político de extrema derecha ya que "
+                return base + ", ".join(explanation_parts) + ". El análisis detecta marcos interpretativos que pueden reforzar narrativas problemáticas sobre inmigración y diversidad cultural."
+            else:
+                return "Este contenido presenta marcos interpretativos característicos del sesgo de extrema derecha, utilizando lenguaje que puede reforzar narrativas discriminatorias."
+        
+        elif category == "conspiracy_theory":
+            return "Este contenido promueve teorías conspiratorias presentando afirmaciones sin base empírica verificable y fomentando desconfianza en instituciones oficiales."
+        
+        elif category == "hate_speech":
+            return "Este contenido presenta características de discurso de odio, utilizando lenguaje discriminatorio que puede fomentar hostilidad hacia grupos específicos."
+        
+        elif category == "disinformation":
+            return "Este contenido presenta características de desinformación, incluyendo afirmaciones que requieren verificación y que pueden difundir información inexacta."
+        
+        elif category == "call_to_action":
+            return "Este contenido incluye llamadas explícitas a la acción o movilización que pueden promover activismo de extrema derecha."
+        
+        else:
+            return "Contenido categorizado mediante análisis de patrones sin características específicas de extremismo detectadas."
     
     def _determine_llm_analysis_type(self, category: str, pattern_results: Dict):
         """Determine the best LLM analysis type based on detected patterns."""

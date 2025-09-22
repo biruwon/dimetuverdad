@@ -96,7 +96,7 @@ class FarRightAnalyzer:
                     'description': 'Nacionalismo excluyente'
                 },
                 {
-                    'pattern': r'\b(?:fuera|expuls\w+|deport\w+)\b.*\b(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\b|\b(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\b.*\b(?:fuera|expuls\w+|deport\w+)\b',
+                    'pattern': r'\bfuera\s+(?:los?\s+|las?\s+)?(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\b|\b(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\s+fuera\s+(?:de\s+)?(?:España|Europa|aquí)\b|\b(?:expuls\w+|deport\w+)\s+(?:a\s+)?(?:los?\s+)?(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\b',
                     'description': 'Llamadas a expulsión'
                 },
                 {

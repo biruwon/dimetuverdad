@@ -163,8 +163,9 @@ def analyze_single_text(analyzer, text, json_output=False):
             print(f"📝 Text: {text}")
             print(f"🎯 Category: {result.category}")
             
-            if hasattr(result, 'explanation'):
-                print(f"💭 Explanation: {result.explanation}")
+            # Show explanation from LLM analysis
+            if result.llm_explanation and result.llm_explanation.strip():
+                print(f"💭 Explanation: {result.llm_explanation}")
             
             # Add emoji indicators
             category_emojis = {

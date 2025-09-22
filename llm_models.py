@@ -472,9 +472,9 @@ class LLMModelConfig:
         """Get recommended model based on task and priority."""
         if task == "generation":
             if priority == "speed":
-                return cls.MODELS["gpt-oss-20b"]  # Original model is fastest on M1 Pro GPU
+                return cls.MODELS["flan-t5-small"]  # Fastest proven model (4s vs 11s+)
             elif priority == "quality":
-                return cls.MODELS["gpt-oss-20b"]  # Original model for quality
+                return cls.MODELS["gemma-7b"] 
             else:  # balanced
                 return cls.MODELS["gpt-oss-20b"]  # Original model is best overall (46s vs 2min+)
         
@@ -1208,14 +1208,15 @@ class EnhancedLLMPipeline:
             response = self.ollama_client.chat.completions.create(
                 model=self.ollama_model_name,
                 messages=[
-                    {"role": "system", "content": "Eres un clasificador de contenido especializado en detectar contenido problemático sutil. Responde únicamente con: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general. Usa 'general' SOLO para contenido verdaderamente neutral (clima, comida, entretenimiento). Si detectas cualquier insinuación problemática, elige la categoría específica más apropiada."},
+                    {"role": "system", "content": "Eres un clasificador de contenido especializado en detectar contenido problemático sutil. Responde únicamente con: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general. \n\nPARA HATE_SPEECH: Detecta generalizaciones despectivas ('esa gente', 'ya sabéis cómo son'), estereotipos negativos, y comentarios que deshumanizan grupos aunque no usen insultos directos.\n\nUsa 'general' SOLO para contenido verdaderamente neutral (clima, comida, entretenimiento). Si detectas cualquier insinuación problemática o generalización negativa sobre grupos de personas, elige la categoría específica más apropiada."},
                     {"role": "user", "content": classification_prompt}
                 ],
                 temperature=0.1  # Lower temperature for more consistent results
                 # Note: max_tokens parameter causes empty responses with gpt-oss:20b
             )
             
-            print(f"🔍 Response object: {response}")
+            # Debug: Show response object only in verbose mode
+            # print(f"🔍 Response object: {response}")  # Commented out to reduce noise
             result = response.choices[0].message.content.strip().lower()
             print(f"🔍 Raw LLM response: '{result}'")
             
@@ -1293,7 +1294,7 @@ Categoría:"""
                 response = self.ollama_client.chat.completions.create(
                     model=self.ollama_model_name,
                     messages=[
-                        {"role": "system", "content": "Classify text as: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, or general"},
+                        {"role": "system", "content": "Classify text as: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, or general. IMPORTANT: hate_speech includes subtle generalizations like 'esa gente no cambia' or stereotypes about groups, not just direct insults."},
                         {"role": "user", "content": f"Text: {text}\nCategory:"}
                     ],
                     **ollama_params

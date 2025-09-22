@@ -15,7 +15,9 @@ class ComprehensiveTestSuite:
     """Complete test suite combining pattern and LLM test cases."""
     
     def __init__(self, save_to_db: bool = False):
-        self.analyzer = EnhancedAnalyzer()
+        # Performance optimization: Initialize analyzer with model loading control
+        print("🚀 Initializing Enhanced Analyzer with optimizations...")
+        self.analyzer = EnhancedAnalyzer(model_priority="fast")  # Use fast mode for testing
         self.save_to_db = save_to_db
     
     def get_category_examples(self) -> Dict[str, Dict]:
@@ -359,28 +361,82 @@ class ComprehensiveTestSuite:
                 'analysis_method': 'pattern',
                 'description': 'Economic boycott call against woke companies'
             },
-            'call_to_action_pattern_7': {
-                'tweet_id': 'action_007',
+            # Move previously LLM tests that are now caught by patterns
+            'hate_speech_pattern_8': {
+                'tweet_id': 'hate_pattern_008',
                 'username': 'test_user',
-                'content': 'Padres!! SACAD a vuestros hijos de esos colegios progres!! Homeschooling o colegios católicos!! Proteged su inocencia!!',
+                'content': 'Los sudacas que vienen aquí son todos unos vagos. Vienen a quitarnos el trabajo y las ayudas que nos corresponden a nosotros',
+                'expected_category': 'hate_speech',
+                'analysis_method': 'pattern',
+                'description': 'Hate speech with derogatory terms for Latin Americans'
+            },
+            'hate_speech_pattern_9': {
+                'tweet_id': 'hate_pattern_009',
+                'username': 'test_user',
+                'content': 'Los menas son todos delincuentes que vienen aquí a vivir del cuento. Están destruyendo nuestros barrios.',
+                'expected_category': 'hate_speech',
+                'analysis_method': 'pattern',
+                'description': 'Direct hate speech using derogatory terms'
+            },
+            
+            'call_to_action_pattern_8': {
+                'tweet_id': 'action_pattern_008',
+                'username': 'test_user',
+                'content': 'Españoles de bien!! Es hora de despertar y hacer algo antes de que sea tarde! Organizaos en vuestras ciudades!!',
                 'expected_category': 'call_to_action',
                 'analysis_method': 'pattern',
-                'description': 'Educational withdrawal call for religious alternatives'
+                'description': 'General mobilization call to action'
+            },
+            
+            'far_right_bias_pattern_6': {
+                'tweet_id': 'bias_pattern_006',
+                'username': 'test_user',
+                'content': 'Vox es el único partido que defiende a los españoles de verdad. El resto son traidores vendidos al globalismo.',
+                'expected_category': 'far_right_bias',
+                'analysis_method': 'pattern',
+                'description': 'Direct far-right bias with partisan extremism'
+            },
+            'far_right_bias_pattern_7': {
+                'tweet_id': 'bias_pattern_007',
+                'username': 'test_user',
+                'content': 'Los inmigrantes ilegales reciben más ayudas que los españoles. Esto es una invasión financiada por los rojos.',
+                'expected_category': ['far_right_bias', 'hate_speech'],
+                'analysis_method': 'pattern',
+                'description': 'Immigration-focused far-right bias with hate speech language'
+            },
+            
+            'conspiracy_theory_pattern_5': {
+                'tweet_id': 'conspiracy_pattern_005',
+                'username': 'test_user',
+                'content': 'Las farmacéuticas y Bill Gates están detrás de la pandemia para vendernos las vacunas y controlarnos.',
+                'expected_category': ['conspiracy_theory', 'disinformation'],
+                'analysis_method': 'pattern',
+                'description': 'COVID conspiracy theory with specific actors'
             }
         }
     
     def get_llm_fallback_tests(self) -> Dict[str, Dict]:
-        """Get test cases requiring LLM analysis (subtle content)."""
+        """Get test cases requiring LLM analysis (subtle content that patterns won't catch)."""
         return {
+            # More subtle hate speech that requires contextual understanding
             'hate_speech_llm_1': {
                 'tweet_id': 'hate_llm_001',
                 'username': 'test_user_llm',
-                'content': 'Los sudacas que vienen aquí son todos unos vagos. Vienen a quitarnos el trabajo y las ayudas que nos corresponden a nosotros',
+                'content': 'Ya sabéis cómo son esa gente... no cambian nunca. Siempre igual, da igual donde vayan o cuánto tiempo pase',
                 'expected_category': 'hate_speech',
                 'analysis_method': 'llm',
-                'description': 'Hate speech with derogatory terms for Latin Americans'
+                'description': 'Subtle hate speech with implicit derogatory generalizations'
+            },
+            'hate_speech_llm_2': {
+                'tweet_id': 'hate_llm_002',
+                'username': 'test_user_llm',
+                'content': 'Las mujeres de ahora ya no saben ser madres ni cuidar la familia. Solo piensan en sus carreras y tonterías.',
+                'expected_category': 'hate_speech',
+                'analysis_method': 'llm',
+                'description': 'Subtle misogynistic hate speech without explicit slurs'
             },
             
+            # Subtle disinformation requiring contextual analysis
             'disinformation_llm_1': {
                 'tweet_id': 'disinfo_llm_001',
                 'username': 'test_user_llm',
@@ -389,111 +445,42 @@ class ComprehensiveTestSuite:
                 'analysis_method': 'llm',
                 'description': 'Vaccine disinformation using anecdotal false authority'
             },
+            'disinformation_llm_2': {
+                'tweet_id': 'disinfo_llm_002',
+                'username': 'test_user_llm',
+                'content': 'Los datos económicos no cuadran con lo que vemos en la calle. Parece que alguien está jugando con las cifras.',
+                'expected_category': 'disinformation',
+                'analysis_method': 'llm',
+                'description': 'Subtle economic disinformation without explicit false claims'
+            },
+            'disinformation_llm_3': {
+                'tweet_id': 'disinfo_llm_003',
+                'username': 'test_user_llm',
+                'content': 'Las estadísticas de criminalidad que publican no reflejan la realidad. Hay muchos casos que no salen a la luz.',
+                'expected_category': 'disinformation',
+                'analysis_method': 'llm',
+                'description': 'Crime statistics disinformation with vague implications'
+            },
             
+            # Sophisticated conspiracy theories
             'conspiracy_theory_llm_1': {
                 'tweet_id': 'conspiracy_llm_001',
                 'username': 'test_user_llm',
                 'content': 'Qué casualidad que todas las crisis benefician siempre a los mismos bancos y multinacionales... 🤔 Ya sabéis quién mueve los hilos',
-                'expected_category': ['conspiracy_theory', 'disinformation'],  # Both reasonable
+                'expected_category': ['conspiracy_theory', 'disinformation'],
                 'analysis_method': 'llm',
                 'description': 'Economic elite conspiracy theory'
             },
             'conspiracy_theory_llm_2': {
                 'tweet_id': 'conspiracy_llm_002',
                 'username': 'test_user_llm',
-                'content': 'Casualmente cada vez que hay "pandemia" las farmacéuticas hacen el negocio del siglo 💰 Qué raro todo, ¿verdad?',
-                'expected_category': ['conspiracy_theory', 'disinformation'],  # Both reasonable
+                'content': 'Es interesante cómo ciertos temas desaparecen de los medios cuando no conviene hablar de ellos. La información está muy controlada.',
+                'expected_category': ['conspiracy_theory', 'disinformation'],
                 'analysis_method': 'llm',
-                'description': 'Pharmaceutical conspiracy with sarcasm'
+                'description': 'Media manipulation conspiracy with subtle language'
             },
             'conspiracy_theory_llm_3': {
                 'tweet_id': 'conspiracy_llm_003',
-                'username': 'test_user_llm',
-                'content': 'Google, Facebook y Twitter censuran todo lo que no les conviene 🤐 Controlan la información para mantenernos borregos',
-                'expected_category': ['conspiracy_theory', 'disinformation'],  # Both reasonable
-                'analysis_method': 'llm',
-                'description': 'Tech censorship conspiracy theory'
-            },
-            
-            'far_right_bias_llm_1': {
-                'tweet_id': 'bias_llm_001',
-                'username': 'test_user_llm',
-                'content': 'Los progres están cambiando España y no para bien. Cada día hay más locuras woke en las instituciones',
-                'expected_category': 'far_right_bias',
-                'analysis_method': 'llm',
-                'description': 'Anti-progressive bias with woke criticism'
-            },
-            'far_right_bias_llm_2': {
-                'tweet_id': 'bias_llm_002',
-                'username': 'test_user_llm',
-                'content': 'En los colegios ya no enseñan historia de España, solo propaganda progresista. Están lavando el cerebro a nuestros hijos',
-                'expected_category': ['far_right_bias', 'disinformation'],  # Both reasonable
-                'analysis_method': 'llm',
-                'description': 'Educational indoctrination bias'
-            },
-            'far_right_bias_llm_3': {
-                'tweet_id': 'bias_llm_003',
-                'username': 'test_user_llm',
-                'content': 'La cultura occidental se está perdiendo por culpa del multiculturalismo forzado. Nos están borrando del mapa 😔',
-                'expected_category': ['far_right_bias', 'conspiracy_theory'],  # Both reasonable
-                'analysis_method': 'llm',
-                'description': 'Cultural replacement conspiracy theory'
-            },
-            
-            'call_to_action_llm_1': {
-                'tweet_id': 'action_llm_001',
-                'username': 'test_user_llm',
-                'content': 'Españoles de bien!! Es hora de despertar y hacer algo antes de que sea tarde! Organizaos en vuestras ciudades!!',
-                'expected_category': 'call_to_action',
-                'analysis_method': 'llm',
-                'description': 'General mobilization call to action'
-            },
-            
-            # More realistic LLM-based tests (less subtle, more Twitter-like)
-            'hate_speech_llm_2': {
-                'tweet_id': 'hate_llm_002',
-                'username': 'test_user_llm',
-                'content': 'Los menas son todos delincuentes que vienen aquí a vivir del cuento. Están destruyendo nuestros barrios.',
-                'expected_category': 'hate_speech',
-                'analysis_method': 'llm',
-                'description': 'Direct hate speech using derogatory terms'
-            },
-            'hate_speech_llm_3': {
-                'tweet_id': 'hate_llm_003',
-                'username': 'test_user_llm',
-                'content': 'Las feminazis han convertido a los hombres en ciudadanos de segunda clase. Ya no podemos ni opinar.',
-                'expected_category': 'hate_speech',
-                'analysis_method': 'llm',
-                'description': 'Anti-feminist hate speech with gendered slurs'
-            },
-            
-            'disinformation_llm_2': {
-                'tweet_id': 'disinfo_llm_002',
-                'username': 'test_user_llm',
-                'content': 'El gobierno está inflando los números de la inflación para justificar sus políticas desastrosas. Los datos reales son el doble.',
-                'expected_category': 'disinformation',
-                'analysis_method': 'llm',
-                'description': 'Economic disinformation with false claims about statistics'
-            },
-            'disinformation_llm_3': {
-                'tweet_id': 'disinfo_llm_003',
-                'username': 'test_user_llm',
-                'content': 'Mi primo trabaja en el hospital y me dice que la mayoría de casos COVID son inventados para cobrar más dinero.',
-                'expected_category': 'disinformation',
-                'analysis_method': 'llm',
-                'description': 'Healthcare disinformation using anecdotal false evidence'
-            },
-            
-            'conspiracy_theory_llm_4': {
-                'tweet_id': 'conspiracy_llm_004',
-                'username': 'test_user_llm',
-                'content': 'Las farmacéuticas y Bill Gates están detrás de la pandemia para vendernos las vacunas y controlarnos.',
-                'expected_category': ['conspiracy_theory', 'disinformation'],  # Both reasonable
-                'analysis_method': 'llm',
-                'description': 'COVID conspiracy theory with specific actors - can be classified as either conspiracy or disinformation'
-            },
-            'conspiracy_theory_llm_5': {
-                'tweet_id': 'conspiracy_llm_005',
                 'username': 'test_user_llm',
                 'content': 'Los chemtrails son reales. Solo hay que mirar al cielo y ver esas líneas que nos están fumigando a todos.',
                 'expected_category': 'conspiracy_theory',
@@ -501,38 +488,56 @@ class ComprehensiveTestSuite:
                 'description': 'Chemtrails conspiracy theory'
             },
             
-            'far_right_bias_llm_4': {
-                'tweet_id': 'bias_llm_004',
+            # Nuanced far-right bias
+            'far_right_bias_llm_1': {
+                'tweet_id': 'bias_llm_001',
                 'username': 'test_user_llm',
-                'content': 'Vox es el único partido que defiende a los españoles de verdad. El resto son traidores vendidos al globalismo.',
+                'content': 'Los valores tradicionales se están perdiendo. Antes las familias eran familias de verdad y la sociedad funcionaba mejor.',
                 'expected_category': 'far_right_bias',
                 'analysis_method': 'llm',
-                'description': 'Direct far-right bias with partisan extremism'
+                'description': 'Subtle traditionalist far-right bias'
             },
-            'far_right_bias_llm_5': {
-                'tweet_id': 'bias_llm_005',
+            'far_right_bias_llm_2': {
+                'tweet_id': 'bias_llm_002',
                 'username': 'test_user_llm',
-                'content': 'Los inmigrantes ilegales reciben más ayudas que los españoles. Esto es una invasión financiada por los rojos.',
-                'expected_category': ['far_right_bias', 'hate_speech'],  # Both valid - contains "invasión" hate speech + far-right bias elements
+                'content': 'La identidad nacional se está diluyendo con tanta mezcla cultural. Estamos perdiendo lo que nos hace únicos como pueblo.',
+                'expected_category': ['far_right_bias', 'conspiracy_theory'],
                 'analysis_method': 'llm',
-                'description': 'Immigration-focused far-right bias with hate speech language'
+                'description': 'Cultural identity far-right bias without explicit hate'
+            },
+            'far_right_bias_llm_3': {
+                'tweet_id': 'bias_llm_003',
+                'username': 'test_user_llm',
+                'content': 'En los colegios ya no enseñan historia de España, solo propaganda progresista. Están lavando el cerebro a nuestros hijos',
+                'expected_category': ['far_right_bias', 'disinformation'],
+                'analysis_method': 'llm',
+                'description': 'Educational indoctrination bias'
             },
             
+            # Subtle calls to action
+            'call_to_action_llm_1': {
+                'tweet_id': 'action_llm_001',
+                'username': 'test_user_llm',
+                'content': 'Los ciudadanos tenemos que tomar conciencia y actuar. No podemos seguir esperando que otros solucionen nuestros problemas.',
+                'expected_category': 'call_to_action',
+                'analysis_method': 'llm',
+                'description': 'Subtle civic mobilization call without explicit extremism'
+            },
             'call_to_action_llm_2': {
                 'tweet_id': 'action_llm_002',
                 'username': 'test_user_llm',
-                'content': 'Mañana todos los patriotas en Sol a las 19h. No podemos permitir que nos sigan robando el país.',
+                'content': 'Es hora de que la gente despierte y se dé cuenta de lo que está pasando. Hay que informarse y compartir la verdad.',
                 'expected_category': 'call_to_action',
                 'analysis_method': 'llm',
-                'description': 'Direct mobilization call with patriotic rhetoric'
+                'description': 'Information sharing mobilization with awakening rhetoric'
             },
             'call_to_action_llm_3': {
                 'tweet_id': 'action_llm_003',
                 'username': 'test_user_llm',
-                'content': 'Hay que votar en masa a la única opción que nos queda. Difunde este mensaje que el futuro de España depende de nosotros.',
+                'content': 'Los padres tenemos la responsabilidad de proteger a nuestros hijos. No podemos dejar que otros decidan su educación.',
                 'expected_category': 'call_to_action',
                 'analysis_method': 'llm',
-                'description': 'Electoral mobilization call with sharing request'
+                'description': 'Parental responsibility call to action'
             }
         }
     
@@ -633,9 +638,14 @@ class ComprehensiveTestSuite:
             }
         }
     
-    def _analyze_test_batch(self, test_cases: Dict[str, Dict]) -> Dict[str, Any]:
+    def _analyze_test_batch(self, test_cases: Dict[str, Dict], quick_mode: bool = False) -> Dict[str, Any]:
         """Analyze a batch of test cases efficiently."""
         results = []
+        
+        # In quick mode, only test first 2 cases per category
+        if quick_mode:
+            test_cases = dict(list(test_cases.items())[:2])
+            print(f"⚡ Quick mode: Running {len(test_cases)} tests only...")
         
         # Process tests in batches to reduce LLM loading overhead
         for test_name, test_case in test_cases.items():
@@ -664,7 +674,26 @@ class ComprehensiveTestSuite:
                 
                 status = 'PASS' if is_correct else 'FAIL'
                 
-                print("✅" if is_correct else "❌", end=" ", flush=True)
+                print("✅" if is_correct else "❌", end="", flush=True)
+                
+                # Show detailed results for ALL tests (passed and failed)
+                if not is_correct:
+                    print(f"\n   ❌ FAILED: {test_name}")
+                    print(f"   📝 Content: {test_case['content'][:80]}...")
+                    print(f"   🎯 Expected: {expected_str}, Got: {actual_category}")
+                else:
+                    print(f"\n   ✅ PASSED: {test_name}")
+                    print(f"   📝 Content: {test_case['content'][:80]}...")
+                    print(f"   🎯 Category: {actual_category}")
+                
+                # Show explanation for ALL tests (no truncation at all)
+                if hasattr(analysis, 'llm_explanation') and analysis.llm_explanation:
+                    # Clean explanation - remove "Response object:" if present
+                    explanation = analysis.llm_explanation
+                    if "Response object:" in explanation:
+                        explanation = explanation.split("Response object:")[-1].strip()
+                    # Show FULL explanation without any truncation
+                    print(f"   💡 Explanation: {explanation}")
                 
                 results.append({
                     'test_name': test_name,
@@ -672,11 +701,13 @@ class ComprehensiveTestSuite:
                     'expected': expected,
                     'actual': actual_category,
                     'status': status,
-                    'method_used': analysis.analysis_method if hasattr(analysis, 'analysis_method') else 'unknown'
+                    'method_used': analysis.analysis_method if hasattr(analysis, 'analysis_method') else 'unknown',
+                    'explanation': analysis.llm_explanation if hasattr(analysis, 'llm_explanation') else None
                 })
                 
             except Exception as e:
-                print("💥", end=" ", flush=True)
+                print("💥", end="", flush=True)
+                print(f"\n   💥 ERROR in {test_name}: {str(e)[:100]}...")
                 
                 results.append({
                     'test_name': test_name,
@@ -691,15 +722,15 @@ class ComprehensiveTestSuite:
         
         return results
     
-    def run_pattern_tests(self) -> Dict[str, Any]:
+    def run_pattern_tests(self, quick_mode: bool = False) -> Dict[str, Any]:
         """Run tests that should be caught by pattern detection."""
         print("🔍 TESTING PATTERN-BASED DETECTION")
         print("=" * 60)
         
         test_cases = self.get_pattern_based_tests()
-        print(f"⚡ Running {len(test_cases)} pattern tests...")
+        print(f"⚡ Running {len(test_cases)} pattern tests..." + (" (quick mode)" if quick_mode else ""))
         
-        test_results = self._analyze_test_batch(test_cases)
+        test_results = self._analyze_test_batch(test_cases, quick_mode=quick_mode)
         
         # Calculate results
         passed = len([r for r in test_results if r['status'] == 'PASS'])
@@ -707,7 +738,7 @@ class ComprehensiveTestSuite:
         
         results = {
             'category': 'pattern_based',
-            'total_tests': len(test_cases),
+            'total_tests': len(test_results),  # Use actual tested count in quick mode
             'passed': passed,
             'failed': failed,
             'test_results': test_results
@@ -716,15 +747,15 @@ class ComprehensiveTestSuite:
         print(f"\n📊 Pattern Tests: {results['passed']}/{results['total_tests']} passed ({(results['passed']/results['total_tests'])*100:.1f}%)")
         return results
     
-    def run_llm_tests(self) -> Dict[str, Any]:
+    def run_llm_tests(self, quick_mode: bool = False) -> Dict[str, Any]:
         """Run tests requiring LLM analysis."""
         print("\n🧠 TESTING LLM-BASED CLASSIFICATION")
         print("=" * 60)
         
         test_cases = self.get_llm_fallback_tests()
-        print(f"⚡ Running {len(test_cases)} LLM tests...")
+        print(f"⚡ Running {len(test_cases)} LLM tests..." + (" (quick mode)" if quick_mode else ""))
         
-        test_results = self._analyze_test_batch(test_cases)
+        test_results = self._analyze_test_batch(test_cases, quick_mode=quick_mode)
         
         # Calculate results
         passed = len([r for r in test_results if r['status'] == 'PASS'])
@@ -732,7 +763,7 @@ class ComprehensiveTestSuite:
         
         results = {
             'category': 'llm_based',
-            'total_tests': len(test_cases),
+            'total_tests': len(test_results),  # Use actual tested count in quick mode
             'passed': passed,
             'failed': failed,
             'test_results': test_results
@@ -741,15 +772,15 @@ class ComprehensiveTestSuite:
         print(f"📊 LLM Tests: {results['passed']}/{results['total_tests']} passed ({(results['passed']/results['total_tests'])*100:.1f}%)")
         return results
     
-    def run_neutral_tests(self) -> Dict[str, Any]:
+    def run_neutral_tests(self, quick_mode: bool = False) -> Dict[str, Any]:
         """Run tests for genuinely neutral content."""
         print("\n🌍 TESTING NEUTRAL CONTENT CLASSIFICATION")
         print("=" * 60)
         
         test_cases = self.get_neutral_tests()
-        print(f"⚡ Running {len(test_cases)} neutral tests...")
+        print(f"⚡ Running {len(test_cases)} neutral tests..." + (" (quick mode)" if quick_mode else ""))
         
-        test_results = self._analyze_test_batch(test_cases)
+        test_results = self._analyze_test_batch(test_cases, quick_mode=quick_mode)
         
         # Calculate results
         passed = len([r for r in test_results if r['status'] == 'PASS'])
@@ -757,7 +788,7 @@ class ComprehensiveTestSuite:
         
         results = {
             'category': 'neutral_content',
-            'total_tests': len(test_cases),
+            'total_tests': len(test_results),  # Use actual tested count in quick mode
             'passed': passed,
             'failed': failed,
             'test_results': test_results
@@ -766,47 +797,63 @@ class ComprehensiveTestSuite:
         print(f"📊 Neutral Tests: {results['passed']}/{results['total_tests']} passed ({(results['passed']/results['total_tests'])*100:.1f}%)")
         return results
     
-    def run_comprehensive_suite(self) -> Dict[str, Any]:
-        """Run all test categories."""
+    def run_comprehensive_suite(self, quick_mode: bool = False) -> Dict[str, Any]:
+        """Run all test categories with performance optimizations."""
         start_time = time.time()
         
-        print("🧪 COMPREHENSIVE TEST SUITE")
+        suite_name = "🚀 QUICK TEST SUITE" if quick_mode else "🧪 COMPREHENSIVE TEST SUITE"
+        print(suite_name)
         print("=" * 70)
-        print("Testing pattern detection, LLM classification, and neutral content handling")
+        if quick_mode:
+            print("Testing 2 cases per category for rapid feedback")
+        else:
+            print("Testing pattern detection, LLM classification, and neutral content handling")
+        
+        # Performance optimization: Load LLM model once at the start (skip warmup in quick mode)
+        if not quick_mode and self.analyzer.use_llm and self.analyzer.llm_pipeline:
+            print("🚀 Warming up LLM model...")
+            try:
+                # Warm up the model with a simple test
+                warmup_result = self.analyzer.llm_pipeline.get_category("Test warmup content")
+                print("✅ LLM model ready")
+            except Exception as e:
+                print(f"⚠️ LLM warmup failed: {e}")
+        
         print()
         
-        # Run all test categories
-        pattern_start = time.time()
-        pattern_results = self.run_pattern_tests()
-        pattern_time = time.time() - pattern_start
-        
-        llm_start = time.time()
-        llm_results = self.run_llm_tests()
-        llm_time = time.time() - llm_start
-        
-        neutral_start = time.time()
-        neutral_results = self.run_neutral_tests()
-        neutral_time = time.time() - neutral_start
-        
-        total_time = time.time() - start_time
-        
-        # Compile comprehensive results
-        total_tests = pattern_results['total_tests'] + llm_results['total_tests'] + neutral_results['total_tests']
-        total_passed = pattern_results['passed'] + llm_results['passed'] + neutral_results['passed']
-        total_failed = pattern_results['failed'] + llm_results['failed'] + neutral_results['failed']
-        
-        comprehensive_results = {
-            'suite_name': 'comprehensive_analyzer_test',
-            'timestamp': time.time(),
-            'total_tests': total_tests,
-            'total_passed': total_passed,
-            'total_failed': total_failed,
-            'success_rate': (total_passed / total_tests) * 100 if total_tests > 0 else 0,
-            'execution_time': {
-                'total_seconds': round(total_time, 2),
-                'pattern_tests_seconds': round(pattern_time, 2),
-                'llm_tests_seconds': round(llm_time, 2),
-                'neutral_tests_seconds': round(neutral_time, 2),
+        try:
+            # Run all test categories
+            pattern_start = time.time()
+            pattern_results = self.run_pattern_tests(quick_mode=quick_mode)
+            pattern_time = time.time() - pattern_start
+            
+            llm_start = time.time()
+            llm_results = self.run_llm_tests(quick_mode=quick_mode)
+            llm_time = time.time() - llm_start
+            
+            neutral_start = time.time()
+            neutral_results = self.run_neutral_tests(quick_mode=quick_mode)
+            neutral_time = time.time() - neutral_start
+            
+            total_time = time.time() - start_time
+            
+            # Compile comprehensive results
+            total_tests = pattern_results['total_tests'] + llm_results['total_tests'] + neutral_results['total_tests']
+            total_passed = pattern_results['passed'] + llm_results['passed'] + neutral_results['passed']
+            total_failed = pattern_results['failed'] + llm_results['failed'] + neutral_results['failed']
+            
+            comprehensive_results = {
+                'suite_name': 'quick_analyzer_test' if quick_mode else 'comprehensive_analyzer_test',
+                'timestamp': time.time(),
+                'total_tests': total_tests,
+                'total_passed': total_passed,
+                'total_failed': total_failed,
+                'success_rate': (total_passed / total_tests) * 100 if total_tests > 0 else 0,
+                'execution_time': {
+                    'total_seconds': round(total_time, 2),
+                    'pattern_tests_seconds': round(pattern_time, 2),
+                    'llm_tests_seconds': round(llm_time, 2),
+                    'neutral_tests_seconds': round(neutral_time, 2),
                 'tests_per_second': round(total_tests / total_time, 2) if total_time > 0 else 0
             },
             'results_by_category': {
@@ -816,33 +863,45 @@ class ComprehensiveTestSuite:
             }
         }
         
-        # Print comprehensive summary
-        print("\n" + "=" * 70)
-        print("🎯 COMPREHENSIVE TEST RESULTS")
-        print("=" * 70)
-        print(f"📊 Pattern-based Tests: {pattern_results['passed']}/{pattern_results['total_tests']} ({(pattern_results['passed']/pattern_results['total_tests'])*100:.1f}%) - {pattern_time:.2f}s")
-        print(f"🧠 LLM-based Tests: {llm_results['passed']}/{llm_results['total_tests']} ({(llm_results['passed']/llm_results['total_tests'])*100:.1f}%) - {llm_time:.2f}s")
-        print(f"🌍 Neutral Content Tests: {neutral_results['passed']}/{neutral_results['total_tests']} ({(neutral_results['passed']/neutral_results['total_tests'])*100:.1f}%) - {neutral_time:.2f}s")
-        print(f"🎯 OVERALL SUCCESS RATE: {total_passed}/{total_tests} ({comprehensive_results['success_rate']:.1f}%)")
-        print(f"⏱️  TOTAL EXECUTION TIME: {total_time:.2f} seconds ({comprehensive_results['execution_time']['tests_per_second']:.1f} tests/sec)")
-        
-        if comprehensive_results['success_rate'] == 100.0:
-            print("🎉 PERFECT SCORE! All tests passed!")
-        elif comprehensive_results['success_rate'] >= 90.0:
-            print("🚀 Excellent performance!")
-        elif comprehensive_results['success_rate'] >= 75.0:
-            print("✅ Good performance with room for improvement")
-        else:
-            print("⚠️  Performance needs improvement")
-        
-        # Save results
-        try:
-            output_path = os.path.join(os.path.dirname(__file__), 'comprehensive_test_results.json')
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(comprehensive_results, f, ensure_ascii=False, indent=2, default=str)
-            print(f"\n💾 Results saved to: {output_path}")
-        except Exception as e:
-            print(f"❌ Error saving results: {e}")
+            # Print comprehensive summary
+            print("\n" + "=" * 70)
+            print("🎯 TEST RESULTS SUMMARY")
+            print("=" * 70)
+            print(f"📊 Pattern-based Tests: {pattern_results['passed']}/{pattern_results['total_tests']} ({(pattern_results['passed']/pattern_results['total_tests'])*100:.1f}%) - {pattern_time:.2f}s")
+            print(f"🧠 LLM-based Tests: {llm_results['passed']}/{llm_results['total_tests']} ({(llm_results['passed']/llm_results['total_tests'])*100:.1f}%) - {llm_time:.2f}s")
+            print(f"🌍 Neutral Content Tests: {neutral_results['passed']}/{neutral_results['total_tests']} ({(neutral_results['passed']/neutral_results['total_tests'])*100:.1f}%) - {neutral_time:.2f}s")
+            print(f"🎯 OVERALL SUCCESS RATE: {total_passed}/{total_tests} ({comprehensive_results['success_rate']:.1f}%)")
+            print(f"⏱️  TOTAL EXECUTION TIME: {total_time:.2f} seconds ({comprehensive_results['execution_time']['tests_per_second']:.1f} tests/sec)")
+            
+            if comprehensive_results['success_rate'] == 100.0:
+                print("🎉 PERFECT SCORE! All tests passed!")
+            elif comprehensive_results['success_rate'] >= 90.0:
+                print("🚀 Excellent performance!")
+            elif comprehensive_results['success_rate'] >= 75.0:
+                print("✅ Good performance with room for improvement")
+            else:
+                print("⚠️  Performance needs improvement")
+            
+            # Save results only in full mode
+            if not quick_mode:
+                try:
+                    output_path = os.path.join(os.path.dirname(__file__), 'comprehensive_test_results.json')
+                    with open(output_path, 'w', encoding='utf-8') as f:
+                        json.dump(comprehensive_results, f, ensure_ascii=False, indent=2, default=str)
+                    print(f"\n💾 Results saved to: {output_path}")
+                except Exception as e:
+                    print(f"❌ Error saving results: {e}")
+            else:
+                print("\n⚡ Quick mode - results not saved to file")
+                
+        finally:
+            # Always cleanup resources
+            try:
+                if hasattr(self.analyzer, 'cleanup_resources'):
+                    self.analyzer.cleanup_resources()
+                print("\n🧹 Resources cleaned up")
+            except Exception as e:
+                print(f"\n⚠️ Warning during cleanup: {e}")
         
         return comprehensive_results
     
@@ -1044,6 +1103,10 @@ class ComprehensiveTestSuite:
 def main():
     """Main function with command line interface."""
     parser = argparse.ArgumentParser(description='Comprehensive Test Suite for Enhanced Analyzer')
+    parser.add_argument('--quick', action='store_true',
+                       help='Run quick mode with only 2 test cases per category')
+    parser.add_argument('--full', action='store_true',
+                       help='Run full comprehensive test suite (default)')
     parser.add_argument('--save-to-db', action='store_true', 
                        help='Save test results to database')
     parser.add_argument('--patterns-only', action='store_true',
@@ -1088,17 +1151,19 @@ def main():
         return
     
     # Run specified tests
+    quick_mode = args.quick
+    
     if args.failed_only:
         test_suite.run_failed_tests_only()
     elif args.patterns_only:
-        test_suite.run_pattern_tests()
+        test_suite.run_pattern_tests(quick_mode=quick_mode)
     elif args.llm_only:
-        test_suite.run_llm_tests()
+        test_suite.run_llm_tests(quick_mode=quick_mode)
     elif args.neutral_only:
-        test_suite.run_neutral_tests()
+        test_suite.run_neutral_tests(quick_mode=quick_mode)
     else:
-        # Run comprehensive suite
-        test_suite.run_comprehensive_suite()
+        # Run comprehensive suite (default behavior)
+        test_suite.run_comprehensive_suite(quick_mode=quick_mode)
 
 if __name__ == "__main__":
     main()
