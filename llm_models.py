@@ -853,7 +853,7 @@ class EnhancedLLMPipeline:
     
     def get_category(self, text: str) -> str:
         """
-        Fast category classification using LLM with dedicated classification prompts.
+        Fast category classification using LLM with optimized prompts.
         
         Args:
             text: Text to analyze
@@ -864,25 +864,27 @@ class EnhancedLLMPipeline:
         try:
             print(f"🔍 LLM category classification for content: {text[:50]}...")
             
-            # Use generation model with classification-specific prompts
-            if self.generation_model:
-                return self._classify_with_generation_model(text)
+            result = "general"  # Default fallback
             
-            # Ollama classification
-            elif self.ollama_client:
+            # Prioritize Ollama classification if available  
+            if self.ollama_client:
                 ollama_result = self._classify_with_ollama(text)
                 ollama_categories = ollama_result.get("llm_categories", [])
                 if ollama_categories:
-                    return ollama_categories[0]
+                    result = ollama_categories[0]
+
+            # Use generation model with classification-specific prompts
+            elif self.generation_model:
+                result = self._classify_with_generation_model(text)
             
             # Classification model fallback
             elif self.classification_model:
                 class_result = self._classify_content(text)
                 categories = class_result.get("llm_categories", [])
                 if categories:
-                    return categories[0]
+                    result = categories[0]
             
-            return "general"
+            return result
                 
         except Exception as e:
             print(f"⚠️ Category detection error: {e}")
@@ -1140,10 +1142,11 @@ class EnhancedLLMPipeline:
     
     def _classify_content(self, text: str) -> Dict:
         """Fast content classification using configuration-driven parsing."""
-        # Check if we have an Ollama model that can do classification
-        if not self.classification_model and self.ollama_client:
+        # Prioritize Ollama model if available (better quality than classification model)
+        if self.ollama_client:
             return self._classify_with_ollama(text)
         
+        # Fallback to classification model if no Ollama
         if not self.classification_model:
             return {"llm_categories": []}
         
@@ -1180,7 +1183,7 @@ class EnhancedLLMPipeline:
                     {"role": "system", "content": "Eres un clasificador de contenido especializado en detectar contenido problemático sutil. Responde únicamente con: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general. Usa 'general' SOLO para contenido verdaderamente neutral (clima, comida, entretenimiento). Si detectas cualquier insinuación problemática, elige la categoría específica más apropiada."},
                     {"role": "user", "content": classification_prompt}
                 ],
-                temperature=0.3  # Slightly higher to encourage more specific classifications
+                temperature=0.1  # Lower temperature for more consistent results
                 # Note: max_tokens parameter causes empty responses with gpt-oss:20b
             )
             
@@ -1213,7 +1216,7 @@ class EnhancedLLMPipeline:
     
     def _classify_with_generation_model(self, text: str) -> str:
         """
-        Perform classification using generation model with dedicated classification prompt.
+        Perform classification using generation model with optimized fast prompt.
         
         Args:
             text: Text to analyze
@@ -1224,70 +1227,78 @@ class EnhancedLLMPipeline:
         try:
             print(f"🔍 Using generation model for classification")
             
-            # Use the same targeted classification prompt as Ollama
-            classification_prompt = self.prompt_generator.generate_classification_prompt(text, model_type="ollama")
+            # PERFORMANCE OPTIMIZATION: Use much shorter, simpler classification prompt
+            simple_classification_prompt = f"""Clasifica este texto en una categoría:
+
+hate_speech - Insultos, discriminación
+disinformation - Información falsa médica/científica  
+conspiracy_theory - Teorías conspirativas
+far_right_bias - Retórica extrema derecha
+call_to_action - Llamadas a acción/movilización
+general - Contenido neutral
+
+Texto: "{text}"
+
+Categoría:"""
             
-            print(f"🔍 Classification prompt length: {len(classification_prompt)} characters")
+            print(f"🔍 Classification prompt length: {len(simple_classification_prompt)} characters")
             
             # Get generation parameters from configuration
             gen_config = self.model_info.get("generation", {})
             generation_params = gen_config.get("generation_params", {}).copy()
             generation_params.update({
-                "temperature": 0.3  # Consistent with Ollama version
-                # Note: max_tokens parameter causes empty responses with gpt-oss:20b
+                "temperature": 0.1,  # PERFORMANCE OPTIMIZATION: Lower temperature for faster, more consistent responses
+                "max_tokens": 20  # PERFORMANCE OPTIMIZATION: Limit output length for speed (OpenAI API parameter)
             })
             
             # Generate response
             if self.generation_model == "ollama":
-                # Use Ollama chat completion
+                # PERFORMANCE OPTIMIZATION: Simplified system prompt for Ollama
                 print(f"🔍 Sending to Ollama model: {self.ollama_model_name}")
+                
+                # Fix: Use OpenAI parameter names for Ollama's OpenAI-compatible API
+                ollama_params = {
+                    "temperature": 0.1,    # Very low temperature for deterministic responses
+                    "max_tokens": 100      # Generous limit to avoid truncation
+                }
+                
                 response = self.ollama_client.chat.completions.create(
                     model=self.ollama_model_name,
                     messages=[
-                        {"role": "system", "content": "Eres un clasificador de contenido especializado en detectar contenido problemático político y social. Responde únicamente con: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general. \n\nIMPORTANTE: Sé MENOS conservador con contenido político. Si detectas:\n- Narrativas de invasión migratoria → far_right_bias\n- Críticas a 'progres', 'woke', feminismo → far_right_bias\n- Llamadas a organizarse, movilizarse, boicotear → call_to_action\n- Insinuaciones sobre élites o control → conspiracy_theory\n\nUsa 'general' SOLO para contenido completamente neutral (clima, comida, entretenimiento personal). Para contenido con matices políticos, elige la categoría específica más apropiada."},
-                        {"role": "user", "content": classification_prompt}
+                        {"role": "system", "content": "Classify text as: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, or general"},
+                        {"role": "user", "content": f"Text: {text}\nCategory:"}
                     ],
-                    **generation_params
+                    **ollama_params
                 )
-                result = response.choices[0].message.content.strip().lower()
+                result = response.choices[0].message.content.strip().lower() if response.choices[0].message.content else ""
                 print(f"🔍 Raw generation model response: '{result}'")
             else:
                 # Use transformers pipeline  
-                response = self.generation_model(classification_prompt, **generation_params)
+                response = self.generation_model(simple_classification_prompt, **generation_params)
                 parser_type = gen_config.get("response_parser", "text_generation")
-                result = ResponseParser.parse_response(response, parser_type, classification_prompt, gen_config)
+                result = ResponseParser.parse_response(response, parser_type, simple_classification_prompt, gen_config)
                 result = result.strip().lower() if result else ""
                 print(f"🔍 Raw transformers response: '{result}'")
             
-            # Clean and validate the result
+            # PERFORMANCE OPTIMIZATION: Simplified validation - just check for key categories
             valid_categories = ["hate_speech", "disinformation", "conspiracy_theory", "far_right_bias", "call_to_action", "general"]
             
-            # Also check Spanish terms that the LLM might use
-            spanish_to_english = {
-                "discurso de odio": "hate_speech",
-                "desinformación": "disinformation", 
-                "desinformacion": "disinformation",
-                "información falsa": "disinformation",
-                "teoría conspirativa": "conspiracy_theory",
-                "teoria conspirativa": "conspiracy_theory",
-                "conspiración": "conspiracy_theory",
-                "conspiracion": "conspiracy_theory",
-                "sesgo político": "far_right_bias",
-                "sesgo politico": "far_right_bias", 
-                "llamada a la acción": "call_to_action",
-                "llamada a la accion": "call_to_action",
-                "general": "general"
-            }
-            
-            # First check Spanish terms
-            for spanish_term, english_category in spanish_to_english.items():
-                if spanish_term in result:
-                    return english_category
-            
-            # Then check English terms
+            # Quick category matching
             for category in valid_categories:
-                if category.replace("_", " ") in result or category in result:
+                if category in result:
                     return category
+            
+            # Check for common Spanish terms quickly
+            if "odio" in result or "discrimina" in result:
+                return "hate_speech"
+            elif "desinforma" in result or "falso" in result:
+                return "disinformation"  
+            elif "conspira" in result:
+                return "conspiracy_theory"
+            elif "sesgo" in result or "político" in result:
+                return "far_right_bias"
+            elif "acción" in result or "moviliza" in result:
+                return "call_to_action"
             
             # Fallback to general if no valid category found
             return "general"

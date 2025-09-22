@@ -364,6 +364,14 @@ class FarRightAnalyzer:
                     'description': 'Llamada a unidad y acción'
                 },
                 {
+                    'pattern': r'\b(?:marchemos|vamos)\s+(?:todos?\s+)?(?:contra|a)\b',
+                    'description': 'Llamada directa a marchar o actuar'
+                },
+                {
+                    'pattern': r'\b(?:revolución|rebelión|alzamiento)\s+(?:ya|ahora|hoy)\b',
+                    'description': 'Llamada a revolución inmediata'
+                },
+                {
                     'pattern': r'\b(?:defender|proteger|salvar)\s+(?:España|la\s+patria|nuestro\s+país)\s+(?:de\s+la\s+)?(?:invasión|destrucción)',
                     'description': 'Llamada a defensa nacional'
                 },

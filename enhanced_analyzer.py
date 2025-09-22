@@ -6,7 +6,6 @@ Integrates specialized components for content analysis workflow.
 import json
 import os
 import sqlite3
-import argparse
 import time
 import warnings
 from typing import List, Dict, Optional, Tuple
@@ -75,7 +74,7 @@ class EnhancedAnalyzer:
         self.model_priority = model_priority
         self.llm_pipeline = None
         
-        print("� Iniciando Enhanced Analyzer...")
+        print("🚀 Iniciando Enhanced Analyzer...")
         print("Componentes cargados:")
         print("- ✓ Analizador de patrones de extrema derecha")
         print("- ✓ Clasificador de temas políticos") 
@@ -339,9 +338,9 @@ class EnhancedAnalyzer:
         
         try:
             print(f"🔍 _get_llm_category called with content: {content[:50]}...")
+            print("🔍 Calling llm_pipeline.get_category...")
             
             # Use FAST category detection instead of full analysis
-            print("🔍 Calling llm_pipeline.get_category...")
             llm_category = self.llm_pipeline.get_category(content)
             print(f"🔍 Fast LLM category result: {llm_category}")
             
@@ -351,12 +350,6 @@ class EnhancedAnalyzer:
             
         except Exception as e:
             print(f"⚠️ Error en categorización LLM: {e}")
-            return "general"
-            
-        except Exception as e:
-            print(f"⚠️ Error in LLM categorization: {e}")
-            import traceback
-            traceback.print_exc()
             return "general"
     
     def _extract_content_insights(self, content: str, pattern_results: Dict) -> Dict:
@@ -724,6 +717,32 @@ class EnhancedAnalyzer:
         except Exception as e:
             print(f"⚠️ Warning during cleanup: {e}")
     
+    def print_system_status(self):
+        """Print current system status for debugging."""
+        print("🔧 ENHANCED ANALYZER SYSTEM STATUS")
+        print("=" * 50)
+        print(f"🤖 LLM Enabled: {self.use_llm}")
+        if self.llm_pipeline:
+            print(f"🔧 Model Priority: {self.model_priority}")
+            print(f"🧠 LLM Pipeline: Loaded")
+        else:
+            print("⚠️ LLM Pipeline: Not available")
+        
+        print(f"🔍 Far-right analyzer: {'✓' if self.far_right_analyzer else '❌'}")
+        print(f"📊 Topic classifier: {'✓' if self.topic_classifier else '❌'}")
+        print(f"🔎 Claim detector: {'✓' if self.claim_detector else '❌'}")
+        
+        # Check database
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=5.0)
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM content_analyses")
+            count = c.fetchone()[0]
+            conn.close()
+            print(f"📊 Database: {count} analyses stored")
+        except Exception as e:
+            print(f"❌ Database: Error - {e}")
+
 
 # Database functions for content analysis workflow
 def migrate_database_schema():
@@ -829,377 +848,7 @@ def save_content_analysis(analysis: ContentAnalysis):
                 raise
 
 
-
-def get_category_examples():
-    """Get examples for each category, including LLM fallback scenarios."""
-    return {
-        # PATTERN-BASED EXAMPLES (Clear explicit patterns)
-        'hate_speech': {
-            'tweet_id': 'hate_001',
-            'username': 'supremacista_es',
-            'content': 'Los musulmanes son una raza inferior que viene a destruir nuestra cultura cristiana. España para los españoles.',
-            'expected_category': 'hate_speech',
-            'analysis_method': 'pattern'
-        },
-        'disinformation': {
-            'tweet_id': 'disinfo_001',
-            'username': 'fake_news_es',
-            'content': 'EXCLUSIVO: Las vacunas COVID contienen microchips 5G para controlar la población. Los datos oficiales son mentira del gobierno.',
-            'expected_category': 'disinformation',
-            'analysis_method': 'pattern'
-        },
-        'conspiracy_theory': {
-            'tweet_id': 'conspiracy_001',
-            'username': 'conspiranoia_es',
-            'content': 'Soros financia la inmigración para reemplazar a los europeos. Es el plan Kalergi en acción.',
-            'expected_category': 'conspiracy_theory',
-            'analysis_method': 'pattern'
-        },
-        'far_right_bias': {
-            'tweet_id': 'bias_001',
-            'username': 'partidista_extremo',
-            'content': 'Los socialistas han destruido España con su agenda marxista. Solo VOX puede salvar la patria de esta invasión comunista.',
-            'expected_category': 'far_right_bias',
-            'analysis_method': 'pattern'
-        },
-        'call_to_action': {
-            'tweet_id': 'action_001',
-            'username': 'organizador_patriota',
-            'content': '¡CONCENTRACIÓN HOY 18:00 en Cibeles! Hay que salir a las calles a defender España de la invasión. ¡Todos unidos!',
-            'expected_category': 'call_to_action',
-            'analysis_method': 'pattern'
-        },
-        'general': {
-            'tweet_id': 'general_001',
-            'username': 'ciudadano_normal',
-            'content': 'Qué día tan bonito hace hoy en Madrid. Me voy a dar un paseo por el Retiro con la familia.',
-            'expected_category': 'general',
-            'analysis_method': 'pattern'
-        },
-        
-        # LLM FALLBACK EXAMPLES (Subtle content requiring LLM analysis)
-        'hate_speech_llm': {
-            'tweet_id': 'hate_llm_001',
-            'username': 'test_user_llm',
-            'content': 'Algunos grupos culturales tienen características que los hacen incompatibles con los valores occidentales modernos.',
-            'expected_category': 'hate_speech',
-            'analysis_method': 'llm',
-            'description': 'Subtle hate speech using neutral language'
-        },
-        'disinformation_llm': {
-            'tweet_id': 'disinfo_llm_001',
-            'username': 'test_user_llm',
-            'content': 'He leído varios estudios que sugieren correlaciones preocupantes entre ciertos tratamientos médicos y efectos adversos no reportados.',
-            'expected_category': 'disinformation',
-            'analysis_method': 'llm',
-            'description': 'Implicit medical disinformation without explicit claims'
-        },
-        'conspiracy_theory_llm': {
-            'tweet_id': 'conspiracy_llm_001',
-            'username': 'test_user_llm',
-            'content': 'Es interesante cómo ciertos eventos mundiales parecen beneficiar siempre a los mismos actores económicos internacionales.',
-            'expected_category': 'conspiracy_theory',
-            'analysis_method': 'llm',
-            'description': 'Coded conspiracy language without explicit patterns'
-        },
-        'far_right_bias_llm': {
-            'tweet_id': 'bias_llm_001',
-            'username': 'test_user_llm',
-            'content': 'La agenda progresista está transformando fundamentalmente las instituciones tradicionales de nuestra sociedad de maneras que muchos ciudadanos encuentran problemáticas.',
-            'expected_category': 'far_right_bias',
-            'analysis_method': 'llm',
-            'description': 'Veiled far-right bias without explicit partisan language'
-        },
-        'call_to_action_llm': {
-            'tweet_id': 'action_llm_001',
-            'username': 'test_user_llm',
-            'content': 'Es momento de que los ciudadanos responsables tomen medidas para proteger sus comunidades y valores fundamentales.',
-            'expected_category': 'call_to_action',
-            'analysis_method': 'llm',
-            'description': 'Indirect call to action without specific mobilization'
-        },
-        'general_llm': {
-            'tweet_id': 'general_llm_001',
-            'username': 'test_user_llm',
-            'content': 'Los datos económicos recientes muestran tendencias que algunos expertos vinculan con políticas específicas, aunque otros cuestionan estas interpretaciones.',
-            'expected_category': 'general',
-            'analysis_method': 'llm',
-            'description': 'Genuinely ambiguous content with mixed signals'
-        }
-    }
-
-def run_category_test(analyzer: EnhancedAnalyzer, categories: List[str] = None, save_to_db: bool = True):
-    """Run test with one example for each specified category or all categories."""
-    available_examples = get_category_examples()
-    available_categories = list(available_examples.keys())
-    
-    # If no categories specified, use all
-    if not categories:
-        categories = available_categories
-    
-    # Validate categories
-    invalid_categories = [cat for cat in categories if cat not in available_categories]
-    if invalid_categories:
-        print(f"❌ Categorías inválidas: {invalid_categories}")
-        print(f"💡 Categorías disponibles: {', '.join(available_categories)}")
-        return []
-    
-    print("🧪 EJECUTANDO TEST POR CATEGORÍAS")
-    print("=" * 60)
-    print(f"📋 Categorías a probar: {', '.join(categories)}")
-    print(f"🔬 Total de ejemplos: {len(categories)}")
-    
-    if save_to_db:
-        migrate_database_schema()  # Ensure schema is up to date
-        init_content_analysis_table()
-    
-    results = []
-    
-    for category in categories:
-        example = available_examples[category]
-        
-        expected_method = example.get('analysis_method', 'pattern')
-        description = example.get('description', '')
-        
-        print(f"\n📄 TEST: {category.upper()}")
-        print(f"🆔 ID: {example['tweet_id']}")
-        print(f"👤 Usuario: @{example['username']}")
-        print(f"📝 Contenido: {example['content'][:80]}...")
-        print(f"🔬 Método esperado: {expected_method.upper()}")
-        if description:
-            print(f"📋 Descripción: {description}")
-        
-        try:
-            # Analyze with enhanced analyzer
-            analysis = analyzer.analyze_content(
-                tweet_id=example['tweet_id'],
-                tweet_url=f"https://twitter.com/{example['username']}/status/{example['tweet_id']}",
-                username=example['username'],
-                content=example['content'],
-                retrieve_evidence=False  # Skip for speed in test
-            )
-            
-            # Check accuracy
-            category_match = analysis.category == example['expected_category']
-            
-            # Use the actual analysis method from the analysis result
-            actual_method = "🔍 Pattern-based" if analysis.analysis_method == "pattern" else "🧠 LLM-based"
-            
-            print(f"🎯 Categoría: {analysis.category} ({'✅' if category_match else '❌'})")
-            print(f"🔧 Método usado: {actual_method}")
-            if expected_method == 'llm':
-                print(f"🧠 Explicación LLM: {analysis.llm_explanation[:150]}...")
-            else:
-                print(f"📖 Explicación: {analysis.llm_explanation[:100]}...")
-            
-            # Save to database
-            if save_to_db:
-                save_content_analysis(analysis)
-                print("💾 Guardado en BD ✓")
-            
-            result = {
-                'category_tested': category,
-                'tweet_id': example['tweet_id'],
-                'tweet_content': example['content'],
-                'username': example['username'],
-                'predicted_category': analysis.category,
-                'expected_category': example['expected_category'],
-                'expected_method': expected_method,
-                'actual_method': actual_method,
-                'category_match': category_match,
-                'explanation': analysis.llm_explanation,
-                'targeted_groups': analysis.targeted_groups,
-                'success': True
-            }
-            
-            results.append(result)
-            
-        except Exception as e:
-            print(f"❌ Error en análisis: {e}")
-            results.append({
-                'category_tested': category,
-                'success': False, 
-                'error': str(e)
-            })
-    
-    # Print summary
-    print(f"\n📊 RESUMEN DE RESULTADOS")
-    print("=" * 50)
-    successful_tests = [r for r in results if r.get('success', False)]
-    category_matches = [r for r in successful_tests if r.get('category_match', False)]
-    
-    # Separate pattern vs LLM results
-    pattern_tests = [r for r in successful_tests if r.get('expected_method') == 'pattern']
-    llm_tests = [r for r in successful_tests if r.get('expected_method') == 'llm']
-    
-    pattern_matches = [r for r in pattern_tests if r.get('category_match', False)]
-    llm_matches = [r for r in llm_tests if r.get('category_match', False)]
-    
-    print(f"✅ Tests exitosos: {len(successful_tests)}/{len(results)}")
-    print(f"🎯 Categorías correctas: {len(category_matches)}/{len(successful_tests)}")
-    
-    if len(pattern_tests) > 0:
-        pattern_accuracy = len(pattern_matches) / len(pattern_tests) * 100
-        print(f"🔍 Precisión patrones: {len(pattern_matches)}/{len(pattern_tests)} ({pattern_accuracy:.1f}%)")
-    
-    if len(llm_tests) > 0:
-        llm_accuracy = len(llm_matches) / len(llm_tests) * 100
-        print(f"🧠 Precisión LLM: {len(llm_matches)}/{len(llm_tests)} ({llm_accuracy:.1f}%)")
-    
-    if len(successful_tests) > 0:
-        overall_accuracy = len(category_matches) / len(successful_tests) * 100
-        print(f"📈 Precisión general: {overall_accuracy:.1f}%")
-    
-    # Show LLM fallback cases specifically
-    if llm_tests:
-        print(f"\n🧠 CASOS DE FALLBACK LLM:")
-        for result in llm_tests:
-            status = "✅" if result.get('category_match') else "❌"
-            expected = result.get('expected_category')
-            actual = result.get('predicted_category')
-            desc = result.get('description', '')
-            print(f"  {status} {result.get('category_tested')}: {expected} → {actual} ({desc})")
-    
-    return results
-
-def run_llm_fallback_test(analyzer: EnhancedAnalyzer, save_to_db: bool = True):
-    """Run test specifically for LLM fallback scenarios where pattern detection fails."""
-    available_examples = get_category_examples()
-    
-    # Filter for LLM test cases only
-    llm_categories = [key for key, example in available_examples.items() 
-                     if example.get('analysis_method') == 'llm']
-    
-    print("🧠 TESTING LLM FALLBACK SCENARIOS")
-    print("=" * 60)
-    print("Testing content where pattern detection fails and LLM should provide primary analysis")
-    print(f"📋 LLM test cases: {len(llm_categories)}")
-    
-    return run_category_test(analyzer, categories=llm_categories, save_to_db=save_to_db)
-
-def main(test_examples: bool = False,
-         skip_save: bool = False,
-         use_llm: bool = True,
-         model_priority: str = "balanced",
-         categories: List[str] = None):
-    """
-    Main analysis function with enhanced content detection capabilities.
-    Now supports testing specific categories or all categories.
-    """
-    if not test_examples:
-        print("❌ Esta versión solo soporta el modo test_examples")
-        print("� Usa --test-examples para ejecutar el análisis")
-        return []
-    
-    # Run category-based tests
-    analyzer = EnhancedAnalyzer(use_llm=use_llm, model_priority=model_priority)
-    results = run_category_test(analyzer, categories=categories, save_to_db=not skip_save)
-    
-    # Save test results
-    try:
-        output_path = os.path.join(os.path.dirname(__file__), 'content_test_results.json')
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(results, f, ensure_ascii=False, indent=2, default=str)
-        print(f"\n💾 Resultados del test guardados en: {output_path}")
-    except Exception as e:
-        print(f"❌ Error guardando resultados del test: {e}")
-    
-    return results
-
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Enhanced Content Analyzer - Test Mode Only')
-    parser.add_argument('--skip-save', action='store_true', 
-                       help='Skip saving to database')
-    parser.add_argument('--no-llm', action='store_true', 
-                       help='Disable LLM analysis')
-    parser.add_argument('--test-examples', action='store_true',
-                       help='Run comprehensive test with content examples (required)')
-    parser.add_argument('--status', action='store_true',
-                       help='Show detailed system status and exit')
-    parser.add_argument('--model-priority', type=str, default='balanced',
-                       choices=['speed', 'balanced', 'quality'],
-                       help='Model priority: speed (fast), balanced (default), quality (best)')
-    parser.add_argument('--test-llm', action='store_true',
-                       help='Test LLM pipeline with sample content and exit')
-    parser.add_argument('--categories', nargs='*', 
-                       choices=['hate_speech', 'disinformation', 'conspiracy_theory', 
-                               'far_right_bias', 'call_to_action', 'general'],
-                       help='Specific categories to test (default: all categories)')
-    parser.add_argument('--list-categories', action='store_true',
-                       help='Show available categories and exit')
-    
-    args = parser.parse_args()
-    
-    # Handle list categories
-    if args.list_categories:
-        available_examples = get_category_examples()
-        print("📋 CATEGORÍAS DISPONIBLES PARA TESTING")
-        print("=" * 50)
-        for category, example in available_examples.items():
-            print(f"🏷️ {category}")
-            print(f"   📝 Ejemplo: {example['content'][:80]}...")
-            print(f"   🎯 Espera: {example['expected_category']}")
-            print()
-        print("💡 Uso: --categories hate_speech disinformation")
-        print("💡 Para todas: --test-examples (sin --categories)")
-        exit(0)
-    
-    # Handle status check
-    if args.status:
-        print("🔧 CHECKING SYSTEM STATUS...")
-        analyzer = EnhancedAnalyzer(use_llm=not args.no_llm, model_priority=args.model_priority)
-        analyzer.print_system_status()
-        if analyzer.llm_pipeline:
-            analyzer.cleanup_resources()
-        exit(0)
-    
-    # Handle LLM testing
-    if args.test_llm:
-        print("🧪 TESTING LLM PIPELINE...")
-        analyzer = EnhancedAnalyzer(use_llm=True, model_priority=args.model_priority)
-        
-        if not analyzer.llm_pipeline:
-            print("❌ LLM pipeline not available")
-            exit(1)
-        
-        # Test with sample content
-        test_content = "Los inmigrantes están destruyendo nuestro país. Es hora de actuar contra la élite globalista."
-        test_context = {
-            'far_right_score': 0.8,
-            'category': 'hate_speech'
-        }
-        
-        print(f"📝 Test content: {test_content}")
-        print("⏳ Running LLM analysis...")
-        
-        try:
-            start_time = time.time()
-            result = analyzer.llm_pipeline.analyze_content(test_content, test_context)
-            end_time = time.time()
-            
-            print("✅ LLM Analysis Results:")
-            print(f"   💭 Explanation: {result.get('llm_explanation', 'N/A')}")
-            print(f"   📊 Sentiment: {result.get('llm_sentiment', 'N/A')}")
-            print(f"   ⏱️ Processing time: {end_time - start_time:.2f}s")
-            
-            analyzer.cleanup_resources()
-            print("🎯 LLM pipeline test completed successfully!")
-            
-        except Exception as e:
-            print(f"❌ LLM test failed: {e}")
-            analyzer.cleanup_resources()
-            exit(1)
-        
-        exit(0)
-    
-    # Run analysis (only test_examples mode supported)
-    results = main(
-        test_examples=args.test_examples,
-        skip_save=args.skip_save,
-        use_llm=not args.no_llm,
-        model_priority=args.model_priority,
-        categories=args.categories
-    )
-    
-    if not results:
-        print("❌ No se pudieron analizar posts")
+    print("❌ Este módulo no debe ejecutarse directamente")
+    print("💡 Usa comprehensive_test_suite.py para ejecutar tests")
+    print("💡 O importa EnhancedAnalyzer para usar la funcionalidad de análisis")
