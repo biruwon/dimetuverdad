@@ -68,6 +68,18 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\bfeminazis?\b.*\b(?:plaga|virus|exterminar|eliminar)\b|\b(?:plaga|virus|exterminar|eliminar)\b.*\bfeminazis?\b',
                     'description': 'Deshumanización de feministas con lenguaje violento'
+                },
+                {
+                    'pattern': r'\bcelebra\s+su\s+[\'"](?:boda|matrimonio)[\'"].*(?:con\s+(?:una\s+)?(?:mujer|hombre))\b',
+                    'description': 'Sarcasmo sobre matrimonios LGBTQ+ con comillas despectivas'
+                },
+                {
+                    'pattern': r'\b(?:alardea|presume|exhibe)\s+(?:de\s+ello|de\s+su|de\s+esto).*(?:redes|redes\s+sociales)\b',
+                    'description': 'Crítica a visibilidad LGBTQ+ como alardeo'
+                },
+                {
+                    'pattern': r'(?:una\s+de\s+sus\s+máximas\s+responsables?|ministra|responsable).*\bcelebra.*[\'"](?:boda|matrimonio)[\'"]',
+                    'description': 'Ataques a funcionarias públicas LGBTQ+ por vida personal'
                 }
             ],
             'xenophobia': [
@@ -340,6 +352,18 @@ class FarRightAnalyzer:
                 {
                     'pattern': r'\b(?:nuestras?\s+)?(?:instituciones?|estructuras?|bases?)\s+(?:fundamentales?|básicas?|tradicionales?)\s+(?:están\s+en\s+peligro|bajo\s+ataque)\b',
                     'description': 'Instituciones fundamentales amenazadas'
+                },
+                {
+                    'pattern': r'(?:ministra|responsable|funcionaria).*(?:celebra|se\s+casa).*(?:con\s+(?:una\s+)?mujer|matrimonio\s+homosexual).*(?:en\s+lugar\s+de|mientras|sin\s+tener).*(?:palabra|atención|respuesta)',
+                    'description': 'Ataque a funcionarias LGBTQ+ por prioridades personales vs profesionales'
+                },
+                {
+                    'pattern': r'\b(?:alardea|presume|exhibe)\s+(?:de\s+ello|de\s+su\s+boda|de\s+esto).*(?:redes|mientras|sin\s+tener)',
+                    'description': 'Crítica a visibilidad LGBTQ+ como exhibicionismo inapropiado'
+                },
+                {
+                    'pattern': r'(?:no\s+ha\s+tenido|sin\s+tener).*(?:una\s+sola\s+palabra|ni\s+una\s+palabra|palabras?).*(?:para\s+las\s+mujeres|afectadas)',
+                    'description': 'Contraste entre vida personal LGBTQ+ y supuesta falta de atención a mujeres'
                 }
             ],
             'call_to_action': [

@@ -85,12 +85,9 @@ class EnhancedAnalyzer:
         if use_llm:
             print("- ⏳ Cargando modelo LLM para análisis avanzado...")
             try:
-                # Use gpt-oss-20b as the recommended default model for best performance
-                self.llm_pipeline = EnhancedLLMPipeline(
-                    model_priority=model_priority,
-                    specific_models={'generation': 'gpt-oss-20b'}
-                )
-                print("- ✓ Modelo LLM gpt-oss-20b cargado correctamente")
+                # Use recommended model (now defaults to original gpt-oss-20b for best performance)
+                self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
+                print("- ✓ Modelo LLM cargado correctamente")
             except Exception as e:
                 print(f"- ⚠️ Error cargando LLM: {e}")
                 print("- 🔄 Intentando con modelo de respaldo...")

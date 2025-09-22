@@ -436,6 +436,34 @@ class LLMModelConfig:
                 "base_url": "http://localhost:11434/v1",
                 "api_key": "ollama"
             }
+        },
+
+        "gpt-oss-fast": {
+            "model_name": "gpt-oss-fast:latest",
+            "description": "Optimized 20B model with reduced context (2048) and CPU processing - faster for classification",
+            "size_gb": 20.0,
+            "speed": "fast",  # Faster due to optimizations
+            "quality": "excellent",
+            "free": True,
+            "task_type": "generation",
+            "primary_task": "generation",
+            "secondary_tasks": ["classification"],
+            "pipeline_type": "ollama",
+            "complexity_level": "full",
+            "generation_params": {
+                "temperature": 0.1,  # Lower for more consistent classification
+                "max_tokens": 128   # Shorter for classification tasks
+            },
+            "max_input_length": 2000,  # Reduced context window
+            "language": "multilingual",
+            "requires_tokenizer_config": False,
+            "response_parser": "ollama_chat",
+            "prompt_removal_strategy": None,
+            "model_type": "chat",
+            "ollama_config": {
+                "base_url": "http://localhost:11434/v1",
+                "api_key": "ollama"
+            }
         }
     }
     
@@ -444,11 +472,11 @@ class LLMModelConfig:
         """Get recommended model based on task and priority."""
         if task == "generation":
             if priority == "speed":
-                return cls.MODELS["flan-t5-small"]  # Fastest proven model (4s vs 11s+)
+                return cls.MODELS["gpt-oss-20b"]  # Original model is fastest on M1 Pro GPU
             elif priority == "quality":
-                return cls.MODELS["gemma-7b"] 
+                return cls.MODELS["gpt-oss-20b"]  # Original model for quality
             else:  # balanced
-                return cls.MODELS["flan-t5-small"]  # Best overall performance
+                return cls.MODELS["gpt-oss-20b"]  # Original model is best overall (46s vs 2min+)
         
         elif task == "classification":
             if priority == "speed":
