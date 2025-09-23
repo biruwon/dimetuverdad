@@ -82,23 +82,29 @@ class EnhancedAnalyzer:
         print("- ✓ Sistema de recuperación de evidencia")
         print("- ✓ Modo de análisis de contenido activado")
         
-        if use_llm:
-            print("- ⏳ Cargando modelo LLM para análisis avanzado...")
+        # Always try to load LLM pipeline as it's needed for fallback when no patterns are detected
+        # The use_llm flag only controls whether we use it for enhancing pattern-based results
+        print("- ⏳ Cargando modelo LLM para análisis de contenido sin patrones...")
+        try:
+            # Use recommended model (now defaults to original gpt-oss-20b for best performance)
+            self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
+            print("- ✓ Modelo LLM cargado correctamente")
+        except Exception as e:
+            print(f"- ⚠️ Error cargando LLM: {e}")
+            print("- 🔄 Intentando con modelo de respaldo...")
             try:
-                # Use recommended model (now defaults to original gpt-oss-20b for best performance)
+                # Fallback to flan-t5-small if Ollama is not available
                 self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
-                print("- ✓ Modelo LLM cargado correctamente")
-            except Exception as e:
-                print(f"- ⚠️ Error cargando LLM: {e}")
-                print("- 🔄 Intentando con modelo de respaldo...")
-                try:
-                    # Fallback to flan-t5-small if Ollama is not available
-                    self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
-                    print("- ✓ Modelo de respaldo cargado correctamente")
-                except Exception as e2:
-                    print(f"- ❌ Error cargando modelo de respaldo: {e2}")
-                    self.llm_pipeline = None
-                    self.use_llm = False
+                print("- ✓ Modelo de respaldo cargado correctamente")
+            except Exception as e2:
+                print(f"- ❌ Error cargando modelo de respaldo: {e2}")
+                self.llm_pipeline = None
+                print("- ⚠️ Sistema funcionará solo con análisis de patrones")
+        
+        if use_llm:
+            print("- ✓ Modo LLM habilitado para mejora de explicaciones")
+        else:
+            print("- ℹ️ Modo LLM deshabilitado para explicaciones (solo usado como fallback sin patrones)")
     
     def analyze_content(self, 
                              tweet_id: str,
@@ -329,8 +335,10 @@ class EnhancedAnalyzer:
     
     def _get_llm_category(self, content: str, pattern_results: Dict) -> str:
         """Use LLM to categorize content when patterns are insufficient."""
-        if not self.use_llm or not self.llm_pipeline:
-            print("🔍 LLM not available, returning general")
+        # When no patterns are detected, we MUST use LLM to avoid defaulting to 'general'
+        # This overrides the use_llm flag because we need categorization
+        if not self.llm_pipeline:
+            print("🔍 LLM pipeline not available, returning general")
             return "general"
         
         try:
