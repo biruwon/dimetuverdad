@@ -66,32 +66,37 @@ class EnhancedAnalyzer:
     Enhanced analyzer with improved LLM integration for content analysis workflows.
     """
     
-    def __init__(self, use_llm: bool = True, model_priority: str = "balanced"):
+    def __init__(self, use_llm: bool = True, model_priority: str = "balanced", verbose: bool = False):
         self.far_right_analyzer = FarRightAnalyzer()
         self.topic_classifier = SpanishPoliticalTopicClassifier()
         self.claim_detector = SpanishClaimDetector()
         self.use_llm = use_llm
         self.model_priority = model_priority
+        self.verbose = verbose  # Control debug output
         self.llm_pipeline = None
         
-        print("🚀 Iniciando Enhanced Analyzer...")
-        print("Componentes cargados:")
-        print("- ✓ Analizador de patrones de extrema derecha")
-        print("- ✓ Clasificador de temas políticos") 
-        print("- ✓ Detector de afirmaciones verificables")
-        print("- ✓ Sistema de recuperación de evidencia")
-        print("- ✓ Modo de análisis de contenido activado")
+        if self.verbose:
+            print("🚀 Iniciando Enhanced Analyzer...")
+            print("Componentes cargados:")
+            print("- ✓ Analizador de patrones de extrema derecha")
+            print("- ✓ Clasificador de temas políticos") 
+            print("- ✓ Detector de afirmaciones verificables")
+            print("- ✓ Sistema de recuperación de evidencia")
+            print("- ✓ Modo de análisis de contenido activado")
         
         # Always try to load LLM pipeline as it's needed for fallback when no patterns are detected
         # The use_llm flag only controls whether we use it for enhancing pattern-based results
-        print("- ⏳ Cargando modelo LLM para análisis de contenido sin patrones...")
+        if self.verbose:
+            print("- ⏳ Cargando modelo LLM para análisis de contenido sin patrones...")
         try:
             # Use recommended model (now defaults to original gpt-oss-20b for best performance)
             self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
-            print("- ✓ Modelo LLM cargado correctamente")
+            if self.verbose:
+                print("- ✓ Modelo LLM cargado correctamente")
         except Exception as e:
-            print(f"- ⚠️ Error cargando LLM: {e}")
-            print("- 🔄 Intentando con modelo de respaldo...")
+            if self.verbose:
+                print(f"- ⚠️ Error cargando LLM: {e}")
+                print("- 🔄 Intentando con modelo de respaldo...")
             try:
                 # Fallback to flan-t5-small if Ollama is not available
                 self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
@@ -126,22 +131,25 @@ class EnhancedAnalyzer:
                 llm_explanation="Content too short for analysis"
             )
         
-        print(f"\n🔍 Content analysis: @{username}")
-        print(f"📝 Contenido: {content[:80]}...")
+        if self.verbose:
+            print(f"\n🔍 Content analysis: @{username}")
+            print(f"📝 Contenido: {content[:80]}...")
         
         # Pipeline Step 1: Pattern analysis (all analyzers run once)
         pattern_results = self._run_pattern_analysis(content)
 
         # Pipeline Step 2: Content categorization (using pattern results + LLM fallback)
-        print(f"🔍 Step 2: Categorization starting...")
+        if self.verbose:
+            print(f"🔍 Step 2: Categorization starting...")
         category, analysis_method = self._categorize_content(content, pattern_results)
-        print(f"🔍 Step 2: Category determined: {category}")
+        if self.verbose:
+            print(f"🔍 Step 2: Category determined: {category}")
 
         # Pipeline Step 3: Content insights extraction
         insights = self._extract_content_insights(content, pattern_results)
 
         # Pipeline Step 4: Smart LLM integration for uncertain cases  
-        llm_explanation = self._generate_explanation_with_smart_llm(content, category, pattern_results, insights)
+        llm_explanation = self._generate_explanation_with_smart_llm(content, category, pattern_results, insights, analysis_method)
         
         # Pipeline Step 5: Create final analysis structure
         analysis_data = self._build_analysis_data(pattern_results, insights)
@@ -300,15 +308,18 @@ class EnhancedAnalyzer:
                 return "far_right_bias", "pattern"
         
         # NEW: LLM fallback for complex content without clear patterns
-        print(f"🔍 Checking LLM fallback conditions...")
-        print(f"🔍 Detected categories: {detected_categories}")
-        print(f"🔍 Claims count: {len(claims)}")
+        if self.verbose:
+            print(f"🔍 Checking LLM fallback conditions...")
+            print(f"🔍 Detected categories: {detected_categories}")
+            print(f"🔍 Claims count: {len(claims)}")
         
         # Simple LLM fallback rule: Use LLM when pattern detection fails
         if self._should_use_llm_fallback(content, detected_categories, claims):
-            print("🧠 No patterns detected - using LLM for analysis")
+            if self.verbose:
+                print("🧠 No patterns detected - using LLM for analysis")
             llm_category = self._get_llm_category(content, pattern_results)
-            print(f"🔍 LLM category result: {llm_category}")
+            if self.verbose:
+                print(f"🔍 LLM category result: {llm_category}")
             if llm_category != "general":
                 return llm_category, "llm"
             return "general", "llm"
@@ -338,14 +349,14 @@ class EnhancedAnalyzer:
         # When no patterns are detected, we MUST use LLM to avoid defaulting to 'general'
         # This overrides the use_llm flag because we need categorization
         if not self.llm_pipeline:
-            print("🔍 LLM pipeline not available, returning general")
+            if self.verbose:
+                print("🔍 LLM pipeline not available, returning general")
             return "general"
-        
+
         try:
-            print(f"🔍 _get_llm_category called with content: {content[:50]}...")
-            print("🔍 Calling llm_pipeline.get_category...")
-            
-            # Use FAST category detection instead of full analysis
+            if self.verbose:
+                print(f"🔍 _get_llm_category called with content: {content[:50]}...")
+                print("🔍 Calling llm_pipeline.get_category...")            # Use FAST category detection instead of full analysis
             llm_category = self.llm_pipeline.get_category(content)
             
             # No hardcoded fallback patterns - let the LLM handle all edge cases
@@ -371,17 +382,23 @@ class EnhancedAnalyzer:
         }
     
     def _generate_explanation_with_smart_llm(self, content: str, category: str, 
-                                           pattern_results: Dict, insights: Dict) -> str:
+                                           pattern_results: Dict, insights: Dict, analysis_method: str) -> str:
         """
         Pipeline Step 4: Smart LLM integration - use LLM only when patterns are ambiguous.
         
         LLM Strategy:
+        - If analysis_method is "llm": ALWAYS use LLM for explanation (forced LLM usage)
         - Clear patterns detected: Use pattern-based explanation
         - Multiple conflicting patterns: Use LLM for disambiguation  
         - No clear patterns: Use LLM for analysis
         """
         # Build base explanation from patterns
         base_explanation = self._generate_pattern_based_explanation(category, pattern_results, insights)
+        
+        # CRITICAL FIX: If categorization used LLM, explanation must also use LLM
+        if analysis_method == "llm":
+            print("🧠 Analysis method is LLM - forcing LLM explanation generation")
+            return self._primary_llm_analysis(content, category, pattern_results, base_explanation)
         
         # Check if we have clear, unambiguous results
         detected_categories = pattern_results['far_right'].get('categories', [])
@@ -873,11 +890,11 @@ def save_content_analysis(analysis: ContentAnalysis):
             c.execute('''
             INSERT OR REPLACE INTO content_analyses 
             (tweet_id, tweet_url, username, tweet_content, category, 
-             llm_explanation, targeted_groups, analysis_json, analysis_timestamp) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             llm_explanation, analysis_method, targeted_groups, analysis_json, analysis_timestamp) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 analysis.tweet_id, analysis.tweet_url, analysis.username, analysis.tweet_content,
-                analysis.category, analysis.llm_explanation,
+                analysis.category, analysis.llm_explanation, analysis.analysis_method,
                 json.dumps(analysis.targeted_groups, ensure_ascii=False),
                 analysis.analysis_json, analysis.analysis_timestamp
             ))
