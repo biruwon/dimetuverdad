@@ -3,7 +3,9 @@ import sqlite3
 import os
 import json
 from datetime import datetime, timedelta
-from collections import Counter
+from collections import                'analysis_timestamp': row[10],
+                'categories_detected': categories_detected
+            })nter
 import re
 
 app = Flask(__name__)
@@ -123,7 +125,8 @@ def user_page(username):
         SELECT 
             t.tweet_url, t.content, t.media_links, t.hashtags, t.mentions,
             t.tweet_timestamp, t.post_type,
-            ca.category as analysis_category, ca.llm_explanation, ca.analysis_method, ca.analysis_timestamp
+            ca.category as analysis_category, ca.llm_explanation, ca.analysis_method, ca.analysis_timestamp,
+            ca.categories_detected
         FROM tweets t
         LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
         WHERE t.username = ?
@@ -133,9 +136,19 @@ def user_page(username):
         cursor.execute(query, (username,))
         results = cursor.fetchall()
         
-        # Process tweets with enhanced analysis
+        # Process tweets with enhanced multi-category analysis
         tweets = []
         for row in results:
+            # Parse multi-category data
+            categories_detected = []
+            try:
+                if row[11]:  # categories_detected
+                    categories_detected = json.loads(row[11])
+            except (json.JSONDecodeError, TypeError):
+                # Fallback to single category for backward compatibility
+                if row[7]:  # analysis_category
+                    categories_detected = [row[7]]
+            
             tweet = {
                 'tweet_url': row[0],
                 'content': row[1],
@@ -147,12 +160,14 @@ def user_page(username):
                 'analysis_category': row[7],
                 'llm_explanation': row[8],
                 'analysis_method': row[9],
-                'analysis_timestamp': row[10]
+                'analysis_timestamp': row[10],
+                'categories_detected': categories_detected
             }
             
             # Use the llm_explanation directly - it contains the best analysis available
             tweet['analysis_display'] = tweet['llm_explanation'] or "Sin análisis disponible"
             tweet['category'] = tweet['analysis_category'] or 'general'
+            tweet['has_multiple_categories'] = len(categories_detected) > 1
             
             tweets.append(tweet)
         

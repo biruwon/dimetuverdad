@@ -308,9 +308,9 @@ def create_context_from_analysis(analysis_results: Dict) -> PromptContext:
 if __name__ == "__main__":
     generator = EnhancedPromptGenerator()
     
-    # Test context
+    # Test context using consolidated categories
     test_context = PromptContext(
-        detected_categories=['hate_speech', 'xenophobia'],
+        detected_categories=['hate_speech', 'far_right_bias'],  # Updated: xenophobia is now part of hate_speech
         targeted_groups=['inmigrantes', 'musulmanes'],
         claims_count=1,
         political_topic='inmigración',

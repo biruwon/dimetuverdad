@@ -13,8 +13,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 
 # Import our enhanced components
-from far_right_patterns import FarRightAnalyzer
-from topic_classifier import SpanishPoliticalTopicClassifier, TopicCategory
+from unified_pattern_analyzer import UnifiedPatternAnalyzer
 from claim_detector import SpanishClaimDetector, VerifiabilityLevel
 # Evidence retrieval skipped as requested
 # from retrieval import retrieve_evidence_for_post, format_evidence
@@ -27,7 +26,7 @@ warnings.filterwarnings("ignore")
 DB_PATH = os.path.join(os.path.dirname(__file__), 'accounts.db')
 @dataclass
 class ContentAnalysis:
-    """Content analysis result structure for general workflows."""
+    """Content analysis result structure with multi-category support."""
     # Tweet metadata
     tweet_id: str
     tweet_url: str
@@ -35,8 +34,9 @@ class ContentAnalysis:
     tweet_content: str
     analysis_timestamp: str
     
-    # Content categories (standardized)
-    category: str  # disinformation, hate_speech, far_right_bias, conspiracy_theory, call_to_action, general
+    # Content categories (consolidated and multi-category support)
+    category: str  # Primary category (backward compatibility)
+    categories_detected: List[str] = None  # All detected categories
     
     # Analysis results
     llm_explanation: str = ""
@@ -58,6 +58,17 @@ class ContentAnalysis:
             self.pattern_matches = []
         if self.claims_detected is None:
             self.claims_detected = []
+        if self.categories_detected is None:
+            self.categories_detected = []
+    
+    @property
+    def has_multiple_categories(self) -> bool:
+        """Check if content was classified with multiple categories."""
+        return len(self.categories_detected) > 1
+    
+    def get_secondary_categories(self) -> List[str]:
+        """Get all categories except the primary one."""
+        return [cat for cat in self.categories_detected if cat != self.category]
 
 
 
@@ -67,8 +78,7 @@ class EnhancedAnalyzer:
     """
     
     def __init__(self, use_llm: bool = True, model_priority: str = "balanced", verbose: bool = False):
-        self.far_right_analyzer = FarRightAnalyzer()
-        self.topic_classifier = SpanishPoliticalTopicClassifier()
+        self.unified_analyzer = UnifiedPatternAnalyzer()
         self.claim_detector = SpanishClaimDetector()
         self.use_llm = use_llm
         self.model_priority = model_priority
@@ -78,8 +88,7 @@ class EnhancedAnalyzer:
         if self.verbose:
             print("🚀 Iniciando Enhanced Analyzer...")
             print("Componentes cargados:")
-            print("- ✓ Analizador de patrones de extrema derecha")
-            print("- ✓ Clasificador de temas políticos") 
+            print("- ✓ Analizador unificado de patrones (extrema derecha + temas políticos)")
             print("- ✓ Detector de afirmaciones verificables")
             print("- ✓ Sistema de recuperación de evidencia")
             print("- ✓ Modo de análisis de contenido activado")
@@ -151,8 +160,16 @@ class EnhancedAnalyzer:
         # Pipeline Step 4: Smart LLM integration for uncertain cases  
         llm_explanation = self._generate_explanation_with_smart_llm(content, category, pattern_results, insights, analysis_method)
         
-        # Pipeline Step 5: Create final analysis structure
+        # Pipeline Step 5: Create final analysis structure with multi-category support
         analysis_data = self._build_analysis_data(pattern_results, insights)
+        
+        # Extract multi-category information from pattern results
+        unified_result = pattern_results.get('unified', None)
+        if unified_result:
+            categories_detected = unified_result.categories
+        else:
+            # Fallback for LLM-only analysis
+            categories_detected = [category]
         
         return ContentAnalysis(
             tweet_id=tweet_id,
@@ -161,6 +178,7 @@ class EnhancedAnalyzer:
             tweet_content=content,
             analysis_timestamp=datetime.now().isoformat(),
             category=category,
+            categories_detected=categories_detected,
             llm_explanation=llm_explanation,
             analysis_method=analysis_method,
             targeted_groups=insights['targeted_groups'],
@@ -172,160 +190,99 @@ class EnhancedAnalyzer:
     
     def _run_pattern_analysis(self, content: str) -> Dict:
         """
-        Pipeline Step 1: Intelligent pattern analysis leveraging each component's strengths.
+        Pipeline Step 1: Unified pattern analysis using single comprehensive analyzer.
         
-        Component Strengths:
-        - FarRightAnalyzer: Hate speech, extremism patterns, threat detection
-        - TopicClassifier: Political context, discourse categorization
-        - ClaimDetector: Factual statements, verifiability assessment
+        New Approach:
+        - UnifiedPatternAnalyzer: Combines far-right detection + topic classification in one pass
+        - ClaimDetector: Factual statements and verifiability assessment
         """
         results = {}
         
-        # Phase 1: Quick political context assessment (fastest component)
-        topic_results = self.topic_classifier.classify_topic(content)
-        results['topics'] = topic_results
+        # Phase 1: Unified pattern analysis (combines previous topic + far-right analysis)
+        unified_result = self.unified_analyzer.analyze_content(content)
+        results['unified'] = unified_result
         
-        # Extract political context for guiding other analyzers
-        political_context = topic_results[0] if topic_results else None
-        is_political_content = political_context and political_context.category.value != "no_político"
-        
-        # Phase 2: Far-right pattern analysis (strength: extremism detection)
-        far_right_result = self.far_right_analyzer.analyze_text(content)
-        results['far_right'] = far_right_result
-        
-        # Phase 3: Claims analysis (strength: factual verification needs)
-        # Always run claims analysis to detect all types of disinformation, not just political
+        # Phase 2: Claims analysis (unchanged - still specialized)
         claims = self.claim_detector.detect_claims(content)
         results['claims'] = claims
         
-        # Phase 4: Create enriched pattern matches combining all components
-        pattern_matches = far_right_result.get('pattern_matches', [])
-        
-        # Enrich with topic context
-        if is_political_content:
+        # Phase 3: Create pattern matches for backward compatibility
+        pattern_matches = []
+        for match in unified_result.pattern_matches:
             pattern_matches.append({
-                'category': 'political_context',
-                'matched_text': political_context.category.value,
-                'description': f'Contexto político: {political_context.subcategory}',
-                'context': content[:50] + '...'
+                'category': match.category,
+                'matched_text': match.matched_text,
+                'description': match.description,
+                'context': match.context
             })
         
         results['pattern_matches'] = pattern_matches
+        
+        # Create legacy format for backward compatibility with categorization logic
+        results['far_right'] = {
+            'categories': unified_result.categories,
+            'pattern_matches': pattern_matches,
+            'has_patterns': len(pattern_matches) > 0
+        }
+        
+        # Legacy topics format (simplified since now integrated)
+        results['topics'] = [{
+            'category': unified_result.primary_category,
+            'subcategory': 'unified_analysis'
+        }] if unified_result.primary_category != "non_political" else []
         
         return results
     
     def _categorize_content(self, content: str, pattern_results: Dict) -> Tuple[str, str]:
         """
-        Pipeline Step 2: Determine content category using pattern results + LLM fallback.
+        Pipeline Step 2: Determine content category using unified pattern results + LLM fallback.
         Returns: (category, analysis_method)
+        
+        Simplified approach:
+        1. If patterns detected any category -> return first detected category (pattern)
+        2. If no patterns but claims with disinformation indicators -> disinformation (pattern) 
+        3. If no patterns detected -> use LLM fallback (llm)
+        4. If LLM returns general -> general (llm)
         """
         far_right_result = pattern_results['far_right']
         claims = pattern_results['claims']
         
         detected_categories = far_right_result.get('categories', [])
         
-        # Priority 1: Hate speech and violence incitement (highest severity)
-        # Map xenophobia and related patterns to hate_speech category
-        if any(cat in detected_categories for cat in ['hate_speech', 'violence_incitement', 'xenophobia']):
-            return "hate_speech", "pattern"
-        
-        # Priority 2: Health/Medical disinformation (using component detection)
-        detected_categories = far_right_result.get('categories', [])
-        
-        # Check for health disinformation using far-right analyzer's new category
-        if 'health_disinformation' in detected_categories:
-            return "disinformation", "pattern"
-        
-        # Specific check for vaccine/COVID disinformation that might be misclassified as conspiracy
-        content_lower = content.lower()
-        if any(term in content_lower for term in ['vacuna', 'covid', 'coronavirus']) and \
-           any(term in content_lower for term in ['microchip', 'control', '5g', 'chip', 'mentira']):
-            return "disinformation", "pattern"
-        
-        # Check for health claims with disinformation indicators using claim detector
-        health_claims = [c for c in claims if c.claim_type.value == 'médica']
-        if health_claims:
-            for claim in health_claims:
-                # Use the new disinformation assessment from claim detector
-                disinfo_assessment = self.claim_detector.assess_disinformation_indicators(
-                    claim.text, claim.claim_type
-                )
-                if disinfo_assessment['risk_level'] in ['high', 'medium']:
-                    return "disinformation", "pattern"
-        
-        # Priority 3: Conspiracy theories (component-based detection)
-        if 'conspiracy' in detected_categories:
-            return "conspiracy_theory", "pattern"
-        
-        # Priority 4: Handle overlapping far-right bias and call to action
-        if 'far_right_bias' in detected_categories and 'call_to_action' in detected_categories:
-            # Prioritize call_to_action if explicit mobilization language is present
-            mobilization_terms = ['movilizaos', 'organizaos', 'retirad', 'sacad', 'boicot', 'todos a', 'mañana', 'actuad ya', 'convocatoria', 'difunde']
-            if any(term in content.lower() for term in mobilization_terms):
-                return "call_to_action", "pattern"
-            else:
-                return "far_right_bias", "pattern"
-        
-        # Priority 5: Political bias (specific political bias patterns)
-        if 'far_right_bias' in detected_categories:
-            return "far_right_bias", "pattern"
-        
-        # Priority 6: Calls to action (specific call-to-action patterns)
-        if 'call_to_action' in detected_categories:
-            return "call_to_action", "pattern"
-        
-        # Priority 6: Anti-government with action language (legacy check)
-        if any(cat in detected_categories for cat in ['anti_government']) and self._has_action_language(content):
-            return "call_to_action", "pattern"
-        
-        # Priority 7: Map remaining patterns to appropriate categories
-        if detected_categories:
-            # Explicit mapping for specific pattern types
-            if any(cat in detected_categories for cat in ['xenophobia', 'nationalism', 'historical_revisionism']):
-                return "hate_speech", "pattern"
-            elif any(cat in detected_categories for cat in ['conspiracy', 'health_disinformation', 'anti_government']):
-                return "conspiracy_theory", "pattern" 
-            elif 'call_to_action' in detected_categories:
-                return "call_to_action", "pattern"
-            else:
-                # Default to far_right_bias for other detected patterns
-                return "far_right_bias", "pattern"
-        
-        # Priority 8: Non-political claims with disinformation indicators (component-based)
-        if claims:
-            for claim in claims:
-                # Use claim detector's disinformation assessment
-                disinfo_assessment = self.claim_detector.assess_disinformation_indicators(
-                    claim.text, claim.claim_type
-                )
-                if disinfo_assessment['risk_level'] in ['high', 'medium']:
-                    return "disinformation", "pattern"
-        
-        # Priority 9: Political claims without patterns
-        if claims:
-            political_claims = [c for c in claims if c.claim_type.value == 'política']
-            if political_claims:
-                return "far_right_bias", "pattern"
-        
-        # NEW: LLM fallback for complex content without clear patterns
         if self.verbose:
-            print(f"🔍 Checking LLM fallback conditions...")
             print(f"🔍 Detected categories: {detected_categories}")
             print(f"🔍 Claims count: {len(claims)}")
         
-        # Simple LLM fallback rule: Use LLM when pattern detection fails
+        # Step 1: If patterns found any category, return the primary one
+        if detected_categories:
+            primary_category = detected_categories[0]  # Use first detected category
+            if self.verbose:
+                print(f"🎯 Pattern detected: {primary_category}")
+            return primary_category, "pattern"
+        
+        # Step 2: Check for disinformation in claims (even without patterns)
+        if claims:
+            for claim in claims:
+                disinfo_assessment = self.claim_detector.assess_disinformation_indicators(
+                    claim.text, claim.claim_type
+                )
+                if disinfo_assessment['risk_level'] in ['high', 'medium']:
+                    if self.verbose:
+                        print("🎯 Disinformation detected via claims analysis")
+                    return "disinformation", "pattern"
+        
+        # Step 3: No patterns detected - use LLM fallback
         if self._should_use_llm_fallback(content, detected_categories, claims):
             if self.verbose:
                 print("🧠 No patterns detected - using LLM for analysis")
             llm_category = self._get_llm_category(content, pattern_results)
             if self.verbose:
                 print(f"🔍 LLM category result: {llm_category}")
-            if llm_category != "general":
-                return llm_category, "llm"
-            return "general", "llm"
+            return llm_category, "llm"
 
+        # Step 4: Default to general
         return "general", "pattern"
-    
+
     def _has_action_language(self, text: str) -> bool:
         """Quick check for action/mobilization language."""
         import re
@@ -510,8 +467,7 @@ class EnhancedAnalyzer:
             analysis_context = {
                 'category': category,
                 'detected_categories': pattern_results['far_right'].get('categories', []),
-                'claims_count': len(pattern_results['claims']),
-                'pattern_confidence': pattern_results['far_right'].get('confidence', 0.0)
+                'claims_count': len(pattern_results['claims'])
             }
             
             # Get LLM enhancement using the new method
@@ -542,7 +498,6 @@ class EnhancedAnalyzer:
                 'analysis_mode': 'primary',
                 'detected_categories': pattern_results['far_right'].get('categories', []),
                 'claims_count': len(pattern_results['claims']),
-                'pattern_confidence': pattern_results['far_right'].get('confidence', 0.0),
                 'has_patterns': len(pattern_results['far_right'].get('categories', [])) > 0
             }
             
@@ -643,18 +598,20 @@ class EnhancedAnalyzer:
         """
         Pipeline Step 5: Build the final analysis data structure.
         """
-        topic_results = pattern_results['topics']
+        unified_result = pattern_results.get('unified', {})
         claims = pattern_results['claims']
+        topics = pattern_results.get('topics', [])
         
         return {
             'category': None,  # Will be set by caller
             'pattern_matches': pattern_results['pattern_matches'],
             'topic_classification': {
-                'primary_topic': topic_results[0].category.value if topic_results else "no_político",
+                'primary_topic': topics[0]['category'] if topics else "no_político",
                 'all_topics': [{
-                    'category': t.category.value,
-                    'subcategory': t.subcategory
-                } for t in topic_results[:3]]
+                    'category': topics[0]['category'],
+                    'subcategory': topics[0]['subcategory']
+                }] if topics else [],
+                'political_context': unified_result.political_context if hasattr(unified_result, 'political_context') else []
             },
             'claims_detected': [{
                 'text': claim.text,
@@ -662,7 +619,8 @@ class EnhancedAnalyzer:
                 'urgency': claim.urgency.value,
                 'verifiability': claim.verifiability.value
             } for claim in claims],
-            'content_insights': insights
+            'content_insights': insights,
+            'unified_categories': unified_result.categories if hasattr(unified_result, 'categories') else []
         }
     
 
@@ -793,8 +751,7 @@ class EnhancedAnalyzer:
         else:
             print("⚠️ LLM Pipeline: Not available")
         
-        print(f"🔍 Far-right analyzer: {'✓' if self.far_right_analyzer else '❌'}")
-        print(f"📊 Topic classifier: {'✓' if self.topic_classifier else '❌'}")
+        print(f"🔍 Unified analyzer: {'✓' if self.unified_analyzer else '❌'}")
         print(f"🔎 Claim detector: {'✓' if self.claim_detector else '❌'}")
         
         # Check database
@@ -811,7 +768,7 @@ class EnhancedAnalyzer:
 
 # Database functions for content analysis workflow
 def migrate_database_schema():
-    """Migrate existing database to add missing columns."""
+    """Migrate existing database to add missing columns and handle unified analysis."""
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     c = conn.cursor()
     
@@ -827,13 +784,15 @@ def migrate_database_schema():
     c.execute("PRAGMA table_info(content_analyses)")
     columns = [col[1] for col in c.fetchall()]
     
-    # Add missing columns
+    # Add missing columns for unified analysis and multi-category support
     missing_columns = []
     expected_columns = {
+        'analysis_method': 'TEXT DEFAULT "pattern"',  # "pattern" or "llm"
         'evidence_sources': 'TEXT',
         'verification_status': 'TEXT DEFAULT "pending"',
         'targeted_groups': 'TEXT',
-        'misinformation_risk': 'TEXT'
+        'misinformation_risk': 'TEXT',
+        'categories_detected': 'TEXT'  # JSON array of all detected categories
     }
     
     for col_name, col_type in expected_columns.items():
@@ -856,7 +815,7 @@ def migrate_database_schema():
     conn.close()
 
 def init_content_analysis_table():
-    """Initialize content analyses table with proper schema."""
+    """Initialize content analyses table with proper schema including multi-category support."""
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     c = conn.cursor()
     c.execute('''
@@ -866,11 +825,18 @@ def init_content_analysis_table():
         tweet_url TEXT,
         username TEXT,
         tweet_content TEXT,
-        category TEXT,
+        category TEXT,                -- Primary category (backward compatibility)
+        subcategory TEXT,
         llm_explanation TEXT,
         targeted_groups TEXT,
+        calls_to_action BOOLEAN,
         analysis_json TEXT,
-        analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        evidence_sources TEXT,
+        verification_status TEXT DEFAULT "pending",
+        misinformation_risk TEXT,
+        analysis_method TEXT DEFAULT "pattern",
+        categories_detected TEXT     -- JSON array of all detected categories  
     )
     ''')
     conn.commit()
@@ -890,13 +856,15 @@ def save_content_analysis(analysis: ContentAnalysis):
             c.execute('''
             INSERT OR REPLACE INTO content_analyses 
             (tweet_id, tweet_url, username, tweet_content, category, 
-             llm_explanation, analysis_method, targeted_groups, analysis_json, analysis_timestamp) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             llm_explanation, analysis_method, targeted_groups, analysis_json, analysis_timestamp,
+             categories_detected) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 analysis.tweet_id, analysis.tweet_url, analysis.username, analysis.tweet_content,
                 analysis.category, analysis.llm_explanation, analysis.analysis_method,
                 json.dumps(analysis.targeted_groups, ensure_ascii=False),
-                analysis.analysis_json, analysis.analysis_timestamp
+                analysis.analysis_json, analysis.analysis_timestamp,
+                json.dumps(analysis.categories_detected, ensure_ascii=False)
             ))
             
             conn.commit()
