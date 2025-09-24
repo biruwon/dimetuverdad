@@ -66,6 +66,9 @@ class UnifiedPatternAnalyzer:
                     # Direct hate speech
                     r'\b(?:odio|rencor|resentimiento)\b.*\b(?:musulmanes|inmigrantes|gitanos)',
                     r'\b(?:discriminación|segregación|apartheid)\b',
+                    # Homophobic and sexist slurs
+                    r'\b(?:maricas?|maricones?)\b',
+                    r'\b(?:feminazis?)\b',
                     # MERGED: Xenophobic patterns (formerly separate category)
                     r'\bfuera\s+(?:los?\s+|las?\s+)?(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\b',
                     r'\b(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\s+fuera\s+(?:de\s+)?(?:España|Europa)\b',
@@ -109,6 +112,11 @@ class UnifiedPatternAnalyzer:
                     r'\b(?:bill\s+gates)\s+(?:y\s+las\s+)?(?:vacunas?|control)',
                     r'\b(?:covid|coronavirus)\s+(?:es\s+)?(?:mentira|falso|inexistente|inventado)',
                     r'\b(?:plandemia|dictadura\s+sanitaria|farmafia)\b',
+                    # Specific patterns found in failing tests
+                    r'\b(?:grafeno)\b.*\b(?:controlarnos|control)\b',
+                    r'\b(?:5g)\b.*\b(?:controlarnos|control)\b',
+                    r'\b(?:vacunas?).*\b(?:grafeno|5g)\b',
+                    r'\b(?:\d+\s+de\s+cada\s+\d+)\s+(?:casos?)\s+(?:de\s+covid|son\s+inventados?)\b',
                     # Additional patterns from former secondary
                     r'\b(?:propaganda|adoctrinamiento|lavado\s+de\s+cerebro)\b',
                     r'\b(?:censura|silenciamiento|ocultación)\b',
@@ -145,6 +153,10 @@ class UnifiedPatternAnalyzer:
                     # Political extremism
                     r'\b(?:traidores?|vendidos?)\s+(?:al\s+)?(?:globalismo|comunismo|soros)\b',
                     r'\b(?:han\s+)?convertido\s+(?:España|el\s+país)\s+en\s+(?:venezuela|cuba|la\s+urss)\b',
+                    # Anti-woke and cultural war patterns
+                    r'\b(?:agenda\s+woke|ideología\s+woke)\b.*\b(?:destruyendo|destruye)\b',
+                    r'\b(?:woke)\b.*\b(?:valores\s+cristianos|tradiciones|familia)\b',
+                    r'\b(?:feminazis?|progres?|rojos?)\b.*\b(?:destruir|acabar|eliminar)\b',
                     # Additional patterns from former secondary
                     r'\b(?:ideolog[íi]a|doctrina)\s+(?:racial|étnica)\b',
                     r'\b(?:movimiento|organización)\s+(?:nacionalist[ao]|patriót[iao])\b',
@@ -228,14 +240,15 @@ class UnifiedPatternAnalyzer:
             
             'political_general': {
                 'patterns': [
-                    # General political terms
-                    r'\b(?:política|político|gobierno|estado|democracia)\b',
+                    # Specific political institutional terms
                     r'\b(?:elecciones?|votar|sufragio|electoral)\b',
                     r'\b(?:partidos?\s+políticos?|coalición|alianza)\b',
                     r'\b(?:congreso|senado|parlamento|cortes)\b',
-                    # Additional patterns from former secondary
-                    r'\b(?:constitución|ley|legal|jurídico)\b',
-                    r'\b(?:ciudadan[íi]a|derechos?\s+civiles?)\b',
+                    r'\b(?:constitución|ley\s+electoral|jurídico\s+político)\b',
+                    # Only match "gobierno" when it's clearly institutional/formal
+                    r'\b(?:gobierno\s+(?:de\s+)?(?:españa|nacional|central|autonómico))\b',
+                    r'\b(?:política\s+(?:exterior|interior|económica|social))\b',
+                    # Remove overly broad single word patterns that catch everything
                 ],
                 'keywords': ['política', 'gobierno', 'democracia', 'elecciones'],
                 'description': 'General political content without extremist elements'
@@ -317,12 +330,15 @@ class UnifiedPatternAnalyzer:
     
     def _detect_political_context(self, text: str) -> List[str]:
         """Detect political entities and context."""
+        import re
         context = []
         text_lower = text.lower()
         
         for entity_type, entities in self.political_entities.items():
             for entity in entities:
-                if entity in text_lower:
+                # Use word boundaries to avoid false positives like "que" matching "ue"
+                pattern = r'\b' + re.escape(entity) + r'\b'
+                if re.search(pattern, text_lower):
                     context.append(f"{entity_type}:{entity}")
         
         return context[:10]  # Limit context items
