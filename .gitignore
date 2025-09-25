@@ -25,5 +25,4 @@ config.json
 *.env
 x_session.json
 model_comparison_*.json
-content_test_results.json
-comprehensive_test_results.json
+test_results.json

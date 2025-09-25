@@ -13,13 +13,11 @@ from transformers import (
     BitsAndBytesConfig
 )
 from openai import OpenAI
-from categories import Categories, get_category_display_name
+from categories import Categories
 
 from enhanced_prompts import (
     EnhancedPromptGenerator, 
     create_context_from_analysis, 
-    PromptContext,
-    build_category_list_prompt,
     build_spanish_classification_prompt,
     build_ollama_system_prompt,
     build_generation_system_prompt
@@ -941,7 +939,7 @@ class EnhancedLLMPipeline:
         """
         try:
             if not self.generation_model:
-                return "Análisis completado sin explicación detallada disponible."
+                return "ERROR: Generation model not available - explanation impossible"
             
             # Use provided analysis_context or create empty dict
             if analysis_context is None:
@@ -957,11 +955,17 @@ class EnhancedLLMPipeline:
             # Generate sophisticated explanation using category directly
             sophisticated_result = self._run_enhanced_analysis(text, category or Categories.GENERAL, prompt_context)
             
-            return sophisticated_result.get("llm_explanation", "Análisis completado sin explicación detallada.")
+            explanation = sophisticated_result.get("llm_explanation", "")
+            if explanation and len(explanation.strip()) > 5:
+                return explanation
+            else:
+                # Surface the actual issue instead of generic fallback
+                return f"ERROR: LLM analysis returned insufficient explanation - got: '{explanation}' (length: {len(explanation.strip()) if explanation else 0})"
             
         except Exception as e:
             print(f"⚠️ Explanation generation error: {e}")
-            return f"Error al generar explicación: {str(e)}"
+            # Keep the existing behavior but make it clearer this is an actual error
+            return f"ERROR: Exception in explanation generation - {type(e).__name__}: {str(e)}"
     
     def analyze_content(self, text: str, analysis_context: Dict = None, category: str = None) -> Dict:
         """

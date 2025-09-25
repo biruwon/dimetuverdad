@@ -19,20 +19,18 @@
 Optimized version with essential test cases only - much faster execution.
 """
 
-import sys
-import os
 import argparse
 import json
 import time
-from typing import List, Dict, Any
+from typing import Dict, Any
 from enhanced_analyzer import EnhancedAnalyzer
 from categories import Categories
 
-class StreamlinedTestSuite:
-    """Streamlined test suite focusing on core consolidated categories."""
+class TestSuite:
+    """Test suite focusing on core consolidated categories."""
     
     def __init__(self, save_to_db: bool = False):
-        print("🚀 Initializing Enhanced Analyzer (streamlined mode)...")
+        print("🚀 Initializing Enhanced Analyzer...")
         self.analyzer = EnhancedAnalyzer(model_priority="fast")
         self.save_to_db = save_to_db
     
@@ -188,7 +186,10 @@ class StreamlinedTestSuite:
                     'expected': expected,
                     'actual': actual,
                     'success': is_success,
-                    'description': test_case['description']
+                    'description': test_case['description'],
+                    'content': test_case['content'],
+                    'llm_explanation': analysis.llm_explanation,
+                    'analysis_method': analysis.analysis_method
                 })
                 print()
                 
@@ -248,20 +249,31 @@ class StreamlinedTestSuite:
                     'test_id': test_id,
                     'expected': expected,
                     'actual': actual,
-                    'success': is_success
+                    'success': is_success,
+                    'description': test_case['description'],
+                    'content': test_case['content'],
+                    'llm_explanation': analysis.llm_explanation,
+                    'analysis_method': analysis.analysis_method
                 })
                 
             except Exception as e:
                 print("💥")
                 print(f"   💥 ERROR: {test_id} - {str(e)}")
                 failed += 1
+                results.append({
+                    'test_id': test_id,
+                    'error': str(e),
+                    'success': False,
+                    'description': test_case['description'],
+                    'content': test_case['content']
+                })
         
         print(f"📊 LLM Tests: {passed}/{passed+failed} passed ({passed/(passed+failed)*100:.1f}%)")
         return {'passed': passed, 'failed': failed, 'results': results}
     
     def run_comprehensive_suite(self, quick_mode: bool = False) -> Dict[str, Any]:
-        """Run the complete streamlined test suite."""
-        print(f"🚀 STREAMLINED TEST SUITE")
+        """Run the complete test suite."""
+        print(f"🚀  TEST SUITE")
         if quick_mode:
             print("⚡ Quick mode: Running 2 tests only...")
         print("=" * 70)
@@ -283,7 +295,7 @@ class StreamlinedTestSuite:
         elapsed_time = time.time() - start_time
         
         # Print summary
-        print("📊 STREAMLINED TEST SUMMARY")
+        print("📊 TEST SUMMARY")
         print("=" * 50)
         print(f"✅ Pattern Tests: {pattern_results['passed']}/{pattern_results['passed'] + pattern_results['failed']} passed")
         print(f"🧠 LLM Tests: {llm_results['passed']}/{llm_results['passed'] + llm_results['failed']} passed")
@@ -305,7 +317,7 @@ class StreamlinedTestSuite:
         }
 
 def main():
-    parser = argparse.ArgumentParser(description='Streamlined Test Suite for Enhanced Analyzer')
+    parser = argparse.ArgumentParser(description='Test Suite for Enhanced Analyzer')
     parser.add_argument('--quick', action='store_true', help='Run quick mode (2 tests per category)')
     parser.add_argument('--patterns-only', action='store_true', help='Run only pattern tests')
     parser.add_argument('--llm-only', action='store_true', help='Run only LLM tests')
@@ -313,7 +325,7 @@ def main():
     
     args = parser.parse_args()
     
-    test_suite = StreamlinedTestSuite()
+    test_suite = TestSuite()
     
     if args.patterns_only:
         results = test_suite.run_pattern_tests(quick_mode=args.quick)
@@ -323,9 +335,9 @@ def main():
         results = test_suite.run_comprehensive_suite(quick_mode=args.quick)
     
     if args.save_results:
-        with open('streamlined_test_results.json', 'w', encoding='utf-8') as f:
+        with open('test_results.json', 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
-        print(f"💾 Results saved to streamlined_test_results.json")
+        print(f"💾 Results saved to test_results.json")
 
 if __name__ == "__main__":
     main()

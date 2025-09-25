@@ -9,7 +9,7 @@ import re
 import sqlite3
 import time
 import warnings
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -244,212 +244,56 @@ class EnhancedAnalyzer:
     def _generate_explanation_with_smart_llm(self, content: str, category: str, 
                                            pattern_results: Dict, analysis_method: str) -> str:
         """
-        Pipeline Step 3: Smart LLM integration - use LLM only when patterns are ambiguous.
+        Pipeline Step 3: Always use LLM for explanation generation.
         
-        LLM Strategy:
-        - If analysis_method is "llm": ALWAYS use LLM for explanation (forced LLM usage)
-        - Clear patterns detected: Use pattern-based explanation
-        - Multiple conflicting patterns: Use LLM for disambiguation  
-        - No clear patterns: Use LLM for analysis
+        Simplified Strategy:
+        - Patterns are only used for faster category detection
+        - LLM is always used for explanation generation regardless of analysis_method
+        - This ensures consistent, high-quality explanations across all content
         """
-        # Extract pattern result from dictionary
-        pattern_result = pattern_results['pattern_result']
-        
-        # Build base explanation from patterns
-        base_explanation = self._generate_pattern_based_explanation(category, pattern_result)
-        
-        # CRITICAL FIX: If categorization used LLM, explanation must also use LLM
-        if analysis_method == "llm":
-            print("🧠 Analysis method is LLM - forcing LLM explanation generation")
-            return self._primary_llm_analysis(content, category, pattern_results, base_explanation)
-        
-        # Check if we have clear, unambiguous results
-        detected_categories = pattern_result.categories
-        has_patterns = len(detected_categories) > 0
-        has_multiple_patterns = len(detected_categories) > 1
-        
-        # Decision: When to use LLM (without any scoring)
-        if not has_patterns and category == Categories.GENERAL:
-            # Check content length and complexity to decide if LLM analysis is needed
-            content_length = len(content.split())
-            has_complex_language = any(word in content.lower() for word in [
-                'características', 'correlaciones', 'interpretaciones', 'fundamentalmente',
-                'transformando', 'instituciones', 'problemáticas', 'específicas',
-                'tendencias', 'beneficiar', 'actores', 'internacionales'
-            ])
-            
-            # Only skip LLM for very simple, clearly innocent content
-            if content_length < 15 and not has_complex_language:
-                print("✅ Clear simple content - using pattern-based analysis")
-                return base_explanation
-            else:
-                # Complex content without patterns might need LLM analysis
-                print("🧠 Complex content without patterns - using LLM for analysis")
-                return self._primary_llm_analysis(content, category, pattern_results, base_explanation)
-        
-        elif has_patterns and not has_multiple_patterns:
-            # Single clear pattern: Pattern analysis is sufficient
-            print("🎯 Clear single pattern - using pattern-based analysis")
-            return base_explanation
-        
-        elif has_multiple_patterns:
-            # Multiple patterns: Use LLM for enhancement
-            print("🤖 Multiple patterns detected - using LLM for enhancement")
-            return self._enhance_explanation_with_llm(content, category, pattern_result, base_explanation)
-        
-        else:
-            # Ambiguous cases: Use LLM for primary analysis
-            print("🧠 Ambiguous content - using LLM for analysis")
-            return self._primary_llm_analysis(content, category, pattern_results, base_explanation)
+        # Always use LLM for explanations - patterns are only for category detection
+        print("🧠 Using LLM for explanation generation (patterns used only for category detection)")
+        return self._generate_llm_explanation(content, category, pattern_results)
     
-    def _generate_pattern_based_explanation(self, category: str, pattern_results: AnalysisResult) -> str:
-        """Generate natural language explanation based purely on pattern analysis."""
-        detected_categories = pattern_results.categories if pattern_results else []
-        
-        # Generate natural language explanations based on category
-        if category == Categories.HATE_SPEECH:
-            base_explanation = "Este contenido presenta características de discurso de odio, utilizando lenguaje discriminatorio y deshumanizante"
-        
-        elif category == Categories.DISINFORMATION:
-            base_explanation = "Este contenido contiene afirmaciones que presentan características de desinformación"
-            if 'health_disinformation' in detected_categories:
-                base_explanation = "Este contenido presenta afirmaciones médicas sin respaldo científico verificable"
-        
-        elif category == Categories.CONSPIRACY_THEORY:
-            base_explanation = "Este contenido promueve teorías conspiratorias sin base empírica"
-            if 'conspiracy' in detected_categories:
-                base_explanation += ", utilizando narrativas que fomentan desconfianza en instituciones oficiales"
-        
-        elif category == Categories.FAR_RIGHT_BIAS:
-            base_explanation = "Este contenido muestra marcos interpretativos de extrema derecha"
-            if detected_categories:
-                base_explanation += " con elementos de retórica extremista"
-        
-        elif category == Categories.CALL_TO_ACTION:
-            base_explanation = "Este contenido incluye llamadas a la acción o movilización."
-        
-        else:
-            return "Contenido analizado sin patrones específicos detectados."
-        
-        # Add contextual information without redundancy
-        context_parts = []
-        if len(detected_categories) > 1:
-            context_parts.append("presenta múltiples indicadores problemáticos")
-        
-        if context_parts:
-            base_explanation += f" y {', '.join(context_parts)}"
-        
-        return base_explanation + "."
-    
-    def _enhance_explanation_with_llm(self, content: str, category: str, 
-                                    pattern_results: AnalysisResult, base_explanation: str) -> str:
-        """Use LLM to enhance and validate pattern-based analysis."""
-        if not self.use_llm or not self.llm_pipeline:
-            return base_explanation
+    def _generate_llm_explanation(self, content: str, category: str, pattern_results: Dict) -> str:
+        """Generate explanation using LLM - surface actual errors instead of hiding them."""
+        if not self.llm_pipeline:
+            # Surface the actual issue instead of hiding it
+            return "ERROR: LLM pipeline not available - explanation generation impossible"
         
         try:
-            # Check if llm_pipeline has the required method
-            if not hasattr(self.llm_pipeline, 'get_explanation'):
-                print("⚠️ LLM pipeline missing get_explanation method")
-                return base_explanation
-            
-            # Create analysis context
-            analysis_context = {
-                'category': category,
-                'detected_categories': pattern_results.categories if pattern_results else []
-            }
-            
-            # Get LLM enhancement using the category directly (no AnalysisType mapping)
-            llm_enhancement = self.llm_pipeline.get_explanation(content, category, analysis_context)
-            
-            if llm_enhancement and len(llm_enhancement.strip()) > 10:
-                # Combine natural language explanations
-                return f"{base_explanation} {llm_enhancement}"
-            else:
-                return base_explanation
-                
-        except Exception as e:
-            print(f"⚠️ Error en mejora LLM: {e}")
-            return base_explanation
-    
-    def _primary_llm_analysis(self, content: str, category: str, 
-                            pattern_results: Dict, base_explanation: str) -> str:
-        """Use LLM as primary analysis method for ambiguous cases."""
-        if not self.use_llm or not self.llm_pipeline:
-            # Don't reveal LLM limitations to user - just return base explanation
-            return base_explanation
-        
-        try:
-            # Extract pattern result
+            # Extract pattern result for context
             pattern_result = pattern_results.get('pattern_result', None)
             
             # Create analysis context with comprehensive information
             analysis_context = {
                 'category': category,
-                'analysis_mode': 'primary',
+                'analysis_mode': 'explanation',
                 'detected_categories': pattern_result.categories if pattern_result else [],
                 'has_patterns': len(pattern_result.categories) > 0 if pattern_result else False
             }
             
-            # Get LLM explanation using the category directly (no AnalysisType mapping)
+            if self.verbose:
+                print(f"🔍 Calling get_explanation with context: {analysis_context}")
+            
+            # Get LLM explanation using the category directly
             llm_explanation = self.llm_pipeline.get_explanation(content, category, analysis_context)
             
             if llm_explanation and len(llm_explanation.strip()) > 10:
                 return llm_explanation
             else:
-                # LLM failed to provide explanation - generate a comprehensive pattern-based one
-                print("⚠️ LLM explanation was empty, using enhanced pattern analysis")
-                return self._generate_enhanced_pattern_explanation(content, category, pattern_results)
+                # Surface the actual issue: LLM returned empty/insufficient response
+                empty_response_info = f"LLM returned: '{llm_explanation}'" if llm_explanation else "LLM returned None/empty"
+                return f"ERROR: LLM explanation generation failed - {empty_response_info} (length: {len(llm_explanation.strip()) if llm_explanation else 0})"
                 
         except Exception as e:
-            print(f"❌ Error en análisis primario LLM: {e}")
-            # Don't reveal LLM errors to user - return enhanced pattern explanation
-            return self._generate_enhanced_pattern_explanation(content, category, pattern_results)
-    
-    def _generate_enhanced_pattern_explanation(self, content: str, category: str, pattern_results: Dict) -> str:
-        """Generate a comprehensive explanation when LLM is not available or fails."""
-        pattern_result = pattern_results.get('pattern_result', None)
-        detected_categories = pattern_result.categories if pattern_result else []
-        
-        # Generate detailed explanations based on what was actually detected
-        if category == Categories.FAR_RIGHT_BIAS:
-            explanation_parts = []
-            
-            # Analyze the specific type of bias detected
-            content_lower = content.lower()
-            
-            if any('sustitución' in content_lower for word in ['sustitución', 'sustitu']):
-                explanation_parts.append("presenta narrativas sobre sustitución poblacional")
-            
-            if any(word in content_lower for word in ['inmigr', 'extranjero', 'moro']):
-                explanation_parts.append("contiene referencias a inmigración con posible sesgo")
-            
-            if any(word in content_lower for word in ['muslim', 'islám', 'tradiciones culturales']):
-                explanation_parts.append("incluye generalizaciones sobre grupos culturales o religiosos")
-            
-            if any(word in content_lower for word in ['efecto llamada', 'política', 'brussels', 'comisión europea']):
-                explanation_parts.append("enmarca políticas oficiales desde perspectivas potencialmente sesgadas")
-            
-            if explanation_parts:
-                base = "Este contenido muestra características de sesgo político de extrema derecha ya que "
-                return base + ", ".join(explanation_parts) + ". El análisis detecta marcos interpretativos que pueden reforzar narrativas problemáticas sobre inmigración y diversidad cultural."
-            else:
-                return "Este contenido presenta marcos interpretativos característicos del sesgo de extrema derecha, utilizando lenguaje que puede reforzar narrativas discriminatorias."
-        
-        elif category == Categories.CONSPIRACY_THEORY:
-            return "Este contenido promueve teorías conspiratorias presentando afirmaciones sin base empírica verificable y fomentando desconfianza en instituciones oficiales."
-        
-        elif category == Categories.HATE_SPEECH:
-            return "Este contenido presenta características de discurso de odio, utilizando lenguaje discriminatorio que puede fomentar hostilidad hacia grupos específicos."
-        
-        elif category == Categories.DISINFORMATION:
-            return "Este contenido presenta características de desinformación, incluyendo afirmaciones que requieren verificación y que pueden difundir información inexacta."
-        
-        elif category == Categories.CALL_TO_ACTION:
-            return "Este contenido incluye llamadas explícitas a la acción o movilización que pueden promover activismo de extrema derecha."
-        
-        else:
-            return "Contenido categorizado mediante análisis de patrones sin características específicas de extremismo detectadas."
+            # Surface the actual error with full traceback information
+            if self.verbose:
+                print(f"❌ Error en explicación LLM: {e}")
+                import traceback
+                traceback.print_exc()
+            # Return the actual error instead of hiding it
+            return f"ERROR: LLM explanation generation exception - {type(e).__name__}: {str(e)}"
     
     def _build_analysis_data(self, pattern_results: Dict) -> Dict:
         """

@@ -3,9 +3,9 @@ Enhanced prompt generation system for Spanish far-right content analysis.
 Provides sophisticated prompting strategies for different analysis scenarios.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 from dataclasses import dataclass
-from categories import Categories, CATEGORY_INFO, get_category_info, get_category_display_name, CLASSIFICATION_PROMPT_MAPPINGS
+from categories import Categories, CATEGORY_INFO, get_category_info, CLASSIFICATION_PROMPT_MAPPINGS
 
 # ============================================================================
 # DYNAMIC PROMPT BUILDERS
@@ -65,7 +65,9 @@ Usa 'general' SOLO para contenido verdaderamente neutral (clima, comida, entrete
 def build_generation_system_prompt() -> str:
     """Build generation model system prompt with dynamic categories."""
     categories = build_category_list_prompt()
-    return f"Classify text as: {categories}. IMPORTANT: hate_speech includes subtle generalizations like 'esa gente no cambia' or stereotypes about groups, not just direct insults."@dataclass
+    return f"Classify text as: {categories}. IMPORTANT: hate_speech includes subtle generalizations like 'esa gente no cambia' or stereotypes about groups, not just direct insults."
+
+@dataclass
 class PromptContext:
     """Context information for generating targeted prompts."""
     detected_categories: List[str]
@@ -244,10 +246,29 @@ def create_context_from_analysis(analysis_results: Dict) -> PromptContext:
     Create prompt context from analysis results.
     Used by LLM pipeline for backwards compatibility.
     """
+    # Handle different context formats
+    detected_categories = []
+    
+    # Check for detected_categories from enhanced analyzer
+    if 'detected_categories' in analysis_results:
+        detected_categories = analysis_results['detected_categories']
+    # Check for categories from pattern analysis
+    elif 'categories' in analysis_results:
+        detected_categories = analysis_results['categories']
+    # Fall back to single category
+    elif 'detected_category' in analysis_results:
+        detected_categories = [analysis_results['detected_category']]
+    
+    # Get political topic
+    political_topic = analysis_results.get('category', analysis_results.get('detected_category', 'general'))
+    
+    # Get uncertainty areas
+    uncertainty_areas = analysis_results.get('uncertainty_areas', [])
+    
     return PromptContext(
-        detected_categories=analysis_results.get('categories', []),
-        political_topic=analysis_results.get('category', 'general'),
-        uncertainty_areas=analysis_results.get('uncertainty_areas', [])
+        detected_categories=detected_categories,
+        political_topic=political_topic,
+        uncertainty_areas=uncertainty_areas
     )
 
 # Test function

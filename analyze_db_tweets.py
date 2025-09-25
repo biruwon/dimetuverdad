@@ -4,12 +4,10 @@ Analyze Database Tweets - Enhanced Analyzer Pipeline
 Analyzes all tweets from the database using the enhanced analyzer system.
 """
 
-import sys
 import sqlite3
 import argparse
 from enhanced_analyzer import EnhancedAnalyzer, save_content_analysis, ContentAnalysis, migrate_database_schema
 from categories import Categories
-import json
 from datetime import datetime
 
 DB_PATH = "accounts.db"
