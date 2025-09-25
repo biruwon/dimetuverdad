@@ -15,57 +15,120 @@ def build_category_list_prompt() -> str:
     """Build dynamic category list for LLM prompts."""
     return ", ".join(Categories.get_all_categories())
 
-def build_detailed_category_descriptions() -> str:
-    """Build detailed category descriptions for system prompts."""
-    descriptions = []
-    for category in Categories.get_all_categories():
-        info = get_category_info(category)
-        if info:
-            descriptions.append(f"{category} - {info.description[:50]}...")
-        else:
-            descriptions.append(f"{category} - Categoría de análisis")
-    return "\n".join(descriptions)
-
 def build_spanish_classification_prompt(text: str) -> str:
-    """Build Spanish classification prompt with dynamic categories."""
+    """Build enhanced Spanish classification prompt with improved category descriptions."""
     categories = Categories.get_all_categories()
-    category_lines = []
     
-    # Add category descriptions dynamically
+    # Enhanced category descriptions with specific examples
     category_descriptions = {
-        Categories.HATE_SPEECH: "Insultos, discriminación",
-        Categories.DISINFORMATION: "Información falsa médica/científica",
-        Categories.CONSPIRACY_THEORY: "Teorías conspirativas", 
-        Categories.FAR_RIGHT_BIAS: "Retórica extrema derecha",
-        Categories.CALL_TO_ACTION: "Llamadas a acción/movilización",
-        Categories.GENERAL: "Contenido neutral"
+        Categories.HATE_SPEECH: "Insultos, generalizaciones despectivas, deshumanización de grupos ('moros', 'menas', 'esa gente')",
+        Categories.DISINFORMATION: "Información médica/científica falsa (vacunas-5G, COVID inventado, curas milagrosas)",
+        Categories.CONSPIRACY_THEORY: "Teorías conspirativas (Soros, élites secretas, planes ocultos, 'la agenda')", 
+        Categories.FAR_RIGHT_BIAS: "Retórica extrema derecha ('rojos', anti-woke, nacionalismo excluyente)",
+        Categories.CALL_TO_ACTION: "Llamadas a movilización con lugar/tiempo específicos ('Todos a Cibeles')",
+        Categories.GENERAL: "Contenido neutro sin elementos problemáticos"
     }
     
+    category_lines = []
     for category in categories:
         desc = category_descriptions.get(category, "Categoría de análisis")
-        category_lines.append(f"{category} - {desc}")
+        category_lines.append(f"• {category}: {desc}")
     
-    return f"""Clasifica este texto en una categoría:
+    return f"""ANÁLISIS DE CONTENIDO PROBLEMÁTICO
 
+TEXTO A CLASIFICAR: "{text}"
+
+CATEGORÍAS DISPONIBLES:
 {chr(10).join(category_lines)}
 
-Texto: "{text}"
+INSTRUCCIONES:
+1. Lee el texto completo cuidadosamente
+2. Identifica elementos problemáticos sutiles o explícitos  
+3. Si hay múltiples categorías aplicables, elige la MÁS ESPECÍFICA
+4. Usa 'general' SOLO si el contenido es completamente neutral
+5. Prefiere categorías específicas sobre 'general'
 
-Categoría:"""
+RESPUESTA (una sola palabra):"""
 
 def build_ollama_system_prompt() -> str:
-    """Build Ollama system prompt with dynamic categories."""
+    """Build enhanced Ollama system prompt with dynamic categories and improved detection guidelines."""
     categories = build_category_list_prompt()
-    return f"""Eres un clasificador de contenido especializado en detectar contenido problemático sutil. Responde únicamente con: {categories}. 
+    return f"""Eres un clasificador experto en contenido problemático en español. Analiza el texto con precisión y responde ÚNICAMENTE con una de estas categorías: {categories}
 
-PARA HATE_SPEECH: Detecta generalizaciones despectivas ('esa gente', 'ya sabéis cómo son'), estereotipos negativos, y comentarios que deshumanizan grupos aunque no usen insultos directos.
+GUÍAS DE DETECCIÓN MEJORADAS:
 
-Usa 'general' SOLO para contenido verdaderamente neutral (clima, comida, entretenimiento). Si detectas cualquier insinuación problemática o generalización negativa sobre grupos de personas, elige la categoría específica más apropiada."""
+🚫 HATE_SPEECH - Identifica:
+- Insultos directos o indirectos hacia grupos (étnicos, religiosos, nacionales)
+- Generalizaciones despectivas ("esa gente", "ya sabéis cómo son", "todos los [grupo] son...")
+- Deshumanización sutil (referencias a animales, objetos, amenazas)
+- Lenguaje que incita hostilidad o violencia hacia grupos específicos
+- Términos despectivos aunque no sean insultos obvios
+
+❌ DISINFORMATION - Identifica:
+- Afirmaciones médicas/científicas falsas sin evidencia
+- Estadísticas inventadas o manipuladas
+- Teorías sobre vacunas, 5G, salud sin base científica
+- Claims sobre efectividad de tratamientos no probados
+
+🔍 CONSPIRACY_THEORY - Identifica:
+- Teorías sobre control secreto por élites globales
+- Planes ocultos de reemplazo poblacional o cultural
+- Afirmaciones sobre manipulación masiva por organizaciones
+- Referencias a "la agenda" sin especificar fuente verificable
+
+⚡ FAR_RIGHT_BIAS - Identifica:
+- Retórica extrema contra "rojos", "comunistas", izquierda
+- Nacionalismo extremo excluyente
+- Marcos interpretativos de "nosotros vs ellos" radicalizados
+- Anti-inmigración con lenguaje alarmista ("invasión")
+
+📢 CALL_TO_ACTION - Identifica:
+- Llamadas explícitas a manifestaciones, protestas, movilización
+- Instrucciones específicas de acción ("todos a [lugar]", "hay que salir")
+- Urgencia para actuar colectivamente
+
+✅ GENERAL - SOLO para contenido neutro:
+- Conversación cotidiana, clima, comida, entretenimiento
+- Opiniones políticas moderadas sin elementos extremistas
+- Información factual sin sesgo problemático
+
+IMPORTANTE: Si detectas CUALQUIER elemento problemático, elige la categoría específica más apropiada. Sé menos conservador - prefiere categorías específicas sobre 'general'."""
 
 def build_generation_system_prompt() -> str:
-    """Build generation model system prompt with dynamic categories."""
+    """Build enhanced generation model system prompt with improved detection guidelines."""
     categories = build_category_list_prompt()
-    return f"Classify text as: {categories}. IMPORTANT: hate_speech includes subtle generalizations like 'esa gente no cambia' or stereotypes about groups, not just direct insults."
+    return f"""You are an expert content classifier specializing in detecting problematic Spanish content. Classify text as one of: {categories}
+
+ENHANCED DETECTION RULES:
+
+HATE_SPEECH: Detect subtle dehumanization and generalizations
+- Direct/indirect insults toward ethnic, religious, or national groups
+- Derogatory generalizations ('esa gente', 'ya sabéis cómo son', 'todos los X son...')
+- Subtle dehumanization (animal references, object comparisons)
+- Language inciting hostility toward specific groups
+
+DISINFORMATION: Medical/scientific false claims
+- Unproven medical treatments or conspiracy theories about vaccines/5G
+- Fabricated statistics or manipulated data
+- False health information without scientific backing
+
+CONSPIRACY_THEORY: Unfounded theories about secret control
+- Claims about elite global manipulation or population replacement
+- References to hidden agendas without verifiable sources
+- Theories about coordinated secret plans
+
+FAR_RIGHT_BIAS: Extreme political rhetoric
+- Radical anti-left language ('rojos', 'comunistas')
+- Exclusionary nationalism with alarmist framing ('invasión')
+- Us-vs-them radicalized frameworks
+
+CALL_TO_ACTION: Explicit mobilization calls
+- Specific instructions for collective action with time/location
+- Direct calls for protests, demonstrations, or gatherings
+
+GENERAL: Truly neutral content only (weather, food, entertainment, moderate opinions)
+
+CRITICAL: If ANY problematic element is detected, choose the most specific category rather than 'general'. Be less conservative in classification."""
 
 @dataclass
 class PromptContext:
@@ -73,13 +136,6 @@ class PromptContext:
     detected_categories: List[str]
     political_topic: str
     uncertainty_areas: List[str]
-
-@dataclass 
-class UncertaintyContext:
-    """Context information for uncertain analysis scenarios."""
-    uncertainty_areas: List[str]
-    detected_categories: List[str]
-    total_patterns: int
 
 class EnhancedPromptGenerator:
     """
@@ -185,61 +241,127 @@ class EnhancedPromptGenerator:
     
     def generate_classification_prompt(self, text: str, model_type: str = "ollama") -> str:
         """
-        Generate targeted classification prompt using centralized category mappings.
+        Generate enhanced step-by-step classification prompt for improved accuracy.
         """
         prompt_parts = [
-            f'TEXTO: "{text}"',
+            f'TEXTO A ANALIZAR: "{text}"',
             "",
-            "ANÁLISIS PASO A PASO:",
-            ""
+            "PROCESO DE ANÁLISIS PASO A PASO:",
+            "",
+            "1️⃣ HATE_SPEECH - ¿Contiene el texto...?",
+            "   • Insultos directos/indirectos hacia grupos étnicos, religiosos, nacionales",
+            "   • Generalizaciones despectivas ('esa gente', 'ya sabéis cómo son', 'todos los X')",
+            "   • Deshumanización sutil (comparaciones con animales/objetos)",
+            "   • Lenguaje que incita hostilidad hacia grupos específicos",
+            "",
+            "2️⃣ DISINFORMATION - ¿Presenta...?",
+            "   • Afirmaciones médicas/científicas sin evidencia (vacunas-5G, COVID falso)",
+            "   • Estadísticas inventadas o datos manipulados",
+            "   • Claims sobre tratamientos no probados científicamente",
+            "",
+            "3️⃣ CONSPIRACY_THEORY - ¿Menciona...?",
+            "   • Teorías sobre control secreto por élites (Soros, Davos, 'la agenda')",
+            "   • Planes ocultos de reemplazo poblacional o cultural",
+            "   • Organizaciones manipulando eventos masivamente sin fuentes",
+            "",
+            "4️⃣ FAR_RIGHT_BIAS - ¿Muestra...?",
+            "   • Retórica extrema contra izquierda ('rojos', 'comunistas')",
+            "   • Nacionalismo excluyente con lenguaje alarmista ('invasión')",
+            "   • Marcos 'nosotros vs ellos' radicalizados",
+            "   • Anti-inmigración con deshumanización",
+            "",
+            "5️⃣ CALL_TO_ACTION - ¿Incluye...?",
+            "   • Llamadas explícitas a manifestaciones/protestas con lugar/hora",
+            "   • Instrucciones específicas de acción colectiva ('todos a X')",
+            "   • Urgencia para movilización inmediata",
+            "",
+            "6️⃣ GENERAL - Solo si:",
+            "   • Contenido completamente neutral (clima, comida, entretenimiento)",
+            "   • Opiniones políticas moderadas sin extremismo",
+            "   • Información factual sin sesgo problemático",
+            "",
+            "DECISIÓN: Evalúa en orden 1→6. Si encuentras elementos de una categoría, esa es la respuesta.",
+            "Si hay múltiples categorías aplicables, elige la MÁS ESPECÍFICA y PROBLEMÁTICA.",
+            "",
+            "RESPUESTA FINAL (una sola palabra):"
         ]
-        
-        # Add classification rules from centralized mappings
-        for step_title, rules in CLASSIFICATION_PROMPT_MAPPINGS.items():
-            prompt_parts.append(step_title)
-            prompt_parts.extend(rules)
-            prompt_parts.append("")
-        
-        prompt_parts.extend([
-            "IMPORTANTE: Sé menos conservador. Si hay matices políticos, elige la categoría específica.",
-            "",
-            "RESPUESTA (evalúa en este orden):"
-        ])
         
         return "\n".join(prompt_parts)
     
-    def create_uncertainty_context(self, pattern_results: Dict) -> UncertaintyContext:
+    def generate_explanation_prompt(self, text: str, category: str, model_type: str = "ollama") -> str:
         """
-        Create context highlighting areas where pattern analysis shows uncertainty.
-        This guides LLM to focus on ambiguous areas.
+        Generate detailed explanation prompt with category-specific focus.
         """
-        uncertainty_areas = []
+        category_context = {
+            Categories.HATE_SPEECH: {
+                "focus": "elementos de odio, discriminación o ataques hacia grupos específicos",
+                "questions": [
+                    "¿Qué lenguaje específico genera hostilidad o desprecio?",
+                    "¿Hacia qué grupo(s) se dirige el contenido problemático?",
+                    "¿Cómo contribuye este contenido a narrativas de exclusión?"
+                ]
+            },
+            Categories.DISINFORMATION: {
+                "focus": "afirmaciones falsas, datos manipulados o información médica/científica incorrecta",
+                "questions": [
+                    "¿Qué claims específicos son médica/científicamente incorrectos?",
+                    "¿Qué evidencia contradice estas afirmaciones?",
+                    "¿Cómo podría este contenido desinformar a la audiencia?"
+                ]
+            },
+            Categories.CONSPIRACY_THEORY: {
+                "focus": "teorías sobre control secreto, planes ocultos o manipulación masiva",
+                "questions": [
+                    "¿Qué teoría conspirativa específica se menciona?",
+                    "¿Qué actores se presentan como controladores secretos?",
+                    "¿Cómo se estructura la narrativa de 'plan oculto'?"
+                ]
+            },
+            Categories.FAR_RIGHT_BIAS: {
+                "focus": "retórica extremista, nacionalismo excluyente o marcos políticos radicales",
+                "questions": [
+                    "¿Qué elementos específicos indican sesgo de extrema derecha?",
+                    "¿Cómo se manifiesta el nacionalismo o anti-inmigración?",
+                    "¿Qué marcos 'nosotros vs ellos' se emplean?"
+                ]
+            },
+            Categories.CALL_TO_ACTION: {
+                "focus": "llamadas específicas a la movilización o acción colectiva",
+                "questions": [
+                    "¿Qué acción específica se solicita a los seguidores?",
+                    "¿Se proporcionan detalles como lugar, hora o método?",
+                    "¿Cuál es la urgencia o motivación para la movilización?"
+                ]
+            },
+            Categories.GENERAL: {
+                "focus": "contenido neutral o político moderado sin elementos extremistas",
+                "questions": [
+                    "¿Por qué este contenido no entra en categorías problemáticas?",
+                    "¿Qué lo hace neutral o moderadamente político?",
+                    "¿Falta contexto extremista, conspirativo o de odio?"
+                ]
+            }
+        }
         
-        # Check for uncertain categorization using unified pattern result
-        pattern_result = pattern_results.get('pattern_result', None)
-        if pattern_result:
-            detected_categories = pattern_result.categories
-            pattern_matches = pattern_result.pattern_matches
-            total_patterns = len(pattern_matches) if pattern_matches else 0
-        else:
-            detected_categories = []
-            total_patterns = 0
+        context = category_context.get(category, category_context[Categories.GENERAL])
         
-        if total_patterns == 0:
-            uncertainty_areas.append("Clasificación de contenido ambigua - sin patrones claros")
+        prompt_parts = [
+            f'TEXTO ANALIZADO: "{text}"',
+            f'CATEGORÍA DETECTADA: {category}',
+            "",
+            f"ANÁLISIS DETALLADO - Enfócate en {context['focus']}:",
+            ""
+        ]
         
-        if len(detected_categories) > 2:
-            uncertainty_areas.append("Múltiples categorías detectadas - necesita priorización")
+        for i, question in enumerate(context['questions'], 1):
+            prompt_parts.append(f"{i}. {question}")
         
-        # Check for topic clarity - simplified since we have unified categories now
-        if len(detected_categories) > 1:
-            uncertainty_areas.append("Múltiples categorías detectadas")
+        prompt_parts.extend([
+            "",
+            "EXPLICACIÓN (2-3 oraciones claras y específicas sobre los elementos detectados):"
+        ])
         
-        return UncertaintyContext(
-            uncertainty_areas=uncertainty_areas,
-            detected_categories=detected_categories,
-            total_patterns=total_patterns
-        )
+        return "\n".join(prompt_parts)
 
 def create_context_from_analysis(analysis_results: Dict) -> PromptContext:
     """

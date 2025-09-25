@@ -949,13 +949,9 @@ class EnhancedLLMPipeline:
             if category:
                 analysis_context['detected_category'] = category
             
-            # Create prompt context from analysis results
-            prompt_context = create_context_from_analysis(analysis_context)
+            # Use the new explanation-specific prompt for better results
+            explanation = self._generate_explanation_with_specific_prompt(text, category or Categories.GENERAL)
             
-            # Generate sophisticated explanation using category directly
-            sophisticated_result = self._run_enhanced_analysis(text, category or Categories.GENERAL, prompt_context)
-            
-            explanation = sophisticated_result.get("llm_explanation", "")
             if explanation and len(explanation.strip()) > 5:
                 return explanation
             else:
@@ -966,6 +962,44 @@ class EnhancedLLMPipeline:
             print(f"⚠️ Explanation generation error: {e}")
             # Keep the existing behavior but make it clearer this is an actual error
             return f"ERROR: Exception in explanation generation - {type(e).__name__}: {str(e)}"
+    
+    def _generate_explanation_with_specific_prompt(self, text: str, category: str) -> str:
+        """
+        Generate explanation using the specialized explanation prompt method.
+        """
+        try:
+            if not self.generation_model or self.generation_model != "ollama":
+                return "ERROR: Explanation generation requires Ollama model"
+            
+            # No need to convert since Categories uses string constants
+            # Just ensure we have a valid category string
+            if not category or not hasattr(Categories, category.upper()):
+                category = Categories.GENERAL
+            
+            # Generate explanation-specific prompt
+            explanation_prompt = self.prompt_generator.generate_explanation_prompt(text, category, model_type="ollama")
+            
+            # Get explanation from Ollama using the same pattern as classification
+            response = self.ollama_client.chat.completions.create(
+                model=self.ollama_model_name,
+                messages=[
+                    {"role": "system", "content": "Eres un experto analista de contenido especializado en explicar por qué un texto pertenece a una categoría específica."},
+                    {"role": "user", "content": explanation_prompt}
+                ],
+                temperature=0.3  # Slightly higher temperature for more natural explanations
+            )
+            
+            explanation = response.choices[0].message.content.strip()
+            
+            if explanation and len(explanation.strip()) > 10:
+                return explanation
+            else:
+                return f"ERROR: Insufficient explanation generated - got: '{explanation}'"
+                
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return f"ERROR: Exception in explanation prompt generation - {type(e).__name__}: {str(e)}"
     
     def analyze_content(self, text: str, analysis_context: Dict = None, category: str = None) -> Dict:
         """

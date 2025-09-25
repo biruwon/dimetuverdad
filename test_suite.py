@@ -133,8 +133,8 @@ class TestSuite:
         test_cases = self.get_essential_pattern_tests()
         
         if quick_mode:
-            # In quick mode, take only the first test from each category
-            test_cases = {k: v for i, (k, v) in enumerate(test_cases.items()) if i < 6}  # 6 tests total
+            # In quick mode, take only 2 tests total for fastest execution
+            test_cases = {k: v for i, (k, v) in enumerate(test_cases.items()) if i < 2}  # 2 tests total
         
         print("🔍 TESTING PATTERN-BASED DETECTION")
         print("=" * 60)
@@ -318,7 +318,7 @@ class TestSuite:
 
 def main():
     parser = argparse.ArgumentParser(description='Test Suite for Enhanced Analyzer')
-    parser.add_argument('--quick', action='store_true', help='Run quick mode (2 tests per category)')
+    parser.add_argument('--quick', action='store_true', help='Run quick mode (2 tests total for speed)')
     parser.add_argument('--patterns-only', action='store_true', help='Run only pattern tests')
     parser.add_argument('--llm-only', action='store_true', help='Run only LLM tests')
     parser.add_argument('--save-results', action='store_true', help='Save results to JSON')
