@@ -207,6 +207,7 @@ migrate_database_schema()  # Reset schema and connections
 - **Force reanalyze workflow**: Essential when prompt engineering or model parameters change
 - **Terminal output formatting**: Uses emoji indicators (🚫, ❌, 🕵️, ⚡, 📢, ✅) for categories
 - **Analysis method tracking**: Every result tagged as either `"pattern"` or `"llm"` in database
+- **No backward compatibility**: Never add legacy compatibility code or deprecated methods - always refactor existing code to use new patterns directly
 
 When working on this codebase, prioritize understanding the multi-stage analysis pipeline and always test with both pattern-only and LLM-enhanced modes to ensure comprehensive coverage.
 

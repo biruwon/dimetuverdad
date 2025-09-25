@@ -6,25 +6,9 @@ Eliminates redundancy between SpanishPoliticalTopicClassifier and FarRightAnalyz
 import re
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
-from enum import Enum
+from categories import Categories
 
-class ContentCategory(Enum):
-    """Consolidated content categories with merged overlapping types."""
-    # Core extremism categories (highest priority)
-    HATE_SPEECH = "hate_speech"              # Includes xenophobia, violence_threats
-    DISINFORMATION = "disinformation"        # Includes health_disinformation
-    CONSPIRACY_THEORY = "conspiracy_theory"
-    FAR_RIGHT_BIAS = "far_right_bias"
-    CALL_TO_ACTION = "call_to_action"
-    
-    # Context categories for analysis
-    NATIONALISM = "nationalism"
-    ANTI_GOVERNMENT = "anti_government"
-    HISTORICAL_REVISIONISM = "historical_revisionism"
-    
-    # General content
-    POLITICAL_GENERAL = "political_general"
-    NON_POLITICAL = "non_political"
+
 
 @dataclass
 class PatternMatch:
@@ -54,7 +38,7 @@ class PatternAnalyzer:
     def _initialize_unified_patterns(self) -> Dict[str, Dict]:
         """Initialize consolidated pattern detection with merged overlapping categories."""
         return {
-            'hate_speech': {
+            Categories.HATE_SPEECH: {
                 'patterns': [
                     # Racial/ethnic hate speech
                     r'\b(?:raza\s+inferior|sangre\s+pura|superioridad\s+racial)\b',
@@ -100,7 +84,7 @@ class PatternAnalyzer:
                 'description': 'Hate speech, xenophobia, and violent threats targeting specific groups'
             },
             
-            'disinformation': {
+            Categories.DISINFORMATION: {
                 'patterns': [
                     # General disinformation
                     r'\b(?:desinformación|fake\s+news|noticias?\s+falsas?)\b',
@@ -146,7 +130,7 @@ class PatternAnalyzer:
                 'description': 'False information including health, statistical, and factual disinformation'
             },
             
-            'conspiracy_theory': {
+            Categories.CONSPIRACY_THEORY: {
                 'patterns': [
                     # Classic conspiracy theories
                     r'\b(?:plan\s+kalergi|gran\s+reemplazo|reemplaz[oa]\s+populacional)\b',
@@ -164,7 +148,7 @@ class PatternAnalyzer:
                 'description': 'Conspiracy theories and hidden agenda narratives'
             },
             
-            'far_right_bias': {
+            Categories.FAR_RIGHT_BIAS: {
                 'patterns': [
                     # Anti-left rhetoric
                     r'\b(?:socialistas?|comunistas?|marxistas?|rojos?)\s+(?:han\s+)?(?:destruido|destruyen|arruinado|arruinan)\s+(?:España|el\s+país)',
@@ -185,7 +169,7 @@ class PatternAnalyzer:
                 'description': 'Far-right political bias and extremist rhetoric'
             },
             
-            'call_to_action': {
+            Categories.CALL_TO_ACTION: {
                 'patterns': [
                     # Direct mobilization calls
                     r'\b(?:movilizaos|organizaos|retirad|sacad|actuad\s+ya)\b',

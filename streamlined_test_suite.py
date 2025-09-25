@@ -1,6 +1,21 @@
 #!/usr/bin/env python3
 """
-Streamlined Test Suite for Enhanced Analyzer
+            'hate_speech_1': {
+                'content': 'Los moros nos están invadiendo 🤬 Fuera de España!! No queremos más mezquitas aquí',
+                'expected_category': Categories.HATE_SPEECH,
+                'description': 'Direct hate speech with racial slurs'
+            },
+            'hate_speech_2': {
+                'content': 'Ya estoy harto de estos menas que no hacen nada más que robar y traficar 😡 Devolvédlos a su país YA!',
+                'expected_category': Categories.HATE_SPEECH,
+                'description': 'Hate speech targeting minors - tests consolidated xenophobia patterns'
+            },
+            
+            'disinformation_1': {
+                'content': '🚨 URGENTE!! Las vacunas COVID tienen grafeno para controlarnos con 5G!! Compartid antes de que lo censuren!!',
+                'expected_category': Categories.DISINFORMATION,
+                'description': 'Health disinformation with conspiracy elements'
+            }, Suite for Enhanced Analyzer
 Optimized version with essential test cases only - much faster execution.
 """
 
@@ -11,6 +26,7 @@ import json
 import time
 from typing import List, Dict, Any
 from enhanced_analyzer import EnhancedAnalyzer
+from categories import Categories
 
 class StreamlinedTestSuite:
     """Streamlined test suite focusing on core consolidated categories."""
@@ -26,62 +42,62 @@ class StreamlinedTestSuite:
             # Core consolidated categories
             'hate_speech_1': {
                 'content': 'Los moros nos están invadiendo 🤬 Fuera de España!! No queremos más mezquitas aquí',
-                'expected_category': 'hate_speech',
+                'expected_category': Categories.HATE_SPEECH,
                 'description': 'Direct hate speech with racial slurs'
             },
             'hate_speech_2': {
                 'content': 'Ya estoy harto de estos menas que no hacen nada más que robar y traficar 😡 Devolvédlos a su país YA!',
-                'expected_category': 'hate_speech',
+                'expected_category': Categories.HATE_SPEECH,
                 'description': 'Hate speech targeting minors - tests consolidated xenophobia patterns'
             },
             
             'disinformation_1': {
                 'content': '🚨 URGENTE!! Las vacunas COVID tienen grafeno para controlarnos con 5G!! Compartid antes de que lo censuren!!',
-                'expected_category': 'disinformation',
+                'expected_category': Categories.DISINFORMATION,
                 'description': 'COVID vaccine misinformation - tests consolidated health_disinformation'
             },
             'disinformation_2': {
                 'content': 'Los medios OCULTAN la verdad: 9 de cada 10 casos de COVID son INVENTADOS para meter miedo!!',
-                'expected_category': ['disinformation', 'conspiracy_theory'],
+                'expected_category': [Categories.DISINFORMATION, Categories.CONSPIRACY_THEORY],
                 'description': 'False statistics - multi-category test'
             },
             
             'conspiracy_theory_1': {
                 'content': 'Soros financia la inmigración masiva para reemplazar a los europeos blancos. Es el plan Kalergi en marcha!! 🚨🚨',
-                'expected_category': 'conspiracy_theory',
+                'expected_category': Categories.CONSPIRACY_THEORY,
                 'description': 'Great replacement conspiracy theory'
             },
             'conspiracy_theory_2': {
                 'content': 'Bill Gates, Soros y el Foro de Davos se reunen en secreto para decidir nuestro futuro 👁️ Despertad ovejas!!',
-                'expected_category': 'conspiracy_theory',
+                'expected_category': Categories.CONSPIRACY_THEORY,
                 'description': 'Elite coordination conspiracy theory'
             },
             
             'far_right_bias_1': {
                 'content': 'Los ROJOS han convertido España en Venezuela 🇻🇪 Solo Vox puede salvarnos de estos COMUNISTAS!',
-                'expected_category': 'far_right_bias',
+                'expected_category': Categories.FAR_RIGHT_BIAS,
                 'description': 'Extreme partisan rhetoric against socialists'
             },
             'far_right_bias_2': {
                 'content': 'La agenda WOKE está destruyendo nuestros valores cristianos!! 😡 Nos quieren convertir en maricas y feminazis',
-                'expected_category': ['far_right_bias', 'hate_speech'],
+                'expected_category': [Categories.FAR_RIGHT_BIAS, Categories.HATE_SPEECH],
                 'description': 'Anti-woke bias with slurs - multi-category test'
             },
             
             'call_to_action_1': {
                 'content': '🚨 CONVOCATORIA URGENTE!! Todos a Cibeles HOY 18:00h!! A defender España de la INVASIÓN!! RT MASIVO!!',
-                'expected_category': 'call_to_action',
+                'expected_category': Categories.CALL_TO_ACTION,
                 'description': 'Direct mobilization call with location and time'
             },
             'call_to_action_2': {
                 'content': 'BASTA YA!! La gente tiene que unirse y salir a las calles antes de que sea demasiado tarde!! #Resistencia',
-                'expected_category': 'call_to_action',
+                'expected_category': Categories.CALL_TO_ACTION,
                 'description': 'Urgent street mobilization call'
             },
             
             'general_1': {
                 'content': 'Hoy hace un día muy bonito en Madrid. Perfecto para pasear por el Retiro con la familia ☀️',
-                'expected_category': 'general',
+                'expected_category': Categories.GENERAL,
                 'description': 'Normal everyday content that should not match any patterns'
             }
         }
@@ -91,25 +107,25 @@ class StreamlinedTestSuite:
         return {
             'hate_speech_llm_1': {
                 'content': 'Ya sabéis cómo son esa gente... no cambian nunca. Siempre igual, da igual donde vayan',
-                'expected_category': 'hate_speech',
+                'expected_category': Categories.HATE_SPEECH,
                 'description': 'Subtle hate speech with implicit derogatory generalizations'
             },
             
             'disinformation_llm_1': {
                 'content': 'Mi primo que trabaja en el hospital me dice que todos los casos COVID son gripe común reclasificada',
-                'expected_category': 'disinformation',
+                'expected_category': Categories.DISINFORMATION,
                 'description': 'Subtle medical misinformation with fake authority'
             },
             
             'conspiracy_theory_llm_1': {
                 'content': 'Es casualidad que todos los líderes mundiales hablen igual sobre el cambio climático? Alguien les está diciendo qué decir...',
-                'expected_category': 'conspiracy_theory',
+                'expected_category': Categories.CONSPIRACY_THEORY,
                 'description': 'Subtle conspiracy theory about global coordination'
             },
             
             'general_llm_1': {
                 'content': 'Me parece que el gobierno debería invertir más en educación pública y menos en otras cosas',
-                'expected_category': 'general',
+                'expected_category': Categories.GENERAL,
                 'description': 'Normal political opinion without extremist elements'
             }
         }

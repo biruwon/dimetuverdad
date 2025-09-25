@@ -1,6 +1,13 @@
 """
 Model Comparison Script for Spanish Far-Right Analysis
-Compare different LLM models with test examples to evaluate performance.
+Co            # === DISINFORMATION ===
+            TestExample(
+                id="disinfo_001",
+                text="El 85% de los inmigrantes no trabajan y cobran ayudas del estado. Estudio secreto del gobierno lo confirma.",
+                category=Categories.DISINFORMATION,
+                description="False statistics without credible sources",
+                far_right_score=0.45,
+            ),fferent LLM models with test examples to evaluate performance.
 """
 
 import json
@@ -11,6 +18,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 
 from llm_models import LLMModelConfig, EnhancedLLMPipeline
+from categories import Categories
 
 @dataclass
 class TestExample:
@@ -53,7 +61,7 @@ class ModelComparator:
             TestExample(
                 id="hate_001",
                 text="Los musulmanes son una raza inferior que viene a destruir nuestra cultura cristiana.",
-                category="hate_speech",
+                category=Categories.HATE_SPEECH,
                 description="Explicit racial hate speech against Muslims",
                 far_right_score=0.85,
             ),
@@ -62,7 +70,7 @@ class ModelComparator:
             TestExample(
                 id="disinfo_001",
                 text="El 85% de los inmigrantes no trabajan y cobran ayudas del estado. Estudio secreto del gobierno lo confirma.",
-                category="disinformation",
+                category=Categories.DISINFORMATION,
                 description="False statistics about immigration",
                 far_right_score=0.70,
             ),
@@ -71,7 +79,7 @@ class ModelComparator:
             TestExample(
                 id="conspiracy_001",
                 text="Soros financia la inmigración para reemplazar a los europeos. Es el plan Kalergi en acción.",
-                category="conspiracy_theory",
+                category=Categories.CONSPIRACY_THEORY,
                 description="Great replacement conspiracy theory",
                 far_right_score=0.78,
             ),
@@ -80,7 +88,7 @@ class ModelComparator:
             TestExample(
                 id="action_001",
                 text="¡CONCENTRACIÓN HOY 18:00 en Cibeles! Hay que salir a las calles a defender España de la invasión.",
-                category="call_to_action",
+                category=Categories.CALL_TO_ACTION,
                 description="Urgent mobilization with location and time",
                 far_right_score=0.75,
             ),
@@ -89,7 +97,7 @@ class ModelComparator:
             TestExample(
                 id="bias_001",
                 text="España necesita un líder fuerte como Franco que ponga orden. La democracia ha fracasado.",
-                category="far_right_bias",
+                category=Categories.FAR_RIGHT_BIAS,
                 description="Authoritarian nostalgia",
                 far_right_score=0.80,
             ),
@@ -98,7 +106,7 @@ class ModelComparator:
             TestExample(
                 id="normal_001",
                 text="Qué día tan bonito hace hoy en Madrid. Me voy a dar un paseo por el Retiro con la familia.",
-                category="general",
+                category=Categories.GENERAL,
                 description="Normal everyday content",
                 far_right_score=0.0,
             )

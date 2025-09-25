@@ -13,8 +13,17 @@ from transformers import (
     BitsAndBytesConfig
 )
 from openai import OpenAI
+from categories import Categories, get_category_display_name
 
-from enhanced_prompts import EnhancedPromptGenerator, AnalysisType, create_context_from_analysis, PromptContext
+from enhanced_prompts import (
+    EnhancedPromptGenerator, 
+    create_context_from_analysis, 
+    PromptContext,
+    build_category_list_prompt,
+    build_spanish_classification_prompt,
+    build_ollama_system_prompt,
+    build_generation_system_prompt
+)
 
 # Suppress warnings including the parameter conflict warnings
 warnings.filterwarnings("ignore")
@@ -624,14 +633,14 @@ class ResponseParser:
             
             # Use lower thresholds for detection
             if hate_score > 0.3:
-                categories.append("hate_speech")
+                categories.append(Categories.HATE_SPEECH)
             if toxic_score > 0.3:
                 categories.append("toxic_content")
             if final_score < 0.3 and positive_score > 0.6:
                 categories.append("normal_content")
             
             if not categories:
-                categories = ["general"]
+                categories = [Categories.GENERAL]
             
             return {
                 "llm_categories": categories
@@ -916,17 +925,16 @@ class EnhancedLLMPipeline:
                 
         except Exception as e:
             print(f"⚠️ Category detection error: {e}")
-            return "general"
+            return Categories.GENERAL
     
-    def get_explanation(self, text: str, category: str = None, analysis_context: Dict = None, analysis_type: AnalysisType = None) -> str:
+    def get_explanation(self, text: str, category: str = None, analysis_context: Dict = None) -> str:
         """
         Generate detailed explanation using generation model only.
         
         Args:
             text: Text to analyze
-            category: Already determined category (optional)
+            category: Content category (hate_speech, disinformation, etc.)
             analysis_context: Dict with prior analysis results (optional)
-            analysis_type: Specific analysis type to perform (optional)
             
         Returns:
             Detailed explanation string
@@ -946,12 +954,8 @@ class EnhancedLLMPipeline:
             # Create prompt context from analysis results
             prompt_context = create_context_from_analysis(analysis_context)
             
-            # Determine optimal analysis type based on context or use provided one
-            if analysis_type is None:
-                analysis_type = self._determine_analysis_type(analysis_context)
-            
-            # Generate sophisticated explanation using EnhancedPromptGenerator
-            sophisticated_result = self._run_enhanced_analysis(text, analysis_type, prompt_context)
+            # Generate sophisticated explanation using category directly
+            sophisticated_result = self._run_enhanced_analysis(text, category or Categories.GENERAL, prompt_context)
             
             return sophisticated_result.get("llm_explanation", "Análisis completado sin explicación detallada.")
             
@@ -959,14 +963,14 @@ class EnhancedLLMPipeline:
             print(f"⚠️ Explanation generation error: {e}")
             return f"Error al generar explicación: {str(e)}"
     
-    def analyze_content(self, text: str, analysis_context: Dict = None, analysis_type: AnalysisType = None) -> Dict:
+    def analyze_content(self, text: str, analysis_context: Dict = None, category: str = None) -> Dict:
         """
         Comprehensive LLM analysis using enhanced prompting system.
         
         Args:
             text: Text to analyze
             analysis_context: Dict with prior analysis results (optional)
-            analysis_type: Specific analysis type to perform (optional)
+            category: Content category to focus on (optional)
         """
         result = {
             "llm_explanation": "",
@@ -979,9 +983,9 @@ class EnhancedLLMPipeline:
         start_time = time.time()
         
         try:
-            # Handle case where analysis_type is passed as first argument for backwards compatibility
-            if isinstance(analysis_context, AnalysisType):
-                analysis_type = analysis_context
+            # Handle case where category is passed as first argument for backwards compatibility
+            if isinstance(analysis_context, str):
+                category = analysis_context
                 analysis_context = {}
             
             # Use provided analysis_context or create empty dict
@@ -996,17 +1000,13 @@ class EnhancedLLMPipeline:
                 class_result = self._classify_content(text)
                 result.update(class_result)
             
-            # Determine optimal analysis type based on context or use provided one
-            if analysis_type is None:
-                analysis_type = self._determine_analysis_type(analysis_context)
-            
-            # Generate sophisticated prompt using EnhancedPromptGenerator
+            # Generate sophisticated prompt using EnhancedPromptGenerator with category
             if self.generation_model:
-                sophisticated_result = self._run_enhanced_analysis(text, analysis_type, prompt_context)
+                sophisticated_result = self._run_enhanced_analysis(text, category or Categories.GENERAL, prompt_context)
                 result.update(sophisticated_result)
             
             result["processing_time"] = time.time() - start_time
-            result["llm_analysis_type"] = analysis_type.value
+            result["llm_analysis_type"] = category or Categories.GENERAL
             
         except Exception as e:
             print(f"⚠️ Enhanced analysis error: {e}")
@@ -1015,19 +1015,8 @@ class EnhancedLLMPipeline:
         
         return result
     
-    def _determine_analysis_type(self, context: Dict) -> AnalysisType:
-        """Determine the optimal analysis type based on context."""
-        far_right_score = context.get('far_right_score', 0.0)
-        
-        # High-risk content needs detailed analysis
-        if far_right_score > 0.7:
-            return AnalysisType.COMPREHENSIVE
-        
-        # Default comprehensive analysis for all other cases
-        return AnalysisType.COMPREHENSIVE
-    
-    def _run_enhanced_analysis(self, text: str, analysis_type: AnalysisType, prompt_context) -> Dict:
-        """Run enhanced analysis with sophisticated prompting."""
+    def _run_enhanced_analysis(self, text: str, category: str, prompt_context) -> Dict:
+        """Run enhanced analysis with sophisticated prompting using content categories."""
         try:
             # For classification models, use classification approach directly
             # Use configuration-based detection instead of hardcoded names
@@ -1078,7 +1067,7 @@ class EnhancedLLMPipeline:
             model_type = "ollama" if self.generation_model == "ollama" else "transformers"
             enhanced_prompt = self.prompt_generator.generate_prompt(
                 text=text,
-                analysis_type=analysis_type,
+                category=category,
                 context=prompt_context,
                 complexity_level=complexity_level,
                 model_type=model_type
@@ -1203,7 +1192,7 @@ class EnhancedLLMPipeline:
             response = self.ollama_client.chat.completions.create(
                 model=self.ollama_model_name,
                 messages=[
-                    {"role": "system", "content": "Eres un clasificador de contenido especializado en detectar contenido problemático sutil. Responde únicamente con: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general. \n\nPARA HATE_SPEECH: Detecta generalizaciones despectivas ('esa gente', 'ya sabéis cómo son'), estereotipos negativos, y comentarios que deshumanizan grupos aunque no usen insultos directos.\n\nUsa 'general' SOLO para contenido verdaderamente neutral (clima, comida, entretenimiento). Si detectas cualquier insinuación problemática o generalización negativa sobre grupos de personas, elige la categoría específica más apropiada."},
+                    {"role": "system", "content": build_ollama_system_prompt()},
                     {"role": "user", "content": classification_prompt}
                 ],
                 temperature=0.1  # Lower temperature for more consistent results
@@ -1216,9 +1205,9 @@ class EnhancedLLMPipeline:
             print(f"🔍 Raw LLM response: '{result}'")
             
             # Extract category from response
-            valid_categories = ['hate_speech', 'disinformation', 'conspiracy_theory', 'far_right_bias', 'call_to_action', 'general']
+            valid_categories = Categories.get_all_categories()
             
-            detected_category = 'general'  # Default fallback
+            detected_category = Categories.GENERAL  # Default fallback
             for category in valid_categories:
                 if category in result:
                     detected_category = category
@@ -1252,18 +1241,7 @@ class EnhancedLLMPipeline:
             print(f"🔍 Using generation model for classification")
             
             # PERFORMANCE OPTIMIZATION: Use much shorter, simpler classification prompt
-            simple_classification_prompt = f"""Clasifica este texto en una categoría:
-
-hate_speech - Insultos, discriminación
-disinformation - Información falsa médica/científica  
-conspiracy_theory - Teorías conspirativas
-far_right_bias - Retórica extrema derecha
-call_to_action - Llamadas a acción/movilización
-general - Contenido neutral
-
-Texto: "{text}"
-
-Categoría:"""
+            simple_classification_prompt = build_spanish_classification_prompt(text)
             
             print(f"🔍 Classification prompt length: {len(simple_classification_prompt)} characters")
             
@@ -1289,7 +1267,7 @@ Categoría:"""
                 response = self.ollama_client.chat.completions.create(
                     model=self.ollama_model_name,
                     messages=[
-                        {"role": "system", "content": "Classify text as: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, or general. IMPORTANT: hate_speech includes subtle generalizations like 'esa gente no cambia' or stereotypes about groups, not just direct insults."},
+                        {"role": "system", "content": build_generation_system_prompt()},
                         {"role": "user", "content": f"Text: {text}\nCategory:"}
                     ],
                     **ollama_params
@@ -1305,7 +1283,7 @@ Categoría:"""
                 print(f"🔍 Raw transformers response: '{result}'")
             
             # PERFORMANCE OPTIMIZATION: Simplified validation - just check for key categories
-            valid_categories = ["hate_speech", "disinformation", "conspiracy_theory", "far_right_bias", "call_to_action", "general"]
+            valid_categories = Categories.get_all_categories()
             
             # Quick category matching
             for category in valid_categories:
@@ -1314,22 +1292,22 @@ Categoría:"""
             
             # Check for common Spanish terms quickly
             if "odio" in result or "discrimina" in result:
-                return "hate_speech"
+                return Categories.HATE_SPEECH
             elif "desinforma" in result or "falso" in result:
-                return "disinformation"  
+                return Categories.DISINFORMATION
             elif "conspira" in result:
-                return "conspiracy_theory"
+                return Categories.CONSPIRACY_THEORY
             elif "sesgo" in result or "político" in result:
-                return "far_right_bias"
+                return Categories.FAR_RIGHT_BIAS
             elif "acción" in result or "moviliza" in result:
-                return "call_to_action"
+                return Categories.CALL_TO_ACTION
             
             # Fallback to general if no valid category found
-            return "general"
+            return Categories.GENERAL
             
         except Exception as e:
             print(f"⚠️ Generation model classification error: {e}")
-            return "general"
+            return Categories.GENERAL
 
     def cleanup_memory(self):
         """Clean up GPU/memory resources."""

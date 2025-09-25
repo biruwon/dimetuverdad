@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-Quick Test Tool for Enhanced Analyzer
-Allows rapid testing of individual posts/texts with the content analysis system.
+Quick test tool for enhanced analyzer without loading full models
 """
 
 import sys
-import argparse
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 from enhanced_analyzer import EnhancedAnalyzer
+from pattern_analyzer import PatternAnalyzer
+from categories import Categories
+import time
+import argparse
 
 def main():
     parser = argparse.ArgumentParser(
@@ -169,12 +174,12 @@ def analyze_single_text(analyzer, text, json_output=False):
             
             # Add emoji indicators
             category_emojis = {
-                'hate_speech': '🚫',
-                'disinformation': '❌', 
-                'conspiracy_theory': '🕵️',
-                'far_right_bias': '⚡',
-                'call_to_action': '📢',
-                'general': '✅'
+                Categories.HATE_SPEECH: '🚫',
+                Categories.DISINFORMATION: '❌', 
+                Categories.CONSPIRACY_THEORY: '🕵️',
+                Categories.FAR_RIGHT_BIAS: '⚡',
+                Categories.CALL_TO_ACTION: '📢',
+                Categories.GENERAL: '✅'
             }
             
             emoji = category_emojis.get(result.category, '❓')

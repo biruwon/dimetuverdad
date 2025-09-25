@@ -8,6 +8,7 @@ import sys
 import sqlite3
 import argparse
 from enhanced_analyzer import EnhancedAnalyzer, save_content_analysis, ContentAnalysis, migrate_database_schema
+from categories import Categories
 import json
 from datetime import datetime
 
@@ -147,13 +148,14 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
             results.append(result)
             
             # Show result
+            # Show result
             category_emoji = {
-                'hate_speech': '🚫',
-                'disinformation': '❌',
-                'conspiracy_theory': '🕵️',
-                'far_right_bias': '⚡',
-                'call_to_action': '📢',
-                'general': '✅'
+                Categories.HATE_SPEECH: '🚫',
+                Categories.DISINFORMATION: '❌',
+                Categories.CONSPIRACY_THEORY: '🕵️',
+                Categories.FAR_RIGHT_BIAS: '⚡',
+                Categories.CALL_TO_ACTION: '📢',
+                Categories.GENERAL: '✅'
             }.get(category, '❓')
             
             print(f"    {category_emoji} {category}")
@@ -180,12 +182,12 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     
     for category, count in sorted(category_counts.items()):
         emoji = {
-            'hate_speech': '🚫',
-            'disinformation': '❌', 
-            'conspiracy_theory': '🕵️',
-            'far_right_bias': '⚡',
-            'call_to_action': '📢',
-            'general': '✅'
+            Categories.HATE_SPEECH: '🚫',
+            Categories.DISINFORMATION: '❌', 
+            Categories.CONSPIRACY_THEORY: '🕵️',
+            Categories.FAR_RIGHT_BIAS: '⚡',
+            Categories.CALL_TO_ACTION: '📢',
+            Categories.GENERAL: '✅'
         }.get(category, '❓')
         
         percentage = (count / len(results)) * 100

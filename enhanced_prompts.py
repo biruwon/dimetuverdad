@@ -3,20 +3,69 @@ Enhanced prompt generation system for Spanish far-right content analysis.
 Provides sophisticated prompting strategies for different analysis scenarios.
 """
 
-from enum import Enum
 from typing import Dict, List, Optional
 from dataclasses import dataclass
+from categories import Categories, CATEGORY_INFO, get_category_info, get_category_display_name, CLASSIFICATION_PROMPT_MAPPINGS
 
-class AnalysisType(Enum):
-    COMPREHENSIVE = "comprehensive"
-    THREAT_ASSESSMENT = "threat_assessment"
-    MISINFORMATION = "misinformation"
-    CLAIM_VERIFICATION = "claim_verification"
-    FAR_RIGHT_BIAS = "far_right_bias"
-    HATE_SPEECH = "hate_speech"
-    CLASSIFICATION = "classification"  # Added for classification tasks
+# ============================================================================
+# DYNAMIC PROMPT BUILDERS
+# ============================================================================
 
-@dataclass
+def build_category_list_prompt() -> str:
+    """Build dynamic category list for LLM prompts."""
+    return ", ".join(Categories.get_all_categories())
+
+def build_detailed_category_descriptions() -> str:
+    """Build detailed category descriptions for system prompts."""
+    descriptions = []
+    for category in Categories.get_all_categories():
+        info = get_category_info(category)
+        if info:
+            descriptions.append(f"{category} - {info.description[:50]}...")
+        else:
+            descriptions.append(f"{category} - Categoría de análisis")
+    return "\n".join(descriptions)
+
+def build_spanish_classification_prompt(text: str) -> str:
+    """Build Spanish classification prompt with dynamic categories."""
+    categories = Categories.get_all_categories()
+    category_lines = []
+    
+    # Add category descriptions dynamically
+    category_descriptions = {
+        Categories.HATE_SPEECH: "Insultos, discriminación",
+        Categories.DISINFORMATION: "Información falsa médica/científica",
+        Categories.CONSPIRACY_THEORY: "Teorías conspirativas", 
+        Categories.FAR_RIGHT_BIAS: "Retórica extrema derecha",
+        Categories.CALL_TO_ACTION: "Llamadas a acción/movilización",
+        Categories.GENERAL: "Contenido neutral"
+    }
+    
+    for category in categories:
+        desc = category_descriptions.get(category, "Categoría de análisis")
+        category_lines.append(f"{category} - {desc}")
+    
+    return f"""Clasifica este texto en una categoría:
+
+{chr(10).join(category_lines)}
+
+Texto: "{text}"
+
+Categoría:"""
+
+def build_ollama_system_prompt() -> str:
+    """Build Ollama system prompt with dynamic categories."""
+    categories = build_category_list_prompt()
+    return f"""Eres un clasificador de contenido especializado en detectar contenido problemático sutil. Responde únicamente con: {categories}. 
+
+PARA HATE_SPEECH: Detecta generalizaciones despectivas ('esa gente', 'ya sabéis cómo son'), estereotipos negativos, y comentarios que deshumanizan grupos aunque no usen insultos directos.
+
+Usa 'general' SOLO para contenido verdaderamente neutral (clima, comida, entretenimiento). Si detectas cualquier insinuación problemática o generalización negativa sobre grupos de personas, elige la categoría específica más apropiada."""
+
+def build_generation_system_prompt() -> str:
+    """Build generation model system prompt with dynamic categories."""
+    categories = build_category_list_prompt()
+    return f"Classify text as: {categories}. IMPORTANT: hate_speech includes subtle generalizations like 'esa gente no cambia' or stereotypes about groups, not just direct insults."@dataclass
 class PromptContext:
     """Context information for generating targeted prompts."""
     detected_categories: List[str]
@@ -44,105 +93,38 @@ class EnhancedPromptGenerator:
         """Initialize base context for Spanish far-right analysis."""
         return """Eres un experto analista especializado en detectar contenido problemático en español, especialmente discurso de odio, desinformación y retórica de extrema derecha en el contexto político español."""
     
-    def _initialize_prompt_templates(self) -> Dict[AnalysisType, Dict]:
-        """Initialize prompt templates for different analysis types."""
-        return {
-            AnalysisType.COMPREHENSIVE: {
-                "system": f"{self.base_context} Analiza el siguiente contenido de forma integral.",
-                "focus": "análisis completo del contenido",
-                "questions": [
-                    "¿Qué elementos problemáticos identificas?",
-                    "¿Cuál es el tono y la intención del mensaje?",
-                    "¿Hay indicios de sesgo político o radicalización?"
-                ]
-            },
-            
-            AnalysisType.THREAT_ASSESSMENT: {
-                "system": f"{self.base_context} Evalúa específicamente el nivel de amenaza y riesgo del contenido.",
-                "focus": "evaluación de amenaza y riesgo",
-                "questions": [
-                    "¿Hay llamadas explícitas o implícitas a la violencia?",
-                    "¿Se incita al odio contra grupos específicos?",
-                    "¿Cuál es el nivel de peligrosidad del mensaje?"
-                ]
-            },
-            
-            AnalysisType.MISINFORMATION: {
-                "system": f"{self.base_context} Analiza la veracidad y detecta posible desinformación.",
-                "focus": "detección de desinformación",
-                "questions": [
-                    "¿Hay afirmaciones que parecen falsas o sin evidencia?",
-                    "¿Se presentan teorías conspiratorias?",
-                    "¿Qué elementos requieren verificación factual?"
-                ]
-            },
-            
-            AnalysisType.CLAIM_VERIFICATION: {
-                "system": f"{self.base_context} Identifica y evalúa las afirmaciones verificables del contenido.",
-                "focus": "verificación de afirmaciones",
-                "questions": [
-                    "¿Qué afirmaciones específicas se pueden verificar?",
-                    "¿Hay datos estadísticos o referencias concretas?",
-                    "¿Qué nivel de urgencia tiene la verificación?"
-                ]
-            },
-            
-            AnalysisType.FAR_RIGHT_BIAS: {
-                "system": f"{self.base_context} Evalúa el sesgo político y la retórica partidista.",
-                "focus": "análisis de sesgo político",
-                "questions": [
-                    "¿Qué orientación política refleja el mensaje?",
-                    "¿Hay elementos de propaganda o manipulación?",
-                    "¿Cómo se presenta a los grupos políticos opuestos?"
-                ]
-            },
-            
-            AnalysisType.HATE_SPEECH: {
-                "system": f"{self.base_context} Analiza específicamente discurso de odio y discriminación.",
-                "focus": "detección de discurso de odio",
-                "questions": [
-                    "¿Hay lenguaje discriminatorio o deshumanizante?",
-                    "¿Se atacan grupos por características protegidas?",
-                    "¿Cuál es la severidad del discurso de odio?"
-                ]
-            },
-            
-            AnalysisType.CLASSIFICATION: {
-                "system": f"{self.base_context} Analiza el contenido para comprender su estructura comunicativa y propósito.",
-                "focus": "análisis de características comunicativas",
-                "categories": {
-                    "hate_speech": "Comunicación que establece jerarquías entre grupos sociales o expresa incompatibilidad cultural fundamental. Características: lenguaje que sugiere diferencias irreconciliables, expresiones de superioridad/inferioridad grupal, narrativas de amenaza identitaria.",
-                    
-                    "disinformation": "Comunicación que presenta afirmaciones fácticas sin evidencia documentada. Características: datos sin fuente verificable, interpretaciones especulativas presentadas como hechos, críticas sistemáticas a instituciones informativas.",
-                    
-                    "conspiracy_theory": "Comunicación que propone explicaciones causales no evidenciadas sobre eventos complejos. Características: patrones de control oculto, atribución de intencionalidad coordinada sin pruebas, narrativas de manipulación encubierta.",
-                    
-                    "far_right_bias": "Comunicación con marcos interpretativos de extrema derecha que presenta transformaciones sociales como amenazas a valores tradicionales. Características: lenguaje de pérdida cultural, narrativas de amenaza identitaria, marcos de preservación de tradiciones.",
-                    
-                    "call_to_action": "Comunicación orientada a generar respuesta colectiva inmediata. Características: lenguaje de urgencia temporal, invitaciones a participación activa, marcos de responsabilidad cívica que requieren acción.",
-                    
-                    "general": "Comunicación descriptiva, informativa o conversacional sin características problemáticas identificables."
-                }
+    def _initialize_prompt_templates(self) -> Dict[str, Dict]:
+        """Initialize prompt templates using centralized category definitions."""
+        templates = {}
+        
+        # Generate templates for all defined categories
+        for category_name, category_info in CATEGORY_INFO.items():
+            templates[category_name] = {
+                "system": category_info.system_prompt,
+                "focus": category_info.focus_area,
+                "questions": category_info.analysis_questions
             }
-        }
+        
+        return templates
     
     def generate_prompt(self, 
                        text: str, 
-                       analysis_type: AnalysisType,
-                       context: PromptContext,
+                       category: str = Categories.GENERAL,
+                       context: PromptContext = None,
                        complexity_level: str = "medium",
                        model_type: str = "transformers") -> str:
         """
-        Generate a sophisticated prompt based on analysis context and uncertainty.
+        Generate a sophisticated prompt based on content category and context.
         
         Args:
             text: Content to analyze
-            analysis_type: Type of analysis needed
+            category: Content category from Categories class
             context: Analysis context with detected patterns
             complexity_level: Prompt complexity (simple/medium/complex)
             model_type: Target model type (transformers/ollama)
         """
-        template = self.prompt_templates[analysis_type]
+        # Use general template if category not found
+        template = self.prompt_templates.get(category, self.prompt_templates[Categories.GENERAL])
         
         # Build context-aware prompt
         prompt_parts = [
@@ -154,20 +136,20 @@ class EnhancedPromptGenerator:
         ]
         
         # Add context information to guide analysis
-        if context.detected_categories:
+        if context and context.detected_categories:
             prompt_parts.extend([
                 f"PATRONES DETECTADOS: {', '.join(context.detected_categories)}",
                 ""
             ])
         
-        if context.political_topic and context.political_topic != "no_político":
+        if context and context.political_topic and context.political_topic != "no_político":
             prompt_parts.extend([
                 f"CONTEXTO POLÍTICO: {context.political_topic}",
                 ""
             ])
         
         # Add uncertainty-focused questions for areas needing LLM insight
-        if context.uncertainty_areas:
+        if context and context.uncertainty_areas:
             prompt_parts.extend([
                 "ÁREAS DE INCERTIDUMBRE A CLARIFICAR:",
                 *[f"- {area}" for area in context.uncertainty_areas],
@@ -183,7 +165,7 @@ class EnhancedPromptGenerator:
         elif complexity_level == "complex":
             prompt_parts.extend([
                 f"Realiza un {template['focus']} detallado respondiendo:",
-                *[f"- {q}" for q in template["questions"]],
+                *[f"- {q}" for q in template.get("questions", [])],
                 "",
                 "Proporciona un análisis extenso con ejemplos específicos del texto."
             ])
@@ -201,45 +183,26 @@ class EnhancedPromptGenerator:
     
     def generate_classification_prompt(self, text: str, model_type: str = "ollama") -> str:
         """
-        Generate targeted classification prompt with specific pattern matching.
-        Updated to be less conservative and catch more political content.
+        Generate targeted classification prompt using centralized category mappings.
         """
         prompt_parts = [
             f'TEXTO: "{text}"',
             "",
             "ANÁLISIS PASO A PASO:",
-            "",
-            "PASO 1 - Detectar contenido político específico:",
-            "- 'ROJOS', 'comunistas', criticas a Vox/partidos → far_right_bias",
-            "- 'agenda WOKE', 'progres', 'feminazis' → far_right_bias", 
-            "- 'invasión', 'nos están borrando' + inmigración → far_right_bias",
-            "- 'RETIRAD', 'MOVILIZAOS', 'ORGANIZARSE' → call_to_action",
-            "- 'BOICOT', organizarse contra empresas → call_to_action",
-            "- Narrativas de sustitución cultural → far_right_bias",
-            "- 'élites', 'agenda globalista' → conspiracy_theory",
-            "",
-            "PASO 2 - Si contiene insultos/slurs directos:",
-            "- 'moros', 'sudacas', 'feminazis', 'maricas' → hate_speech",
-            "- 'genéticamente ladrones', 'parásitos' → hate_speech",
-            "- 'pedofilia LGBTI' → hate_speech",
-            "",
-            "PASO 3 - Si no hay frases exactas, buscar patrones conceptuales:",
-            "- Referencias vagas a estudios/informes sin especificar → disinformation",
-            "- Preguntar sobre 'coincidencias' o beneficios sistemáticos → conspiracy_theory",
-            "- Críticas a instituciones educativas por sesgo ideológico → far_right_bias",
-            "- Incompatibilidad cultural entre grupos → hate_speech",
-            "- Llamadas a acción defensiva o electoral → call_to_action",
-            "- Generalizaciones negativas sobre grupos ('esa gente', 'ya sabéis cómo son') → hate_speech",
-            "- Estereotipos de género tradicionales ('las mujeres no saben ser madres') → hate_speech",
-            "- Comentarios despectivos sobre comportamientos de grupos → hate_speech",
-            "",
-            "PASO 4 - Solo si NO hay NINGÚN patrón problemático:",
-            "- Contenido sobre clima, familia, comida, deportes personales → general",
-            "",
+            ""
+        ]
+        
+        # Add classification rules from centralized mappings
+        for step_title, rules in CLASSIFICATION_PROMPT_MAPPINGS.items():
+            prompt_parts.append(step_title)
+            prompt_parts.extend(rules)
+            prompt_parts.append("")
+        
+        prompt_parts.extend([
             "IMPORTANTE: Sé menos conservador. Si hay matices políticos, elige la categoría específica.",
             "",
             "RESPUESTA (evalúa en este orden):"
-        ]
+        ])
         
         return "\n".join(prompt_parts)
     
@@ -250,14 +213,15 @@ class EnhancedPromptGenerator:
         """
         uncertainty_areas = []
         
-        # Check for uncertain categorization
-        far_right_result = pattern_results.get('far_right', {})
-        detected_categories = far_right_result.get('categories', [])
-        
-        # Use simple heuristics instead of confidence scores
-        pattern_matches = far_right_result.get('pattern_matches', [])
-        # pattern_matches is a list, not a dict
-        total_patterns = len(pattern_matches) if isinstance(pattern_matches, list) else 0
+        # Check for uncertain categorization using unified pattern result
+        pattern_result = pattern_results.get('pattern_result', None)
+        if pattern_result:
+            detected_categories = pattern_result.categories
+            pattern_matches = pattern_result.pattern_matches
+            total_patterns = len(pattern_matches) if pattern_matches else 0
+        else:
+            detected_categories = []
+            total_patterns = 0
         
         if total_patterns == 0:
             uncertainty_areas.append("Clasificación de contenido ambigua - sin patrones claros")
@@ -265,10 +229,9 @@ class EnhancedPromptGenerator:
         if len(detected_categories) > 2:
             uncertainty_areas.append("Múltiples categorías detectadas - necesita priorización")
         
-        # Check for topic clarity
-        topics = pattern_results.get('topics', [])
-        if topics and len(topics) > 1:
-            uncertainty_areas.append("Múltiples temas políticos detectados")
+        # Check for topic clarity - simplified since we have unified categories now
+        if len(detected_categories) > 1:
+            uncertainty_areas.append("Múltiples categorías detectadas")
         
         return UncertaintyContext(
             uncertainty_areas=uncertainty_areas,
@@ -291,16 +254,19 @@ def create_context_from_analysis(analysis_results: Dict) -> PromptContext:
 if __name__ == "__main__":
     generator = EnhancedPromptGenerator()
     
-    # Test context using consolidated categories
+    # Test context using centralized categories
     test_context = PromptContext(
-        detected_categories=['hate_speech', 'far_right_bias'],  # Updated: xenophobia is now part of hate_speech
+        detected_categories=[Categories.HATE_SPEECH, Categories.FAR_RIGHT_BIAS],
         political_topic='inmigración',
         uncertainty_areas=['Nivel de amenaza real', 'Intención del autor']
     )
     
     test_text = "Los musulmanes están invadiendo España y hay que pararlos ya"
     
-    for analysis_type in AnalysisType:
-        print(f"\n=== {analysis_type.value.upper()} ===")
-        prompt = generator.generate_prompt(test_text, analysis_type, test_context)
+    # Test all content categories using centralized definitions
+    test_categories = Categories.get_all_categories()
+    
+    for category in test_categories:
+        print(f"\n=== {category.upper()} ===")
+        prompt = generator.generate_prompt(test_text, category, test_context)
         print(prompt[:200] + "..." if len(prompt) > 200 else prompt)
