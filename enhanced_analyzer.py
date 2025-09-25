@@ -40,9 +40,6 @@ class ContentAnalysis:
     llm_explanation: str = ""
     analysis_method: str = "pattern"  # "pattern" or "llm"
     
-    # Enhanced metadata
-    targeted_groups: List[str] = None
-    
     # Technical data
     pattern_matches: List[Dict] = None
     topic_classification: Dict = None
@@ -52,8 +49,6 @@ class ContentAnalysis:
         # Initialize lists to avoid None values
         if self.categories_detected is None:
             self.categories_detected = []
-        if self.targeted_groups is None:
-            self.targeted_groups = []
         if self.pattern_matches is None:
             self.pattern_matches = []
     
@@ -175,7 +170,6 @@ class EnhancedAnalyzer:
             categories_detected=categories_detected,
             llm_explanation=llm_explanation,
             analysis_method=analysis_method,
-            targeted_groups=insights['targeted_groups'],
             pattern_matches=[{'matched_text': pm.matched_text, 'category': pm.category, 'description': pm.description} for pm in (pattern_result.pattern_matches if pattern_result else [])],
             topic_classification=analysis_data['topic_classification'],
             analysis_json=json.dumps(analysis_data, ensure_ascii=False, default=str)
@@ -275,12 +269,7 @@ class EnhancedAnalyzer:
         """
         pattern_result = pattern_results['pattern_result']
         
-        # Extract targeted groups
-        targeted_groups = self._extract_targeted_groups(content, pattern_result)
-        
-        return {
-            'targeted_groups': targeted_groups
-        }
+        return {}
     
     def _generate_explanation_with_smart_llm(self, content: str, category: str, 
                                            pattern_results: Dict, insights: Dict, analysis_method: str) -> str:
@@ -350,7 +339,6 @@ class EnhancedAnalyzer:
         # Generate natural language explanations based on category
         if category == "hate_speech":
             base_explanation = "Este contenido presenta características de discurso de odio, utilizando lenguaje discriminatorio y deshumanizante"
-            # Don't mention specific groups to avoid redundancy with targeted_groups field
         
         elif category == "disinformation":
             base_explanation = "Este contenido contiene afirmaciones que presentan características de desinformación"
@@ -557,38 +545,7 @@ class EnhancedAnalyzer:
         }
     
 
-    def _extract_targeted_groups(self, text: str, pattern_result: 'AnalysisResult') -> List[str]:
-        """Extract targeted groups based on actual matched text, not generic categories."""
-        pattern_matches = pattern_result.pattern_matches if pattern_result else []
-        
-        targeted_groups = []
-        text_lower = text.lower()
-        
-        # Extract groups based on what was actually mentioned in the text
-        for match in pattern_matches:
-            matched_text = match.matched_text.lower() if hasattr(match, 'matched_text') else ''
-            context = match.context.lower() if hasattr(match, 'context') else ''
-            full_context = matched_text + ' ' + context
-            
-            # Look for specific group mentions in the matched text and context
-            if any(term in full_context for term in ['sánchez', 'psoe', 'gobierno', 'socialista']):
-                targeted_groups.append('gobierno')
-            if any(term in full_context for term in ['inmigr', 'extranjero', 'moro', 'ilegal']):
-                targeted_groups.append('inmigrantes')
-            if any(term in full_context for term in ['islam', 'muslim', 'musulm']):
-                targeted_groups.append('musulmanes')
-            if any(term in full_context for term in ['zurd', 'rojo', 'marxist', 'communist']):
-                targeted_groups.append('izquierda')
-            if any(term in full_context for term in ['soros', 'élite', 'globalist']):
-                targeted_groups.append('élites')
-            if any(term in full_context for term in ['medios', 'prensa', 'televisión', 'periodist']):
-                targeted_groups.append('medios')
-            if any(term in full_context for term in ['gay', 'lgbt', 'trans', 'homosexual']):
-                targeted_groups.append('lgbtq')
-            if any(term in full_context for term in ['feminazi', 'feminista', 'hembrista']):
-                targeted_groups.append('feministas')
-        
-        return list(set(targeted_groups))[:5]  # Remove duplicates, limit to 5
+    
 
     def cleanup_resources(self):
         """Clean up any resources used by the analyzer."""
@@ -648,7 +605,6 @@ def migrate_database_schema():
         'analysis_method': 'TEXT DEFAULT "pattern"',  # "pattern" or "llm"
         'evidence_sources': 'TEXT',
         'verification_status': 'TEXT DEFAULT "pending"',
-        'targeted_groups': 'TEXT',
         'misinformation_risk': 'TEXT',
         'categories_detected': 'TEXT'  # JSON array of all detected categories
     }
@@ -686,7 +642,6 @@ def init_content_analysis_table():
         category TEXT,                -- Primary category (backward compatibility)
         subcategory TEXT,
         llm_explanation TEXT,
-        targeted_groups TEXT,
         calls_to_action BOOLEAN,
         analysis_json TEXT,
         analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -713,13 +668,12 @@ def save_content_analysis(analysis: ContentAnalysis):
             c.execute('''
             INSERT OR REPLACE INTO content_analyses 
             (tweet_id, tweet_url, username, tweet_content, category, 
-             llm_explanation, analysis_method, targeted_groups, analysis_json, analysis_timestamp,
+             llm_explanation, analysis_method, analysis_json, analysis_timestamp,
              categories_detected) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 analysis.tweet_id, analysis.tweet_url, analysis.username, analysis.tweet_content,
                 analysis.category, analysis.llm_explanation, analysis.analysis_method,
-                json.dumps(analysis.targeted_groups, ensure_ascii=False),
                 analysis.analysis_json, analysis.analysis_timestamp,
                 json.dumps(analysis.categories_detected, ensure_ascii=False)
             ))

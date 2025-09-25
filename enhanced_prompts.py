@@ -20,7 +20,6 @@ class AnalysisType(Enum):
 class PromptContext:
     """Context information for generating targeted prompts."""
     detected_categories: List[str]
-    targeted_groups: List[str]
     political_topic: str
     uncertainty_areas: List[str]
 
@@ -161,12 +160,6 @@ class EnhancedPromptGenerator:
                 ""
             ])
         
-        if context.targeted_groups:
-            prompt_parts.extend([
-                f"GRUPOS MENCIONADOS: {', '.join(context.targeted_groups)}",
-                ""
-            ])
-        
         if context.political_topic and context.political_topic != "no_político":
             prompt_parts.extend([
                 f"CONTEXTO POLÍTICO: {context.political_topic}",
@@ -290,7 +283,6 @@ def create_context_from_analysis(analysis_results: Dict) -> PromptContext:
     """
     return PromptContext(
         detected_categories=analysis_results.get('categories', []),
-        targeted_groups=analysis_results.get('targeted_groups', []),
         political_topic=analysis_results.get('category', 'general'),
         uncertainty_areas=analysis_results.get('uncertainty_areas', [])
     )
@@ -302,7 +294,6 @@ if __name__ == "__main__":
     # Test context using consolidated categories
     test_context = PromptContext(
         detected_categories=['hate_speech', 'far_right_bias'],  # Updated: xenophobia is now part of hate_speech
-        targeted_groups=['inmigrantes', 'musulmanes'],
         political_topic='inmigración',
         uncertainty_areas=['Nivel de amenaza real', 'Intención del autor']
     )
