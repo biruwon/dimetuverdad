@@ -35,65 +35,64 @@ class TestSuite:
         self.save_to_db = save_to_db
     
     def get_essential_pattern_tests(self) -> Dict[str, Dict]:
-        """Essential pattern tests - 2 per consolidated category for maximum coverage with minimal time."""
+        """Essential pattern tests - 1 test per category for comprehensive coverage with minimal time."""
         return {
-            # Core consolidated categories
-            'hate_speech_1': {
+            # All 10 categories with one representative test each
+            'hate_speech': {
                 'content': 'Los moros nos están invadiendo 🤬 Fuera de España!! No queremos más mezquitas aquí',
                 'expected_category': Categories.HATE_SPEECH,
                 'description': 'Direct hate speech with racial slurs'
             },
-            'hate_speech_2': {
-                'content': 'Ya estoy harto de estos menas que no hacen nada más que robar y traficar 😡 Devolvédlos a su país YA!',
-                'expected_category': Categories.HATE_SPEECH,
-                'description': 'Hate speech targeting minors - tests consolidated xenophobia patterns'
-            },
             
-            'disinformation_1': {
+            'disinformation': {
                 'content': '🚨 URGENTE!! Las vacunas COVID tienen grafeno para controlarnos con 5G!! Compartid antes de que lo censuren!!',
                 'expected_category': Categories.DISINFORMATION,
-                'description': 'COVID vaccine misinformation - tests consolidated health_disinformation'
-            },
-            'disinformation_2': {
-                'content': 'Los medios OCULTAN la verdad: 9 de cada 10 casos de COVID son INVENTADOS para meter miedo!!',
-                'expected_category': [Categories.DISINFORMATION, Categories.CONSPIRACY_THEORY],
-                'description': 'False statistics - multi-category test'
+                'description': 'COVID vaccine misinformation'
             },
             
-            'conspiracy_theory_1': {
+            'conspiracy_theory': {
                 'content': 'Soros financia la inmigración masiva para reemplazar a los europeos blancos. Es el plan Kalergi en marcha!! 🚨🚨',
                 'expected_category': Categories.CONSPIRACY_THEORY,
                 'description': 'Great replacement conspiracy theory'
             },
-            'conspiracy_theory_2': {
-                'content': 'Bill Gates, Soros y el Foro de Davos se reunen en secreto para decidir nuestro futuro 👁️ Despertad ovejas!!',
-                'expected_category': Categories.CONSPIRACY_THEORY,
-                'description': 'Elite coordination conspiracy theory'
-            },
             
-            'far_right_bias_1': {
+            'far_right_bias': {
                 'content': 'Los ROJOS han convertido España en Venezuela 🇻🇪 Solo Vox puede salvarnos de estos COMUNISTAS!',
                 'expected_category': Categories.FAR_RIGHT_BIAS,
                 'description': 'Extreme partisan rhetoric against socialists'
             },
-            'far_right_bias_2': {
-                'content': 'La agenda WOKE está destruyendo nuestros valores cristianos!! 😡 Nos quieren convertir en maricas y feminazis',
-                'expected_category': [Categories.FAR_RIGHT_BIAS, Categories.HATE_SPEECH],
-                'description': 'Anti-woke bias with slurs - multi-category test'
-            },
             
-            'call_to_action_1': {
+            'call_to_action': {
                 'content': '🚨 CONVOCATORIA URGENTE!! Todos a Cibeles HOY 18:00h!! A defender España de la INVASIÓN!! RT MASIVO!!',
                 'expected_category': Categories.CALL_TO_ACTION,
                 'description': 'Direct mobilization call with location and time'
             },
-            'call_to_action_2': {
-                'content': 'BASTA YA!! La gente tiene que unirse y salir a las calles antes de que sea demasiado tarde!! #Resistencia',
-                'expected_category': Categories.CALL_TO_ACTION,
-                'description': 'Urgent street mobilization call'
+            
+            'nationalism': {
+                'content': 'España primero! Los patriotas debemos unirnos contra la invasión que quiere destruir nuestra cultura milenaria',
+                'expected_category': Categories.NATIONALISM,
+                'description': 'Nationalist rhetoric with cultural superiority claims'
             },
             
-            'general_1': {
+            'anti_government': {
+                'content': 'El gobierno corrupto nos traiciona mientras las instituciones del régimen nos roban. Hay que resistir!',
+                'expected_category': Categories.ANTI_GOVERNMENT,
+                'description': 'Anti-institutional discourse attacking government legitimacy'
+            },
+            
+            'historical_revisionism': {
+                'content': 'Franco salvó España del comunismo y la historia oficial nos oculta la verdad. Es hora de contar los hechos reales',
+                'expected_category': Categories.HISTORICAL_REVISIONISM,
+                'description': 'Historical revisionism about Spanish Civil War'
+            },
+            
+            'political_general': {
+                'content': 'Las próximas elecciones serán decisivas para el futuro. Hay que votar por el cambio político que España necesita',
+                'expected_category': Categories.POLITICAL_GENERAL,
+                'description': 'General political discourse without extremist elements'
+            },
+            
+            'general': {
                 'content': 'Hoy hace un día muy bonito en Madrid. Perfecto para pasear por el Retiro con la familia ☀️',
                 'expected_category': Categories.GENERAL,
                 'description': 'Normal everyday content that should not match any patterns'
@@ -101,27 +100,63 @@ class TestSuite:
         }
     
     def get_essential_llm_tests(self) -> Dict[str, Dict]:
-        """Essential LLM tests - subtle cases that require LLM analysis."""
+        """Essential LLM tests - subtle cases that require LLM analysis, one per category."""
         return {
-            'hate_speech_llm_1': {
+            'hate_speech_llm': {
                 'content': 'Ya sabéis cómo son esa gente... no cambian nunca. Siempre igual, da igual donde vayan',
                 'expected_category': Categories.HATE_SPEECH,
                 'description': 'Subtle hate speech with implicit derogatory generalizations'
             },
             
-            'disinformation_llm_1': {
+            'disinformation_llm': {
                 'content': 'Mi primo que trabaja en el hospital me dice que todos los casos COVID son gripe común reclasificada',
                 'expected_category': Categories.DISINFORMATION,
                 'description': 'Subtle medical misinformation with fake authority'
             },
             
-            'conspiracy_theory_llm_1': {
+            'conspiracy_theory_llm': {
                 'content': 'Es casualidad que todos los líderes mundiales hablen igual sobre el cambio climático? Alguien les está diciendo qué decir...',
                 'expected_category': Categories.CONSPIRACY_THEORY,
                 'description': 'Subtle conspiracy theory about global coordination'
             },
             
-            'general_llm_1': {
+            'far_right_bias_llm': {
+                'content': 'Los progres han infectado las universidades con su ideología destructiva. La juventud está perdida',
+                'expected_category': Categories.FAR_RIGHT_BIAS,
+                'description': 'Subtle far-right framing without explicit extremism'
+            },
+            
+            'call_to_action_llm': {
+                'content': 'Ya es hora de que los ciudadanos de bien se organicen y hagan algo. No podemos quedarnos de brazos cruzados',
+                'expected_category': Categories.CALL_TO_ACTION,
+                'description': 'Subtle mobilization call without explicit organization'
+            },
+            
+            'nationalism_llm': {
+                'content': 'Los valores tradicionales que construyeron nuestra nación están siendo atacados por fuerzas externas',
+                'expected_category': Categories.NATIONALISM,
+                'description': 'Subtle nationalist discourse about traditional values'
+            },
+            
+            'anti_government_llm': {
+                'content': 'El sistema está podrido desde dentro. Los que mandan no representan al pueblo real',
+                'expected_category': Categories.ANTI_GOVERNMENT,
+                'description': 'Subtle anti-system rhetoric without direct attacks'
+            },
+            
+            'historical_revisionism_llm': {
+                'content': 'La historia que nos enseñaron en el colegio está incompleta. Hay muchos hechos que nos ocultaron',
+                'expected_category': Categories.HISTORICAL_REVISIONISM,
+                'description': 'Subtle historical revisionism without specific claims'
+            },
+            
+            'political_general_llm': {
+                'content': 'Las políticas económicas actuales no están funcionando. Necesitamos un cambio de rumbo serio',
+                'expected_category': Categories.POLITICAL_GENERAL,
+                'description': 'General political criticism without extremist framing'
+            },
+            
+            'general_llm': {
                 'content': 'Me parece que el gobierno debería invertir más en educación pública y menos en otras cosas',
                 'expected_category': Categories.GENERAL,
                 'description': 'Normal political opinion without extremist elements'
@@ -134,7 +169,7 @@ class TestSuite:
         
         if quick_mode:
             # In quick mode, take only 2 tests total for fastest execution
-            test_cases = {k: v for i, (k, v) in enumerate(test_cases.items()) if i < 2}  # 2 tests total
+            test_cases = dict(list(test_cases.items())[:2])  # First 2 tests only
         
         print("🔍 TESTING PATTERN-BASED DETECTION")
         print("=" * 60)
@@ -211,7 +246,7 @@ class TestSuite:
         test_cases = self.get_essential_llm_tests()
         
         if quick_mode:
-            test_cases = {k: v for i, (k, v) in enumerate(test_cases.items()) if i < 2}  # 2 tests in quick mode
+            test_cases = dict(list(test_cases.items())[:2])  # 2 tests in quick mode
         
         print("🧠 TESTING LLM-BASED CLASSIFICATION")
         print("=" * 60)
@@ -275,7 +310,9 @@ class TestSuite:
         """Run the complete test suite."""
         print(f"🚀  TEST SUITE")
         if quick_mode:
-            print("⚡ Quick mode: Running 2 tests only...")
+            print("⚡ Quick mode: Running 4 tests only (2 pattern + 2 LLM)...")
+        else:
+            print("📊 Full mode: Running all 20 tests (10 pattern + 10 LLM)...")
         print("=" * 70)
         
         start_time = time.time()

@@ -153,6 +153,10 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
                 Categories.CONSPIRACY_THEORY: '🕵️',
                 Categories.FAR_RIGHT_BIAS: '⚡',
                 Categories.CALL_TO_ACTION: '📢',
+                Categories.NATIONALISM: '🏴',
+                Categories.ANTI_GOVERNMENT: '🏛️',
+                Categories.HISTORICAL_REVISIONISM: '📜',
+                Categories.POLITICAL_GENERAL: '🗳️',
                 Categories.GENERAL: '✅'
             }.get(category, '❓')
             

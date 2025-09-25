@@ -34,6 +34,10 @@ Categories:
   🕵️ conspiracy_theory: Conspiracy theories, hidden agendas
   ⚡ far_right_bias: Far-right political bias, extremist views
   📢 call_to_action: Mobilization calls, organized actions
+  🏴 nationalism: Nationalist rhetoric, cultural superiority
+  🏛️ anti_government: Anti-institutional, anti-system discourse  
+  📜 historical_revisionism: Historical revisionism, denial
+  🗳️ political_general: General political discourse
   ✅ general: Neutral, non-problematic content
         """
     )
@@ -179,6 +183,10 @@ def analyze_single_text(analyzer, text, json_output=False):
                 Categories.CONSPIRACY_THEORY: '🕵️',
                 Categories.FAR_RIGHT_BIAS: '⚡',
                 Categories.CALL_TO_ACTION: '📢',
+                Categories.NATIONALISM: '🏴',
+                Categories.ANTI_GOVERNMENT: '🏛️',
+                Categories.HISTORICAL_REVISIONISM: '📜',
+                Categories.POLITICAL_GENERAL: '🗳️',
                 Categories.GENERAL: '✅'
             }
             
@@ -212,6 +220,10 @@ def print_help():
   🕵️ conspiracy_theory - Conspiracy theories, hidden agendas  
   ⚡ far_right_bias   - Far-right political bias
   📢 call_to_action   - Mobilization calls, actions
+  🏴 nationalism      - Nationalist rhetoric, superiority
+  🏛️ anti_government   - Anti-institutional discourse
+  📜 historical_revisionism - Historical revisionism, denial  
+  🗳️ political_general - General political discourse
   ✅ general          - Neutral, non-problematic content
     """)
 

@@ -188,7 +188,7 @@ class PatternAnalyzer:
                 'description': 'Calls to action and mobilization'
             },
             
-            'nationalism': {
+            Categories.NATIONALISM: {
                 'patterns': [
                     # Spanish nationalism
                     r'\b(?:España|Europa)\s+para\s+(?:los\s+)?españoles?\b',
@@ -207,7 +207,7 @@ class PatternAnalyzer:
                 'description': 'Nationalist rhetoric and identity politics'
             },
             
-            'anti_government': {
+            Categories.ANTI_GOVERNMENT: {
                 'patterns': [
                     # Government as illegitimate
                     r'\b(?:régimen|dictadura|tiranía)\s+(?:de\s+)?(?:sánchez|socialista)\b',
@@ -224,7 +224,7 @@ class PatternAnalyzer:
                 'description': 'Anti-government rhetoric and delegitimization'
             },
             
-            'historical_revisionism': {
+            Categories.HISTORICAL_REVISIONISM: {
                 'patterns': [
                     # Franco rehabilitation
                     r'\b(?:franco|franquismo)\s+(?:fue\s+)?(?:necesario|salvador|héroe|gran\s+líder|mejor)\b',
@@ -242,7 +242,7 @@ class PatternAnalyzer:
                 'description': 'Historical revisionism and dictatorship rehabilitation'
             },
             
-            'political_general': {
+            Categories.POLITICAL_GENERAL: {
                 'patterns': [
                     # Specific political institutional terms
                     r'\b(?:elecciones?|votar|sufragio|electoral)\b',
@@ -321,8 +321,8 @@ class PatternAnalyzer:
         
         # If no extremist patterns but has political context, mark as political_general
         if not detected_categories and political_context:
-            primary_category = "political_general"
-            detected_categories = ["political_general"]
+            primary_category = Categories.POLITICAL_GENERAL
+            detected_categories = [Categories.POLITICAL_GENERAL]
         
         return AnalysisResult(
             categories=detected_categories,

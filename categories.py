@@ -17,6 +17,10 @@ class Categories:
     CONSPIRACY_THEORY = "conspiracy_theory"
     FAR_RIGHT_BIAS = "far_right_bias"
     CALL_TO_ACTION = "call_to_action"
+    NATIONALISM = "nationalism"
+    ANTI_GOVERNMENT = "anti_government"
+    HISTORICAL_REVISIONISM = "historical_revisionism"
+    POLITICAL_GENERAL = "political_general"
     GENERAL = "general"
     
     @classmethod
@@ -28,6 +32,10 @@ class Categories:
             cls.CONSPIRACY_THEORY,
             cls.FAR_RIGHT_BIAS,
             cls.CALL_TO_ACTION,
+            cls.NATIONALISM,
+            cls.ANTI_GOVERNMENT,
+            cls.HISTORICAL_REVISIONISM,
+            cls.POLITICAL_GENERAL,
             cls.GENERAL
         ]
 
@@ -113,6 +121,58 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Cuál es el nivel de urgencia de la llamada?"
         ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Evalúa específicamente llamadas a la acción y movilización."
+    ),
+    
+    Categories.NATIONALISM: CategoryInfo(
+        name=Categories.NATIONALISM,
+        display_name="Nacionalismo",
+        description="Comunicación que enfatiza la identidad nacional como valor primordial y marco interpretativo. Características: exaltación de símbolos patrios, narrativas de identidad nacional amenazada, retórica de soberanía y tradición.",
+        focus_area="análisis de retórica nacionalista",
+        analysis_questions=[
+            "¿Se manifiesta retórica nacionalista excluyente?",
+            "¿Hay exaltación de símbolos o valores nacionales?",
+            "¿Se presenta la identidad nacional como amenazada?"
+        ],
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido nacionalista y de identidad nacional."
+    ),
+    
+    Categories.ANTI_GOVERNMENT: CategoryInfo(
+        name=Categories.ANTI_GOVERNMENT,
+        display_name="Anti-Gubernamental",
+        description="Comunicación que cuestiona la legitimidad institucional del gobierno. Características: deslegitimización del poder político, narrativas de autoritarismo, retórica anti-establishment.",
+        focus_area="análisis de retórica anti-gubernamental",
+        analysis_questions=[
+            "¿Se cuestiona la legitimidad del gobierno?",
+            "¿Hay retórica deslegitimizadora de instituciones?",
+            "¿Se promueve resistencia o desobediencia?"
+        ],
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-gubernamental y anti-institucional."
+    ),
+    
+    Categories.HISTORICAL_REVISIONISM: CategoryInfo(
+        name=Categories.HISTORICAL_REVISIONISM,
+        display_name="Revisionismo Histórico",
+        description="Comunicación que reinterpreta eventos históricos para justificar narrativas políticas actuales. Características: rehabilitación de figuras controvertidas, minimización de eventos históricos problemáticos, narrativas nostálgicas del pasado autoritario.",
+        focus_area="análisis de revisionismo histórico",
+        analysis_questions=[
+            "¿Se reinterpreta la historia de forma sesgada?",
+            "¿Hay rehabilitación de figuras o regímenes autoritarios?",
+            "¿Se minimizan eventos históricos problemáticos?"
+        ],
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente revisionismo histórico y narrativas nostálgicas."
+    ),
+    
+    Categories.POLITICAL_GENERAL: CategoryInfo(
+        name=Categories.POLITICAL_GENERAL,
+        display_name="Política General",
+        description="Comunicación de contenido político general sin características extremistas identificables. Características: discusión de temas políticos convencionales, opiniones políticas moderadas, información política factual.",
+        focus_area="análisis de contenido político general",
+        analysis_questions=[
+            "¿Cuáles son los temas políticos tratados?",
+            "¿Qué perspectiva política se presenta?",
+            "¿Hay elementos de debate político constructivo?"
+        ],
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza contenido político general y opiniones políticas convencionales."
     ),
     
     Categories.GENERAL: CategoryInfo(

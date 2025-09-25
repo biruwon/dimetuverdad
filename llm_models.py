@@ -1328,18 +1328,6 @@ class EnhancedLLMPipeline:
                 if category in result:
                     return category
             
-            # Check for common Spanish terms quickly
-            if "odio" in result or "discrimina" in result:
-                return Categories.HATE_SPEECH
-            elif "desinforma" in result or "falso" in result:
-                return Categories.DISINFORMATION
-            elif "conspira" in result:
-                return Categories.CONSPIRACY_THEORY
-            elif "sesgo" in result or "político" in result:
-                return Categories.FAR_RIGHT_BIAS
-            elif "acción" in result or "moviliza" in result:
-                return Categories.CALL_TO_ACTION
-            
             # Fallback to general if no valid category found
             return Categories.GENERAL
             

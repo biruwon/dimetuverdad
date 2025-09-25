@@ -46,7 +46,10 @@
         .tweet-card.analysis-conspiracy_theory { border-left-color: #6f42c1; }
         .tweet-card.analysis-far_right_bias { border-left-color: #e83e8c; }
         .tweet-card.analysis-call_to_action { border-left-color: #20c997; }
-        .tweet-card.analysis-political_general { border-left-color: #007bff; }
+        .tweet-card.analysis-nationalism { border-left-color: #795548; }
+        .tweet-card.analysis-anti_government { border-left-color: #607d8b; }
+        .tweet-card.analysis-historical_revisionism { border-left-color: #8bc34a; }
+        .tweet-card.analysis-political_general { border-left-color: #2196f3; }
         .tweet-card.analysis-general { border-left-color: #6c757d; }
         
         .stats-card {
@@ -76,10 +79,10 @@
         .category-conspiracy_theory { background-color: #6f42c1; }
         .category-far_right_bias { background-color: #e83e8c; }
         .category-call_to_action { background-color: #20c997; }
-        .category-nationalism { background-color: #17a2b8; }
-        .category-anti_government { background-color: #28a745; }
-        .category-historical_revisionism { background-color: #ffc107; color: #212529; }
-        .category-political_general { background-color: #007bff; }
+        .category-nationalism { background-color: #795548; }
+        .category-anti_government { background-color: #607d8b; }
+        .category-historical_revisionism { background-color: #8bc34a; color: #212529; }
+        .category-political_general { background-color: #2196f3; }
         .category-general { background-color: #6c757d; }
         
         /* Multi-category badge styles */
@@ -551,7 +554,7 @@
                     {{ item.count }}{% if not loop.last %},{% endif %}
                     {% endfor %}
                 ],
-                backgroundColor: ['#dc3545', '#fd7e14', '#6f42c1', '#e83e8c', '#20c997', '#6c757d']
+                backgroundColor: ['#dc3545', '#fd7e14', '#6f42c1', '#e83e8c', '#20c997', '#795548', '#607d8b', '#8bc34a', '#2196f3', '#6c757d']
             }]
         };
 

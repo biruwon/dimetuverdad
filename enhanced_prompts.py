@@ -333,6 +333,38 @@ class EnhancedPromptGenerator:
                     "¿Cuál es la urgencia o motivación para la movilización?"
                 ]
             },
+            Categories.NATIONALISM: {
+                "focus": "retórica nacionalista y exaltación de la identidad nacional",
+                "questions": [
+                    "¿Qué símbolos o valores nacionales se exaltan?",
+                    "¿Cómo se presenta la identidad nacional como amenazada?",
+                    "¿Qué elementos de nacionalismo excluyente se detectan?"
+                ]
+            },
+            Categories.ANTI_GOVERNMENT: {
+                "focus": "retórica anti-gubernamental y deslegitimización institucional",
+                "questions": [
+                    "¿Qué aspectos del gobierno se cuestionan como ilegítimos?",
+                    "¿Cómo se manifiesta la retórica anti-establishment?",
+                    "¿Se promueve resistencia o desobediencia institucional?"
+                ]
+            },
+            Categories.HISTORICAL_REVISIONISM: {
+                "focus": "reinterpretación sesgada de eventos históricos",
+                "questions": [
+                    "¿Qué eventos históricos se reinterpretan de forma problemática?",
+                    "¿Se rehabilitan figuras o regímenes controvertidos?",
+                    "¿Cómo se usa la historia para justificar narrativas actuales?"
+                ]
+            },
+            Categories.POLITICAL_GENERAL: {
+                "focus": "contenido político convencional sin elementos extremistas",
+                "questions": [
+                    "¿Qué temas políticos se tratan de forma constructiva?",
+                    "¿Qué perspectiva política moderada se presenta?",
+                    "¿Por qué no entra en categorías problemáticas específicas?"
+                ]
+            },
             Categories.GENERAL: {
                 "focus": "contenido neutral o político moderado sin elementos extremistas",
                 "questions": [

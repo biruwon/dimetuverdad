@@ -52,6 +52,10 @@
         .category-conspiracy_theory { background-color: #6f42c1; }
         .category-far_right_bias { background-color: #e83e8c; }
         .category-call_to_action { background-color: #20c997; }
+        .category-nationalism { background-color: #795548; }
+        .category-anti_government { background-color: #607d8b; }
+        .category-historical_revisionism { background-color: #8bc34a; }
+        .category-political_general { background-color: #2196f3; }
         .category-general { background-color: #6c757d; }
         
         .account-card {
@@ -297,6 +301,22 @@
                                 <strong>Llamada a la Acción:</strong> Movilización y acciones organizadas
                             </div>
                             <div class="col-md-4 mb-2">
+                                <span class="badge category-nationalism category-badge me-2">🏴</span>
+                                <strong>Nacionalismo:</strong> Retórica nacionalista y superioridad cultural
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <span class="badge category-anti_government category-badge me-2">🏛️</span>
+                                <strong>Anti-gobierno:</strong> Discurso anti-institucional y anti-sistema
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <span class="badge category-historical_revisionism category-badge me-2">📜</span>
+                                <strong>Revisionismo Histórico:</strong> Revisionismo histórico y negación
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <span class="badge category-political_general category-badge me-2">🗳️</span>
+                                <strong>Político General:</strong> Discurso político general
+                            </div>
+                            <div class="col-md-4 mb-2">
                                 <span class="badge category-general category-badge me-2">✅</span>
                                 <strong>General:</strong> Contenido neutral, no problemático
                             </div>
@@ -337,6 +357,10 @@
                             {% if item.category == 'conspiracy_theory' %}'#6f42c1'{% endif %}
                             {% if item.category == 'far_right_bias' %}'#d63384'{% endif %}
                             {% if item.category == 'call_to_action' %}'#198754'{% endif %}
+                            {% if item.category == 'nationalism' %}'#795548'{% endif %}
+                            {% if item.category == 'anti_government' %}'#607d8b'{% endif %}
+                            {% if item.category == 'historical_revisionism' %}'#8bc34a'{% endif %}
+                            {% if item.category == 'political_general' %}'#2196f3'{% endif %}
                             {% if item.category == 'general' %}'#6c757d'{% endif %}
                             {% if not loop.last %},{% endif %}
                             {% endfor %}
