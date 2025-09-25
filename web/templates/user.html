@@ -176,67 +176,87 @@
         <!-- Header -->
         <div class="row mb-4">
             <div class="col-12">
-                <h1 class="display-6 mb-2">
-                    <i class="fab fa-twitter text-primary me-3"></i>
-                    @{{ username }}
-                </h1>
-                <p class="text-muted">
-                    Análisis detallado del contenido político
-                </p>
+                <div class="d-flex align-items-center mb-3">
+                    {% if user_profile_pic or (tweets_data.tweets and tweets_data.tweets[0].profile_pic_url) %}
+                    <img src="{{ user_profile_pic or tweets_data.tweets[0].profile_pic_url }}" 
+                         alt="@{{ username }}" 
+                         class="rounded-circle me-3" 
+                         width="60" 
+                         height="60"
+                         style="object-fit: cover;">
+                    {% endif %}
+                    <div>
+                        <h1 class="display-6 mb-2">
+                            <i class="fab fa-twitter text-primary me-3"></i>
+                            @{{ username }}
+                        </h1>
+                        <p class="text-muted mb-0">
+                            Análisis detallado del contenido político
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Statistics Overview -->
+        <!-- Simplified Statistics Overview - Only Analyzed Posts -->
         {% if stats.basic %}
         <div class="row mb-4">
             <div class="col-12">
-                <h3 class="mb-3">
-                    <i class="fas fa-chart-bar text-secondary me-2"></i>
-                    Estadísticas de la Cuenta
-                </h3>
-            </div>
-            <div class="col-lg-3 col-md-6 mb-3">
-                <div class="card stats-card text-center">
-                    <div class="card-body py-3">
-                        <div class="metric-value">{{ stats.basic.total_tweets or 0 }}</div>
-                        <div class="metric-label">Total Tweets</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-3 col-md-6 mb-3">
-                <div class="card stats-card text-center" style="background: linear-gradient(135deg, var(--success-color), var(--primary-color));">
-                    <div class="card-body py-3">
-                        <div class="metric-value">{{ stats.basic.active_days or 0 }}</div>
-                        <div class="metric-label">Días Activos</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-3 col-md-6 mb-3">
-                <div class="card stats-card text-center" style="background: linear-gradient(135deg, var(--warning-color), var(--accent-color));">
-                    <div class="card-body py-3">
-                        <div class="metric-value">{{ stats.basic.tweets_with_media or 0 }}</div>
-                        <div class="metric-label">Con Multimedia</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-3 col-md-6 mb-3">
-                <div class="card stats-card text-center" style="background: linear-gradient(135deg, var(--accent-color), var(--dark-color));">
-                    <div class="card-body py-3">
-                        <div class="metric-value">
-                            {% set analyzed_count = 0 %}
-                            {% for tweet in tweets %}
-                                {% if tweet.analysis_category %}
-                                    {% set analyzed_count = analyzed_count + 1 %}
-                                {% endif %}
-                            {% endfor %}
-                            {{ analyzed_count }}
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-12">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-brain text-success fs-2 me-3"></i>
+                                    <div>
+                                        <div class="h2 mb-1 text-success">{{ stats.basic.analyzed_posts or 0 }}</div>
+                                        <div class="text-muted">Posts Analizados</div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="metric-label">Analizados</div>
                     </div>
                 </div>
             </div>
         </div>
         {% endif %}
+
+        <!-- Category Filter -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">
+                            <i class="fas fa-filter text-primary me-2"></i>
+                            Filtrar por Categoría
+                        </h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="?" class="btn btn-sm {% if not current_category %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                                <i class="fas fa-list me-1"></i>Todos
+                            </a>
+                            <a href="?category=hate_speech" class="btn btn-sm {% if current_category == 'hate_speech' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                                🚫 Discurso de Odio
+                            </a>
+                            <a href="?category=disinformation" class="btn btn-sm {% if current_category == 'disinformation' %}btn-warning{% else %}btn-outline-warning{% endif %}">
+                                ❌ Desinformación
+                            </a>
+                            <a href="?category=conspiracy_theory" class="btn btn-sm {% if current_category == 'conspiracy_theory' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
+                                🕵️ Conspiración
+                            </a>
+                            <a href="?category=far_right_bias" class="btn btn-sm {% if current_category == 'far_right_bias' %}btn-info{% else %}btn-outline-info{% endif %}">
+                                ⚡ Sesgo Extremista
+                            </a>
+                            <a href="?category=call_to_action" class="btn btn-sm {% if current_category == 'call_to_action' %}btn-success{% else %}btn-outline-success{% endif %}">
+                                📢 Llamada a Acción
+                            </a>
+                            <a href="?category=general" class="btn btn-sm {% if current_category == 'general' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                                ✅ General
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Analysis Charts -->
         <div class="row mb-4">
@@ -259,17 +279,30 @@
 
         <!-- Tweets -->
         <div class="row">
-            <div class="col-12">
-                <h3 class="mb-3">
+            <div class="col-12 d-flex justify-content-between align-items-center mb-3">
+                <h3 class="mb-0">
                     <i class="fas fa-comments text-secondary me-2"></i>
-                    Tweets Analizados ({{ tweets|length }} encontrados)
+                    Tweets Analizados
+                    {% if current_category %}
+                    <span class="badge bg-secondary ms-2">Filtrado: {{ current_category|title|replace('_', ' ') }}</span>
+                    {% endif %}
                 </h3>
+                <div>
+                    {% if tweets_data.total_pages > 1 %}
+                    <small class="text-muted">
+                        Página {{ tweets_data.page }} de {{ tweets_data.total_pages }} 
+                        ({{ tweets_data.total_tweets }} tweets)
+                    </small>
+                    {% else %}
+                    <small class="text-muted">({{ tweets_data.tweets|length }} tweets encontrados)</small>
+                    {% endif %}
+                </div>
             </div>
         </div>
 
-        {% if tweets %}
+        {% if tweets_data.tweets %}
         <div class="row">
-            {% for tweet in tweets %}
+            {% for tweet in tweets_data.tweets %}
             <div class="col-12 mb-4">
                 <div class="card tweet-card {% if tweet.analysis_category %}analysis-{{ tweet.analysis_category }}{% endif %}">
                     <div class="card-body">
@@ -279,6 +312,14 @@
                                 <h6 class="mb-1">
                                     <i class="fab fa-twitter text-primary me-2"></i>
                                     @{{ username }}
+                                    {% if tweet.profile_pic_url %}
+                                    <img src="{{ tweet.profile_pic_url }}" 
+                                         alt="@{{ username }}" 
+                                         class="rounded-circle ms-2" 
+                                         width="20" 
+                                         height="20"
+                                         style="object-fit: cover;">
+                                    {% endif %}
                                 </h6>
                                 <small class="text-muted">
                                     <i class="fas fa-calendar me-1"></i>
@@ -430,6 +471,49 @@
             </div>
             {% endfor %}
         </div>
+        
+        <!-- Pagination -->
+        {% if tweets_data.total_pages > 1 %}
+        <div class="row mt-4">
+            <div class="col-12">
+                <nav aria-label="Tweet pagination">
+                    <ul class="pagination justify-content-center">
+                        {% if tweets_data.page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ tweets_data.page - 1 }}{% if current_category %}&category={{ current_category }}{% endif %}">
+                                <i class="fas fa-chevron-left me-1"></i>Anterior
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% for page_num in range(1, tweets_data.total_pages + 1) %}
+                            {% if page_num == tweets_data.page %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_num }}</span>
+                            </li>
+                            {% elif page_num <= 3 or page_num > tweets_data.total_pages - 3 or (page_num >= tweets_data.page - 1 and page_num <= tweets_data.page + 1) %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_num }}{% if current_category %}&category={{ current_category }}{% endif %}">{{ page_num }}</a>
+                            </li>
+                            {% elif page_num == 4 and tweets_data.page > 5 %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% elif page_num == tweets_data.total_pages - 3 and tweets_data.page < tweets_data.total_pages - 4 %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if tweets_data.page < tweets_data.total_pages %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ tweets_data.page + 1 }}{% if current_category %}&category={{ current_category }}{% endif %}">
+                                Siguiente<i class="fas fa-chevron-right ms-1"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+        </div>
+        {% endif %}
         {% else %}
         <div class="row">
             <div class="col-12">

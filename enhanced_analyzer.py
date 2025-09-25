@@ -5,18 +5,17 @@ Integrates specialized components for content analysis workflow.
 
 import json
 import os
+import re
 import sqlite3
 import time
 import warnings
 from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
 
 # Import our enhanced components
 from unified_pattern_analyzer import UnifiedPatternAnalyzer
-from claim_detector import SpanishClaimDetector, VerifiabilityLevel
-# Evidence retrieval skipped as requested
-# from retrieval import retrieve_evidence_for_post, format_evidence
+from claim_detector import SpanishClaimDetector
 from llm_models import EnhancedLLMPipeline
 
 # Suppress warnings for cleaner output
@@ -124,8 +123,7 @@ class EnhancedAnalyzer:
                              tweet_id: str,
                              tweet_url: str, 
                              username: str,
-                             content: str,
-                             retrieve_evidence: bool = False) -> ContentAnalysis:
+                             content: str) -> ContentAnalysis:
         """
         Main content analysis pipeline with consolidated pattern analysis.
         """
@@ -285,7 +283,6 @@ class EnhancedAnalyzer:
 
     def _has_action_language(self, text: str) -> bool:
         """Quick check for action/mobilization language."""
-        import re
         action_patterns = [
             r'\b(?:concentración|manifestación|calles|resistencia)\b',
             r'\b(?:organizad|difunde|comparte|despertad)\b',
@@ -529,9 +526,6 @@ class EnhancedAnalyzer:
         if category == "far_right_bias":
             explanation_parts = []
             
-            # Check what specific patterns were detected for far-right bias
-            pattern_matches = pattern_results['far_right'].get('pattern_matches', [])
-            
             # Analyze the specific type of bias detected
             content_lower = content.lower()
             
@@ -624,69 +618,6 @@ class EnhancedAnalyzer:
         }
     
 
-    def _generate_pattern_explanation(self, far_right_result: Dict, content: str) -> str:
-        """Generate explanation for detected patterns."""
-        detected_categories = far_right_result.get('categories', [])
-        
-        if not detected_categories:
-            return "Contenido con características de sesgo político"
-        
-        # Map categories to Spanish descriptions
-        category_descriptions = {
-            'hate_speech': 'discurso de odio',
-            'xenophobia': 'xenofobia',
-            'nationalism': 'nacionalismo extremo',
-            'conspiracy': 'teorías conspiratorias',
-            'violence_incitement': 'incitación a la violencia',
-            'anti_government': 'retórica anti-gobierno',
-            'historical_revisionism': 'revisionismo histórico'
-        }
-        
-        descriptions = [category_descriptions.get(cat, cat) for cat in detected_categories[:3]]
-        return f"Patrones de {', '.join(descriptions)}"
-    
-    def _generate_claims_explanation(self, claims: List) -> str:
-        """Generate explanation for detected claims."""
-        if not claims:
-            return "No se detectaron afirmaciones verificables"
-        
-        claim_types = [claim.claim_type.value for claim in claims[:3]]
-        return f"Afirmaciones de tipo {', '.join(set(claim_types))} ({len(claims)} total)"
-    
-    def _get_llm_explanation(self, content: str, category: str, explanation_parts: List[str]) -> Optional[str]:
-        """Get enhanced explanation from LLM if available."""
-        if not self.llm_pipeline:
-            return None
-        
-        analysis_context = {
-            'category': category,
-            'existing_analysis': " | ".join(explanation_parts),
-            'pattern_matches': [{'category': category}]
-        }
-        
-        try:
-            llm_result = self.llm_pipeline.analyze_content(content, analysis_context)
-            return llm_result.get('llm_explanation', '')
-        except Exception as e:
-            print(f"⚠️ Error en análisis LLM: {e}")
-            return None
-    
-
-    
-    def _generate_category_explanation(self, category: str, content: str) -> str:
-        """Generate explanation based on detected category."""
-        category_explanations = {
-            "hate_speech": "Detectado discurso de odio con lenguaje discriminatorio",
-            "disinformation": "Identificada posible desinformación o contenido falso",
-            "conspiracy_theory": "Detectadas teorías conspiratorias sin evidencia",
-            "far_right_bias": "Contenido con marcos interpretativos de extrema derecha",
-            "call_to_action": "Detectada llamada a la acción o movilización"
-        }
-        
-        return category_explanations.get(category, "Contenido categorizado")
-    
-    
-
     def _extract_targeted_groups(self, text: str, far_right_result: Dict) -> List[str]:
         """Extract targeted groups based on actual matched text, not generic categories."""
         pattern_matches = far_right_result.get('pattern_matches', [])
@@ -719,17 +650,6 @@ class EnhancedAnalyzer:
                 targeted_groups.append('feministas')
         
         return list(set(targeted_groups))[:5]  # Remove duplicates, limit to 5
-    
-    def _detect_calls_to_action(self, text: str, far_right_result: Dict) -> bool:
-        """Detect calls to action using pattern analysis results."""
-        detected_categories = far_right_result.get('categories', [])
-        
-        # Check for action-oriented pattern categories
-        if any(cat in detected_categories for cat in ['violence_incitement', 'anti_government']):
-            # Additional check for explicit action language
-            return self._has_action_language(text)
-        
-        return False
 
     def cleanup_resources(self):
         """Clean up any resources used by the analyzer."""
@@ -844,7 +764,6 @@ def init_content_analysis_table():
 
 def save_content_analysis(analysis: ContentAnalysis):
     """Save content analysis to database with retry logic."""
-    import time
     max_retries = 3
     retry_delay = 1
     

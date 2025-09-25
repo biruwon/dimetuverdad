@@ -103,63 +103,22 @@
             </div>
         </div>
 
-        <!-- Overall Statistics -->
-        {% if overall_stats %}
-        <div class="row mb-4">
-            <div class="col-12">
-                <h3 class="mb-3">
-                    <i class="fas fa-globe me-2 text-secondary"></i>
-                    Estadísticas Generales
-                </h3>
-            </div>
-            <div class="col-md-3">
-                <div class="card stats-card text-center py-3">
-                    <div class="card-body">
-                        <div class="metric-value">{{ overall_stats.total_tweets or 0 }}</div>
-                        <div class="metric-label text-light">Total Tweets</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stats-card text-center py-3" style="background: linear-gradient(135deg, var(--success-color), var(--primary-color));">
-                    <div class="card-body">
-                        <div class="metric-value">{{ overall_stats.total_accounts or 0 }}</div>
-                        <div class="metric-label text-light">Cuentas Analizadas</div>
-                    </div>
-                </div>
-            </div>
-                        <div class="col-lg-3 col-md-6 mb-3">
-                <div class="card stats-card text-center" style="background: linear-gradient(135deg, var(--warning-color), var(--accent-color));">
-                    <div class="card-body py-3">
-                        <div class="metric-value">{{ overall_stats.tweets_with_media or 0 }}</div>
-                        <div class="metric-label">Con Multimedia</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-3 col-md-6 mb-3">
-                <div class="card stats-card text-center" style="background: linear-gradient(135deg, var(--accent-color), var(--dark-color));">
-                    <div class="card-body py-3">
-                        <div class="metric-value">{{ overall_stats.analyzed_tweets or 0 }}</div>
-                        <div class="metric-label">Tweets Analizados</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
         <div class="row">
             <!-- Analysis Distribution -->
-            <div class="col-lg-6 mb-4">
+            <div class="col-lg-8 mb-4">
                 <div class="card h-100">
                     <div class="card-header bg-white">
                         <h5 class="mb-0">
                             <i class="fas fa-pie-chart text-primary me-2"></i>
                             Distribución de Análisis
+                            {% if current_category %}
+                            <span class="badge bg-secondary ms-2">Filtrado por: {{ current_category|title }}</span>
+                            {% endif %}
                         </h5>
                     </div>
                     <div class="card-body">
                         {% if analysis_distribution %}
-                        <canvas id="analysisChart" width="400" height="300"></canvas>
+                        <canvas id="analysisChart" width="400" height="300" style="cursor: pointer;"></canvas>
                         {% else %}
                         <div class="text-center text-muted py-4">
                             <i class="fas fa-chart-pie fa-3x mb-3"></i>
@@ -171,45 +130,52 @@
             </div>
 
             <!-- Accounts List -->
-            <div class="col-lg-6 mb-4">
+            <div class="col-lg-4 mb-4">
                 <div class="card h-100">
-                    <div class="card-header bg-white">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">
                             <i class="fas fa-users text-primary me-2"></i>
                             Cuentas Monitoreadas
                         </h5>
+                        {% if accounts_data.total_pages > 1 %}
+                        <small class="text-muted">Página {{ accounts_data.page }} de {{ accounts_data.total_pages }}</small>
+                        {% endif %}
                     </div>
                     <div class="card-body">
-                        {% if accounts %}
+                        {% if accounts_data.accounts %}
                         <div class="row">
-                            {% for account in accounts %}
+                            {% for account in accounts_data.accounts %}
                             <div class="col-12 mb-3">
                                 <div class="account-card card border-0 bg-light">
                                     <div class="card-body py-2">
                                         <div class="d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <a href="/user/{{ account.username }}" class="text-decoration-none">
-                                                    <h6 class="mb-1 text-primary">
-                                                        <i class="fab fa-twitter me-1"></i>
-                                                        @{{ account.username }}
-                                                    </h6>
-                                                </a>
-                                                <small class="text-muted">
-                                                    <i class="fas fa-message me-1"></i>
-                                                    {{ account.tweet_count }} tweets
-                                                    <span class="mx-2">•</span>
-                                                    <i class="fas fa-clock me-1"></i>
-                                                    {% if account.last_activity %}
-                                                        {{ account.last_activity[:10] }}
-                                                    {% else %}
-                                                        Sin actividad reciente
-                                                    {% endif %}
-                                                </small>
+                                            <div class="d-flex align-items-center">
+                                                <div class="me-3">
+                                                    <img src="{{ account.profile_pic_url or 'https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png' }}" 
+                                                         alt="@{{ account.username }}" 
+                                                         class="rounded-circle" 
+                                                         width="40" 
+                                                         height="40"
+                                                         style="object-fit: cover;">
+                                                </div>
+                                                <div>
+                                                    <a href="/user/{{ account.username }}" class="text-decoration-none">
+                                                        <h6 class="mb-1 text-primary">
+                                                            <i class="fab fa-twitter me-1"></i>
+                                                            @{{ account.username }}
+                                                        </h6>
+                                                    </a>
+                                                    <small class="text-muted">
+                                                        <span class="badge bg-danger me-1">{{ account.problematic_posts }}</span> problemáticos
+                                                        <span class="mx-1">•</span>
+                                                        <span class="badge bg-info">{{ account.analyzed_posts }}</span> analizados
+                                                    </small>
+                                                </div>
                                             </div>
                                             <div>
                                                 <a href="/user/{{ account.username }}" class="btn btn-outline-primary btn-sm">
                                                     <i class="fas fa-eye me-1"></i>
-                                                    Ver Análisis
+                                                    Ver
                                                 </a>
                                             </div>
                                         </div>
@@ -218,6 +184,41 @@
                             </div>
                             {% endfor %}
                         </div>
+                        
+                        <!-- Pagination -->
+                        {% if accounts_data.total_pages > 1 %}
+                        <nav aria-label="Account pagination" class="mt-3">
+                            <ul class="pagination pagination-sm justify-content-center mb-0">
+                                {% if accounts_data.page > 1 %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ accounts_data.page - 1 }}{% if current_category %}&category={{ current_category }}{% endif %}">Anterior</a>
+                                </li>
+                                {% endif %}
+                                
+                                {% for page_num in range(1, accounts_data.total_pages + 1) %}
+                                    {% if page_num == accounts_data.page %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ page_num }}</span>
+                                    </li>
+                                    {% elif page_num <= 3 or page_num > accounts_data.total_pages - 3 or (page_num >= accounts_data.page - 1 and page_num <= accounts_data.page + 1) %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_num }}{% if current_category %}&category={{ current_category }}{% endif %}">{{ page_num }}</a>
+                                    </li>
+                                    {% elif page_num == 4 and accounts_data.page > 5 %}
+                                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                                    {% elif page_num == accounts_data.total_pages - 3 and accounts_data.page < accounts_data.total_pages - 4 %}
+                                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if accounts_data.page < accounts_data.total_pages %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ accounts_data.page + 1 }}{% if current_category %}&category={{ current_category }}{% endif %}">Siguiente</a>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                        {% endif %}
                         {% else %}
                         <div class="text-center text-muted py-4">
                             <i class="fas fa-user-slash fa-3x mb-3"></i>
@@ -229,6 +230,38 @@
                 </div>
             </div>
         </div>
+
+        <!-- Simple Statistics - moved down and simplified -->
+        {% if overall_stats %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-users text-primary fs-4 me-3"></i>
+                                    <div>
+                                        <div class="h4 mb-0">{{ overall_stats.total_accounts or 0 }}</div>
+                                        <small class="text-muted">Cuentas Analizadas</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <i class="fas fa-chart-line text-success fs-4 me-3"></i>
+                                    <div>
+                                        <div class="h4 mb-0">{{ overall_stats.analyzed_tweets or 0 }}</div>
+                                        <small class="text-muted">Posts Analizados</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Category Legend -->
         {% if analysis_distribution %}
@@ -279,40 +312,113 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-        // Analysis Distribution Chart
+        // Analysis Distribution Chart with clickable functionality
         {% if analysis_distribution %}
-        const analysisData = {
-            labels: [
-                {% for item in analysis_distribution %}
-                '{{ item.category|title }}'{% if not loop.last %},{% endif %}
-                {% endfor %}
-            ],
-            datasets: [{
-                data: [
-                    {% for item in analysis_distribution %}
-                    {{ item.count }}{% if not loop.last %},{% endif %}
-                    {% endfor %}
-                ],
-                backgroundColor: [
-                    '#dc3545', '#fd7e14', '#6f42c1', '#e83e8c', '#20c997', '#6c757d'
-                ]
-            }]
-        };
-
-        const ctx = document.getElementById('analysisChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'doughnut',
-            data: analysisData,
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
+        const ctx = document.getElementById('analysisChart');
+        if (ctx) {
+            const analysisChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: [
+                        {% for item in analysis_distribution %}
+                        '{{ item.category|title }}'{% if not loop.last %},{% endif %}
+                        {% endfor %}
+                    ],
+                    datasets: [{
+                        data: [
+                            {% for item in analysis_distribution %}
+                            {{ item.count }}{% if not loop.last %},{% endif %}
+                            {% endfor %}
+                        ],
+                        backgroundColor: [
+                            {% for item in analysis_distribution %}
+                            {% if item.category == 'hate_speech' %}'#dc3545'{% endif %}
+                            {% if item.category == 'disinformation' %}'#fd7e14'{% endif %}
+                            {% if item.category == 'conspiracy_theory' %}'#6f42c1'{% endif %}
+                            {% if item.category == 'far_right_bias' %}'#d63384'{% endif %}
+                            {% if item.category == 'call_to_action' %}'#198754'{% endif %}
+                            {% if item.category == 'general' %}'#6c757d'{% endif %}
+                            {% if not loop.last %},{% endif %}
+                            {% endfor %}
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                usePointStyle: true,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    onClick: function(event, activeElements) {
+                        if (activeElements.length > 0) {
+                            const chartElement = activeElements[0];
+                            const categoryIndex = chartElement.index;
+                            const category = this.data.labels[categoryIndex].toLowerCase().replace(' ', '_');
+                            
+                            // Get current URL parameters
+                            const urlParams = new URLSearchParams(window.location.search);
+                            const currentCategory = urlParams.get('category');
+                            
+                            // Toggle category filter
+                            if (currentCategory === category) {
+                                // Remove filter if clicking on currently filtered category
+                                urlParams.delete('category');
+                            } else {
+                                // Set new category filter
+                                urlParams.set('category', category);
+                            }
+                            
+                            // Reset to first page when filtering
+                            urlParams.delete('page');
+                            
+                            // Redirect with new parameters
+                            window.location.search = urlParams.toString();
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
         {% endif %}
+
+        // Smooth card hover animations
+        document.addEventListener('DOMContentLoaded', function() {
+            const accountCards = document.querySelectorAll('.account-card');
+            accountCards.forEach(card => {
+                card.style.transition = 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out';
+                
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-2px)';
+                    this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                    this.style.boxShadow = 'none';
+                });
+            });
+        });
     </script>
 </body>
 </html>

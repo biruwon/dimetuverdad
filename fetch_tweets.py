@@ -181,7 +181,7 @@ def save_enhanced_tweet(conn, tweet_data: Dict):
             print(f"  ⏭️ Tweet {tweet_data['tweet_id']} already exists, skipping")
             return
         
-        # Insert with all enhanced fields
+        # Insert with all enhanced fields including profile picture
         c.execute("""
             INSERT INTO tweets (
                 tweet_id, tweet_url, username, content,
@@ -194,8 +194,8 @@ def save_enhanced_tweet(conn, tweet_data: Dict):
                 hashtags, mentions,
                 engagement_retweets, engagement_likes, engagement_replies, engagement_views,
                 tweet_timestamp, scrape_timestamp,
-                is_repost, is_like, is_comment, parent_tweet_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_repost, is_like, is_comment, parent_tweet_id, profile_pic_url
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             tweet_data['tweet_id'], tweet_data['tweet_url'], tweet_data['username'], tweet_data['content'],
             tweet_data['post_type'], tweet_data['is_pinned'],
@@ -209,7 +209,8 @@ def save_enhanced_tweet(conn, tweet_data: Dict):
             tweet_data.get('engagement_replies', 0), tweet_data.get('engagement_views', 0),
             tweet_data.get('tweet_timestamp'), datetime.now().isoformat(),
             tweet_data.get('is_repost', 0), tweet_data.get('is_like', 0), 
-            tweet_data.get('is_comment', 0), tweet_data.get('parent_tweet_id')
+            tweet_data.get('is_comment', 0), tweet_data.get('parent_tweet_id'),
+            tweet_data.get('profile_pic_url')
         ))
         
         conn.commit()
@@ -592,6 +593,76 @@ def analyze_post_type(article, target_username: str) -> Dict[str, any]:
     print(f"    ✍️ Original post detected")
     return post_analysis
 
+def extract_profile_picture(page, username: str) -> Optional[str]:
+    """Extract profile picture URL from user's Twitter profile page."""
+    try:
+        # Look for profile image in various possible selectors
+        profile_img_selectors = [
+            '[data-testid="UserAvatar-Container-unknown"] img',
+            '[data-testid="UserAvatar-Container"] img', 
+            '[aria-label*="profile photo"] img',
+            '[data-testid="UserProfileHeader_Items"] img',
+            'img[src*="profile_images"]',
+            'a[href*="/photo"] img'
+        ]
+        
+        profile_pic_url = None
+        
+        for selector in profile_img_selectors:
+            try:
+                img_element = page.query_selector(selector)
+                if img_element:
+                    src = img_element.get_attribute('src')
+                    if src and 'profile_images' in src:
+                        # Get the full-size version (remove size parameters)
+                        if '_normal.' in src:
+                            profile_pic_url = src.replace('_normal.', '_400x400.')
+                        elif '_bigger.' in src:
+                            profile_pic_url = src.replace('_bigger.', '_400x400.')
+                        else:
+                            profile_pic_url = src
+                        print(f"  🖼️  Profile picture found: {profile_pic_url[:80]}...")
+                        break
+            except Exception:
+                continue
+        
+        if not profile_pic_url:
+            print(f"  ⚠️  No profile picture found for @{username}")
+            
+        return profile_pic_url
+        
+    except Exception as e:
+        print(f"  ❌ Error extracting profile picture for @{username}: {e}")
+        return None
+
+def save_account_profile_info(conn, username: str, profile_pic_url: str = None):
+    """Save or update account profile information."""
+    if not profile_pic_url:
+        return
+    
+    cursor = conn.cursor()
+    try:
+        # Insert or update account profile information
+        cursor.execute("""
+            INSERT INTO accounts (username, profile_pic_url, profile_pic_updated, last_scraped)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(username) DO UPDATE SET
+                profile_pic_url = excluded.profile_pic_url,
+                profile_pic_updated = excluded.profile_pic_updated,
+                last_scraped = excluded.last_scraped
+        """, (
+            username, 
+            profile_pic_url, 
+            datetime.now().isoformat(),
+            datetime.now().isoformat()
+        ))
+        
+        conn.commit()
+        print(f"  💾 Updated profile info for @{username}")
+        
+    except Exception as e:
+        print(f"  ❌ Error saving profile info for @{username}: {e}")
+
 def fetch_enhanced_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bool = True) -> List[Dict]:
     """
     Enhanced tweet fetching with comprehensive post type detection.
@@ -618,8 +689,12 @@ def fetch_enhanced_tweets(page, username: str, max_tweets: int = 30, resume_from
     except TimeoutError:
         print(f"❌ No tweets found for @{username} or page failed to load")
         return []
-    
+
     human_delay(2.0, 4.0)
+    
+    # Extract profile picture before starting tweet collection
+    print(f"🖼️  Extracting profile picture for @{username}...")
+    profile_pic_url = extract_profile_picture(page, username)
     
     collected_tweets = []
     seen_tweet_ids = set()
@@ -727,6 +802,7 @@ def fetch_enhanced_tweets(page, username: str, max_tweets: int = 30, resume_from
                     'username': username,
                     'content': content,
                     'tweet_timestamp': tweet_timestamp,
+                    'profile_pic_url': profile_pic_url,  # Add profile picture URL
                     
                     # Post type analysis
                     **post_analysis,
@@ -892,6 +968,11 @@ def main():
                     print(f"  💾 Saved tweet {i}/{len(tweets)}: {tweet['tweet_id']}")
                 except Exception as e:
                     print(f"  ❌ Error saving tweet {tweet.get('tweet_id', 'unknown')}: {e}")
+            
+            # Save profile information if tweets were collected successfully
+            if tweets and 'profile_pic_url' in tweets[0]:
+                profile_pic_url = tweets[0]['profile_pic_url']
+                save_account_profile_info(conn, handle, profile_pic_url)
             
             total += len(tweets)
         

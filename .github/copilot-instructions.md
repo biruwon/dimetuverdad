@@ -210,3 +210,17 @@ migrate_database_schema()  # Reset schema and connections
 - **Analysis method tracking**: Every result tagged as either `"pattern"` or `"llm"` in database
 
 When working on this codebase, prioritize understanding the multi-stage analysis pipeline and always test with both pattern-only and LLM-enhanced modes to ensure comprehensive coverage.
+
+## Terminal Usage Best Practices
+
+**CRITICAL**: Always use existing terminals instead of creating new ones unnecessarily.
+
+### Terminal Management Rules:
+1. **Check existing terminals first**: Use `get_terminal_output` or `terminal_last_command` to see available terminals
+2. **Continue in same terminal**: For sequential commands, use the same terminal session to maintain context
+3. **Only create new terminals when**: 
+   - Running background processes that need isolation
+   - Existing terminal is occupied by a blocking process
+   - Need different working directories simultaneously
+4. **Background process management**: Use `isBackground=true` only for long-running services (web servers, watchers)
+5. **Working directory**: Use `cd` commands within existing terminals instead of creating new ones
