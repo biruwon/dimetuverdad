@@ -15,12 +15,11 @@ from llm_models import LLMModelConfig, EnhancedLLMPipeline
 @dataclass
 class TestExample:
     """Test example for model comparison."""
-    id: str
     text: str
+    expected_category: str
     category: str
     description: str
     far_right_score: float = 0.5
-    has_claims: bool = False
 
 @dataclass 
 class ModelResult:
@@ -57,7 +56,6 @@ class ModelComparator:
                 category="hate_speech",
                 description="Explicit racial hate speech against Muslims",
                 far_right_score=0.85,
-                has_claims=False
             ),
             
             # === DISINFORMATION ===
@@ -67,7 +65,6 @@ class ModelComparator:
                 category="disinformation",
                 description="False statistics about immigration",
                 far_right_score=0.70,
-                has_claims=True
             ),
             
             # === CONSPIRACY THEORY ===
@@ -77,7 +74,6 @@ class ModelComparator:
                 category="conspiracy_theory",
                 description="Great replacement conspiracy theory",
                 far_right_score=0.78,
-                has_claims=True
             ),
             
             # === CALL TO ACTION ===
@@ -87,7 +83,6 @@ class ModelComparator:
                 category="call_to_action",
                 description="Urgent mobilization with location and time",
                 far_right_score=0.75,
-                has_claims=False
             ),
             
             # === FAR-RIGHT BIAS ===
@@ -97,7 +92,6 @@ class ModelComparator:
                 category="far_right_bias",
                 description="Authoritarian nostalgia",
                 far_right_score=0.80,
-                has_claims=False
             ),
             
             # === NORMAL CONTENT (Control) ===
@@ -107,7 +101,6 @@ class ModelComparator:
                 category="general",
                 description="Normal everyday content",
                 far_right_score=0.0,
-                has_claims=False
             )
         ]
     
@@ -211,7 +204,6 @@ class ModelComparator:
             # Create analysis context
             analysis_context = {
                 'far_right_score': example.far_right_score,
-                'claims_count': 2 if example.has_claims else 0,
                 'category': example.category
             }
             

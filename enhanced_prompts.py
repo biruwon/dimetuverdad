@@ -21,7 +21,6 @@ class PromptContext:
     """Context information for generating targeted prompts."""
     detected_categories: List[str]
     targeted_groups: List[str]
-    claims_count: int
     political_topic: str
     uncertainty_areas: List[str]
 
@@ -273,13 +272,6 @@ class EnhancedPromptGenerator:
         if len(detected_categories) > 2:
             uncertainty_areas.append("Múltiples categorías detectadas - necesita priorización")
         
-        # Check for claim verification needs
-        claims = pattern_results.get('claims', [])
-        if claims:
-            high_verifiability_claims = [c for c in claims if hasattr(c, 'verifiability') and c.verifiability.value == 'high']
-            if high_verifiability_claims:
-                uncertainty_areas.append("Afirmaciones verificables requieren validación")
-        
         # Check for topic clarity
         topics = pattern_results.get('topics', [])
         if topics and len(topics) > 1:
@@ -299,7 +291,6 @@ def create_context_from_analysis(analysis_results: Dict) -> PromptContext:
     return PromptContext(
         detected_categories=analysis_results.get('categories', []),
         targeted_groups=analysis_results.get('targeted_groups', []),
-        claims_count=analysis_results.get('claims_count', 0),
         political_topic=analysis_results.get('category', 'general'),
         uncertainty_areas=analysis_results.get('uncertainty_areas', [])
     )
@@ -312,7 +303,6 @@ if __name__ == "__main__":
     test_context = PromptContext(
         detected_categories=['hate_speech', 'far_right_bias'],  # Updated: xenophobia is now part of hate_speech
         targeted_groups=['inmigrantes', 'musulmanes'],
-        claims_count=1,
         political_topic='inmigración',
         uncertainty_areas=['Nivel de amenaza real', 'Intención del autor']
     )

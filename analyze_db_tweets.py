@@ -139,8 +139,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
                 analysis_method=result.analysis_method,
                 targeted_groups=getattr(result, 'targeted_groups', []),
                 pattern_matches=getattr(result, 'pattern_matches', []),
-                topic_classification=getattr(result, 'topic_classification', {}),
-                claims_detected=getattr(result, 'claims_detected', [])
+                topic_classification=getattr(result, 'topic_classification', {})
             )
             
             # Save to database

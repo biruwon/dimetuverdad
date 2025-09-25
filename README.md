@@ -36,12 +36,7 @@ A comprehensive AI-powered system for detecting and analyzing far-right discours
    - Context-aware political topic detection
    - Specialized patterns for Spanish political landscape
 
-5. **Claim Detection** (`claim_detector.py`)
-   - Factual statement extraction and verification
-   - Medical/scientific claim identification
-   - Disinformation risk assessment
-
-6. **Enhanced Prompting** (`enhanced_prompts.py`)
+5. **Enhanced Prompting** (`enhanced_prompts.py`)
    - Sophisticated LLM prompt generation
    - Context-aware analysis strategies
    - Spanish-specific political understanding
@@ -327,7 +322,6 @@ dimetuverdad/
 ├── far_right_patterns.py       # Pattern detection engine  
 ├── llm_models.py              # LLM integration & management
 ├── topic_classifier.py        # Political topic classification
-├── claim_detector.py          # Factual claim detection
 ├── enhanced_prompts.py        # LLM prompt generation
 ├── retrieval.py               # Evidence retrieval system
 │

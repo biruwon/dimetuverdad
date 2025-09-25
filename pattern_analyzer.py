@@ -41,9 +41,9 @@ class AnalysisResult:
     political_context: List[str]
     keywords: List[str]
 
-class UnifiedPatternAnalyzer:
+class PatternAnalyzer:
     """
-    Unified analyzer combining topic classification and far-right pattern detection.
+    Pattern analyzer combining topic classification and far-right pattern detection.
     Eliminates redundant processing while providing comprehensive content analysis.
     """
     
@@ -117,13 +117,33 @@ class UnifiedPatternAnalyzer:
                     r'\b(?:5g)\b.*\b(?:controlarnos|control)\b',
                     r'\b(?:vacunas?).*\b(?:grafeno|5g)\b',
                     r'\b(?:\d+\s+de\s+cada\s+\d+)\s+(?:casos?)\s+(?:de\s+covid|son\s+inventados?)\b',
+                    # INTEGRATED CLAIM PATTERNS - Statistical claims that might be false
+                    r'\b(\d+(?:[.,]\d+)*)\s*%\s+(?:de\s+)?(?:los\s+)?(\w+)',
+                    r'\b(?:según|conforme\s+a|de\s+acuerdo\s+con)\s+(?:el\s+)?(\w+),?\s+(\d+(?:[.,]\d+)*)',
+                    r'\b(\d+(?:[.,]\d+)*)\s+(?:millones?|miles?|euros?|personas?|casos?)\s+(?:de\s+)?(\w+)',
+                    r'\b(?:aumentó|disminuyó|creció|bajó)\s+(?:un\s+)?(\d+(?:[.,]\d+)*)\s*%',
+                    # Medical claims that could be false
+                    r'\b(?:vacunas?|medicamentos?|tratamientos?)\s+(?:causan?|provocan?|generan?)\s+(\w+)',
+                    r'\b(?:covid|coronavirus|pandemia)\s+(?:es|fue|será)\s+(\w+)',
+                    r'\b(?:estudios?|investigación|ciencia)\s+(?:demuestra|prueba|confirma)\s+que\s+(.+)',
+                    r'\b(?:efectos?\s+(?:secundarios?|adversos?))\s+(?:de\s+)?(.+)',
+                    # Economic disinformation
+                    r'\b(?:pib|inflación|desempleo|paro)\s+(?:es|está|alcanza)\s+(?:del?\s+)?(\d+(?:[.,]\d+)*)\s*%',
+                    r'\b(?:salario|sueldo|pensión)\s+(?:medio|promedio)\s+(?:es|está|alcanza)\s+(\d+(?:[.,]\d+)*)\s*euros?',
+                    # Scientific claims that could be false
+                    r'\b(?:la\s+ciencia|científicos?|investigadores?)\s+(?:dice|afirma|demuestra)\s+que\s+(.+)',
+                    r'\b(?:está\s+(?:científicamente\s+)?(?:probado|demostrado))\s+que\s+(.+)',
+                    r'\b(?:cambio\s+climático|calentamiento\s+global)\s+(?:es|no\s+es)\s+(.+)',
+                    # Demographic claims that might be inflated or false
+                    r'\b(?:inmigrantes?|extranjeros?)\s+(?:representan|son)\s+(?:el\s+)?(\d+(?:[.,]\d+)*)\s*%',
+                    r'\b(?:población|habitantes)\s+(?:de\s+)?(\w+)\s+(?:es|son|alcanza)\s+(\d+(?:[.,]\d+)*)',
                     # Additional patterns from former secondary
                     r'\b(?:propaganda|adoctrinamiento|lavado\s+de\s+cerebro)\b',
                     r'\b(?:censura|silenciamiento|ocultación)\b',
                     r'\b(?:verdad\s+(?:oculta|alternativa)|realidad\s+alternativa)\b',
                 ],
-                'keywords': ['desinformación', 'bulo', 'mentira', 'manipulación', 'vacunas', 'covid'],
-                'description': 'False information including health and medical disinformation'
+                'keywords': ['desinformación', 'bulo', 'mentira', 'manipulación', 'vacunas', 'covid', 'estadísticas', 'estudios'],
+                'description': 'False information including health, statistical, and factual disinformation'
             },
             
             'conspiracy_theory': {
@@ -347,7 +367,7 @@ class UnifiedPatternAnalyzer:
 # Convenience functions for backward compatibility
 def analyze_far_right_content(text: str) -> Dict:
     """Backward compatibility function for far-right analysis."""
-    analyzer = UnifiedPatternAnalyzer()
+    analyzer = PatternAnalyzer()
     result = analyzer.analyze_content(text)
     
     return {
@@ -366,7 +386,7 @@ def analyze_far_right_content(text: str) -> Dict:
 
 def classify_political_topic(text: str) -> Dict:
     """Backward compatibility function for topic classification."""
-    analyzer = UnifiedPatternAnalyzer()
+    analyzer = PatternAnalyzer()
     result = analyzer.analyze_content(text)
     
     return {
@@ -390,7 +410,7 @@ if __name__ == "__main__":
         "Manifestación mañana contra la dictadura sanitaria"
     ]
     
-    analyzer = UnifiedPatternAnalyzer()
+    analyzer = PatternAnalyzer()
     
     for text in test_texts:
         print(f"\n--- Texto: {text}")

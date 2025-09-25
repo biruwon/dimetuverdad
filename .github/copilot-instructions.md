@@ -26,8 +26,8 @@ Web Interface (web/app.py)
    - Returns `ContentAnalysis` objects with structured results
    - Pipeline: `analyze_content()` → `_categorize_content()` → `_generate_explanation_with_smart_llm()`
 
-2. **`unified_pattern_analyzer.py`** - Consolidated pattern detection
-   - `UnifiedPatternAnalyzer` combines far-right detection + topic classification in single pass
+2. **`pattern_analyzer.py`** - Consolidated pattern detection
+   - `PatternAnalyzer` combines far-right detection + topic classification + disinformation claims in single pass
    - 13 content categories from hate_speech to political_general
    - **Eliminates redundant processing** between topic classification and extremism detection
    - Returns `AnalysisResult` with categories, pattern matches, confidence scores
@@ -166,8 +166,7 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 - **Web interface** reads directly from `content_analyses` table
 
 ### Component Architecture
-- **`unified_pattern_analyzer.py`**: Single-pass analysis combining topic classification + extremism detection
-- **`claim_detector.py`**: Specialized factual statement verification
+- **`pattern_analyzer.py`**: Single-pass analysis combining topic classification + extremism detection + disinformation claims
 - **`llm_models.py`**: LLM integration for complex cases and explanations
 - **`enhanced_analyzer.py`**: Orchestration layer managing the complete pipeline
 
@@ -226,3 +225,35 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 **CRITICAL**: The `run_in_terminal` tool automatically uses the existing terminal. Creating new terminals is a SYSTEM VIOLATION that breaks virtual environment activation and workflow continuity.
 
 **IF VIRTUAL ENV ISSUES OCCUR**: Use navigation commands like `cd ..` and `source venv/bin/activate` within the existing terminal rather than creating new ones.
+
+## Automatic Git Workflow
+
+**AUTOMATIC COMMITS**: When a complete feature, fix, or refactor is finished, ask for confirmation then commit and push changes to GitHub.
+
+### Git Automation Rules:
+1. **Completion Triggers**: 
+   - Complete feature implementation is finished
+   - Bug fix is fully resolved and tested
+   - Refactoring work is completed
+   - Multi-step enhancement is done
+2. **NOT triggered by**: Single file edits, partial implementations, or intermediate steps
+3. **Ask for Confirmation**: Prompt user before committing with suggested commit message
+4. **Automatic Commit**: Stage all changes and create a descriptive commit message (after confirmation)
+5. **Automatic Push**: Push directly to the main branch without user intervention (after confirmation)
+6. **Commit Message Format**: Use format: `feat: [brief description]`, `fix: [description]`, or `refactor: [description]`
+7. **Include All Related Files**: Stage and commit all files modified during the complete work session
+8. **Push Immediately**: Execute `git push origin main` after successful commit
+
+**COMMIT MESSAGE EXAMPLES**:
+- `feat: add political_general category with distinct UI styling and filtering`
+- `fix: resolve tweet sorting to prioritize political content over general posts`
+- `refactor: consolidate terminal usage rules and eliminate multiple terminal creation`
+- `feat: implement automatic git workflow for completed features`
+
+**EXECUTION STEPS**:
+1. Verify the complete feature/fix/refactor is finished
+2. Ask user: "This feature/fix/refactor appears complete. Would you like me to commit and push these changes with message: '[proposed commit message]'?"
+3. If confirmed: `git add .` to stage all changes
+4. `git commit -m "descriptive message"`
+5. `git push origin main`
+6. Confirm successful push with brief status message

@@ -14,8 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 # Import our enhanced components
-from unified_pattern_analyzer import UnifiedPatternAnalyzer
-from claim_detector import SpanishClaimDetector
+from pattern_analyzer import PatternAnalyzer, AnalysisResult, PatternMatch
 from llm_models import EnhancedLLMPipeline
 
 # Suppress warnings for cleaner output
@@ -47,18 +46,16 @@ class ContentAnalysis:
     # Technical data
     pattern_matches: List[Dict] = None
     topic_classification: Dict = None
-    claims_detected: List[Dict] = None
     analysis_json: str = ""
     
     def __post_init__(self):
+        # Initialize lists to avoid None values
+        if self.categories_detected is None:
+            self.categories_detected = []
         if self.targeted_groups is None:
             self.targeted_groups = []
         if self.pattern_matches is None:
             self.pattern_matches = []
-        if self.claims_detected is None:
-            self.claims_detected = []
-        if self.categories_detected is None:
-            self.categories_detected = []
     
     @property
     def has_multiple_categories(self) -> bool:
@@ -77,8 +74,7 @@ class EnhancedAnalyzer:
     """
     
     def __init__(self, use_llm: bool = True, model_priority: str = "balanced", verbose: bool = False):
-        self.unified_analyzer = UnifiedPatternAnalyzer()
-        self.claim_detector = SpanishClaimDetector()
+        self.pattern_analyzer = PatternAnalyzer()
         self.use_llm = use_llm
         self.model_priority = model_priority
         self.verbose = verbose  # Control debug output
@@ -162,9 +158,9 @@ class EnhancedAnalyzer:
         analysis_data = self._build_analysis_data(pattern_results, insights)
         
         # Extract multi-category information from pattern results
-        unified_result = pattern_results.get('unified', None)
-        if unified_result:
-            categories_detected = unified_result.categories
+        pattern_result = pattern_results.get('pattern_result', None)
+        if pattern_result:
+            categories_detected = pattern_result.categories
         else:
             # Fallback for LLM-only analysis
             categories_detected = [category]
@@ -180,76 +176,40 @@ class EnhancedAnalyzer:
             llm_explanation=llm_explanation,
             analysis_method=analysis_method,
             targeted_groups=insights['targeted_groups'],
-            pattern_matches=pattern_results['pattern_matches'],
+            pattern_matches=[{'matched_text': pm.matched_text, 'category': pm.category, 'description': pm.description} for pm in (pattern_result.pattern_matches if pattern_result else [])],
             topic_classification=analysis_data['topic_classification'],
-            claims_detected=analysis_data['claims_detected'],
             analysis_json=json.dumps(analysis_data, ensure_ascii=False, default=str)
         )
     
     def _run_pattern_analysis(self, content: str) -> Dict:
         """
-        Pipeline Step 1: Unified pattern analysis using single comprehensive analyzer.
+        Pipeline Step 1: Pattern analysis using the consolidated pattern analyzer.
         
-        New Approach:
-        - UnifiedPatternAnalyzer: Combines far-right detection + topic classification in one pass
-        - ClaimDetector: Factual statements and verifiability assessment
+        Simplified Approach:
+        - PatternAnalyzer: Combines all pattern detection including disinformation claims in one pass
         """
-        results = {}
+        # Single phase: Comprehensive pattern analysis
+        pattern_result = self.pattern_analyzer.analyze_content(content)
         
-        # Phase 1: Unified pattern analysis (combines previous topic + far-right analysis)
-        unified_result = self.unified_analyzer.analyze_content(content)
-        results['unified'] = unified_result
-        
-        # Phase 2: Claims analysis (unchanged - still specialized)
-        claims = self.claim_detector.detect_claims(content)
-        results['claims'] = claims
-        
-        # Phase 3: Create pattern matches for backward compatibility
-        pattern_matches = []
-        for match in unified_result.pattern_matches:
-            pattern_matches.append({
-                'category': match.category,
-                'matched_text': match.matched_text,
-                'description': match.description,
-                'context': match.context
-            })
-        
-        results['pattern_matches'] = pattern_matches
-        
-        # Create legacy format for backward compatibility with categorization logic
-        results['far_right'] = {
-            'categories': unified_result.categories,
-            'pattern_matches': pattern_matches,
-            'has_patterns': len(pattern_matches) > 0
+        return {
+            'pattern_result': pattern_result
         }
-        
-        # Legacy topics format (simplified since now integrated)
-        results['topics'] = [{
-            'category': unified_result.primary_category,
-            'subcategory': 'unified_analysis'
-        }] if unified_result.primary_category != "non_political" else []
-        
-        return results
     
     def _categorize_content(self, content: str, pattern_results: Dict) -> Tuple[str, str]:
         """
-        Pipeline Step 2: Determine content category using unified pattern results + LLM fallback.
+        Pipeline Step 2: Determine content category using pattern results + LLM fallback.
         Returns: (category, analysis_method)
         
         Simplified approach:
         1. If patterns detected any category -> return first detected category (pattern)
-        2. If no patterns but claims with disinformation indicators -> disinformation (pattern) 
-        3. If no patterns detected -> use LLM fallback (llm)
-        4. If LLM returns general -> general (llm)
+        2. If no patterns detected -> use LLM fallback (llm)
+        3. If LLM returns general -> general (llm)
         """
-        far_right_result = pattern_results['far_right']
-        claims = pattern_results['claims']
-        
-        detected_categories = far_right_result.get('categories', [])
+        pattern_result = pattern_results['pattern_result']
+        detected_categories = pattern_result.categories
         
         if self.verbose:
             print(f"🔍 Detected categories: {detected_categories}")
-            print(f"🔍 Claims count: {len(claims)}")
         
         # Step 1: If patterns found any category, return the primary one
         if detected_categories:
@@ -258,19 +218,8 @@ class EnhancedAnalyzer:
                 print(f"🎯 Pattern detected: {primary_category}")
             return primary_category, "pattern"
         
-        # Step 2: Check for disinformation in claims (even without patterns)
-        if claims:
-            for claim in claims:
-                disinfo_assessment = self.claim_detector.assess_disinformation_indicators(
-                    claim.text, claim.claim_type
-                )
-                if disinfo_assessment['risk_level'] in ['high', 'medium']:
-                    if self.verbose:
-                        print("🎯 Disinformation detected via claims analysis")
-                    return "disinformation", "pattern"
-        
-        # Step 3: No patterns detected - use LLM fallback
-        if self._should_use_llm_fallback(content, detected_categories, claims):
+        # Step 2: No patterns detected - use LLM fallback
+        if self._should_use_llm_fallback(content, detected_categories):
             if self.verbose:
                 print("🧠 No patterns detected - using LLM for analysis")
             llm_category = self._get_llm_category(content, pattern_results)
@@ -278,7 +227,7 @@ class EnhancedAnalyzer:
                 print(f"🔍 LLM category result: {llm_category}")
             return llm_category, "llm"
 
-        # Step 4: Default to general
+        # Step 3: Default to general
         return "general", "pattern"
 
     def _has_action_language(self, text: str) -> bool:
@@ -292,10 +241,9 @@ class EnhancedAnalyzer:
         text_lower = text.lower()
         return any(re.search(pattern, text_lower) for pattern in action_patterns)
     
-    def _should_use_llm_fallback(self, content: str, detected_categories: List, claims: List) -> bool:
+    def _should_use_llm_fallback(self, content: str, detected_categories: List) -> bool:
         """Determine if content requires LLM analysis when pattern detection fails."""
-        # Use LLM when no patterns are detected, regardless of claims
-        # Claims alone don't determine category - context matters
+        # Use LLM when no patterns are detected
         return len(detected_categories) == 0
     
     def _get_llm_category(self, content: str, pattern_results: Dict) -> str:
@@ -323,13 +271,12 @@ class EnhancedAnalyzer:
     
     def _extract_content_insights(self, content: str, pattern_results: Dict) -> Dict:
         """
-        Pipeline Step 3: Extract content insights using consolidated pattern results.
-        This replaces multiple separate extraction methods.
+        Pipeline Step 3: Extract content insights using pattern results.
         """
-        far_right_result = pattern_results['far_right']
+        pattern_result = pattern_results['pattern_result']
         
         # Extract targeted groups
-        targeted_groups = self._extract_targeted_groups(content, far_right_result)
+        targeted_groups = self._extract_targeted_groups(content, pattern_result)
         
         return {
             'targeted_groups': targeted_groups
@@ -346,8 +293,11 @@ class EnhancedAnalyzer:
         - Multiple conflicting patterns: Use LLM for disambiguation  
         - No clear patterns: Use LLM for analysis
         """
+        # Extract pattern result from dictionary
+        pattern_result = pattern_results['pattern_result']
+        
         # Build base explanation from patterns
-        base_explanation = self._generate_pattern_based_explanation(category, pattern_results, insights)
+        base_explanation = self._generate_pattern_based_explanation(category, pattern_result, insights)
         
         # CRITICAL FIX: If categorization used LLM, explanation must also use LLM
         if analysis_method == "llm":
@@ -355,13 +305,12 @@ class EnhancedAnalyzer:
             return self._primary_llm_analysis(content, category, pattern_results, base_explanation)
         
         # Check if we have clear, unambiguous results
-        detected_categories = pattern_results['far_right'].get('categories', [])
+        detected_categories = pattern_result.categories
         has_patterns = len(detected_categories) > 0
         has_multiple_patterns = len(detected_categories) > 1
-        claims = pattern_results.get('claims', [])
         
         # Decision: When to use LLM (without any scoring)
-        if not has_patterns and not claims and category == "general":
+        if not has_patterns and category == "general":
             # Check content length and complexity to decide if LLM analysis is needed
             content_length = len(content.split())
             has_complex_language = any(word in content.lower() for word in [
@@ -384,20 +333,19 @@ class EnhancedAnalyzer:
             print("🎯 Clear single pattern - using pattern-based analysis")
             return base_explanation
         
-        elif has_multiple_patterns or (claims and has_patterns):
-            # Multiple patterns or patterns + claims: Use LLM for enhancement
+        elif has_multiple_patterns:
+            # Multiple patterns: Use LLM for enhancement
             print("🤖 Multiple patterns detected - using LLM for enhancement")
-            return self._enhance_explanation_with_llm(content, category, pattern_results, base_explanation)
+            return self._enhance_explanation_with_llm(content, category, pattern_result, base_explanation)
         
         else:
             # Ambiguous cases: Use LLM for primary analysis
             print("🧠 Ambiguous content - using LLM for analysis")
             return self._primary_llm_analysis(content, category, pattern_results, base_explanation)
     
-    def _generate_pattern_based_explanation(self, category: str, pattern_results: Dict, insights: Dict) -> str:
+    def _generate_pattern_based_explanation(self, category: str, pattern_results: AnalysisResult, insights: Dict) -> str:
         """Generate natural language explanation based purely on pattern analysis."""
-        detected_categories = pattern_results['far_right'].get('categories', [])
-        claims = pattern_results.get('claims', [])
+        detected_categories = pattern_results.categories if pattern_results else []
         
         # Generate natural language explanations based on category
         if category == "hate_speech":
@@ -408,10 +356,6 @@ class EnhancedAnalyzer:
             base_explanation = "Este contenido contiene afirmaciones que presentan características de desinformación"
             if 'health_disinformation' in detected_categories:
                 base_explanation = "Este contenido presenta afirmaciones médicas sin respaldo científico verificable"
-            elif claims:
-                health_claims = [c for c in claims if c.claim_type.value == 'médica']
-                if health_claims:
-                    base_explanation += " relacionadas con temas de salud"
         
         elif category == "conspiracy_theory":
             base_explanation = "Este contenido promueve teorías conspiratorias sin base empírica"
@@ -434,16 +378,13 @@ class EnhancedAnalyzer:
         if len(detected_categories) > 1:
             context_parts.append("presenta múltiples indicadores problemáticos")
         
-        if claims and len(claims) > 1:
-            context_parts.append("contiene varias afirmaciones verificables")
-        
         if context_parts:
             base_explanation += f" y {', '.join(context_parts)}"
         
         return base_explanation + "."
     
     def _enhance_explanation_with_llm(self, content: str, category: str, 
-                                    pattern_results: Dict, base_explanation: str) -> str:
+                                    pattern_results: AnalysisResult, base_explanation: str) -> str:
         """Use LLM to enhance and validate pattern-based analysis."""
         if not self.use_llm or not self.llm_pipeline:
             return base_explanation
@@ -463,8 +404,7 @@ class EnhancedAnalyzer:
             # Create analysis context
             analysis_context = {
                 'category': category,
-                'detected_categories': pattern_results['far_right'].get('categories', []),
-                'claims_count': len(pattern_results['claims'])
+                'detected_categories': pattern_results.categories if pattern_results else []
             }
             
             # Get LLM enhancement using the new method
@@ -488,14 +428,15 @@ class EnhancedAnalyzer:
             return base_explanation
         
         try:
+            # Extract pattern result
+            pattern_result = pattern_results.get('pattern_result', None)
             
             # Create analysis context with comprehensive information
             analysis_context = {
                 'category': category,
                 'analysis_mode': 'primary',
-                'detected_categories': pattern_results['far_right'].get('categories', []),
-                'claims_count': len(pattern_results['claims']),
-                'has_patterns': len(pattern_results['far_right'].get('categories', [])) > 0
+                'detected_categories': pattern_result.categories if pattern_result else [],
+                'has_patterns': len(pattern_result.categories) > 0 if pattern_result else False
             }
             
             # Use comprehensive analysis for uncertain cases
@@ -519,8 +460,8 @@ class EnhancedAnalyzer:
     
     def _generate_enhanced_pattern_explanation(self, content: str, category: str, pattern_results: Dict) -> str:
         """Generate a comprehensive explanation when LLM is not available or fails."""
-        detected_categories = pattern_results['far_right'].get('categories', [])
-        claims = pattern_results.get('claims', [])
+        pattern_result = pattern_results.get('pattern_result', None)
+        detected_categories = pattern_result.categories if pattern_result else []
         
         # Generate detailed explanations based on what was actually detected
         if category == "far_right_bias":
@@ -576,8 +517,8 @@ class EnhancedAnalyzer:
                 return AnalysisType.MISINFORMATION
             elif category == "conspiracy_theory":
                 return AnalysisType.MISINFORMATION
-            elif pattern_results.get('claims'):
-                return AnalysisType.CLAIM_VERIFICATION
+            elif category == "disinformation":
+                return AnalysisType.MISINFORMATION  # Disinformation now includes integrated claims
             elif category == "far_right_bias":
                 return AnalysisType.FAR_RIGHT_BIAS
             else:
@@ -592,43 +533,41 @@ class EnhancedAnalyzer:
         """
         Pipeline Step 5: Build the final analysis data structure.
         """
-        unified_result = pattern_results.get('unified', {})
-        claims = pattern_results['claims']
-        topics = pattern_results.get('topics', [])
+        pattern_result = pattern_results.get('pattern_result', None)
+        
+        if pattern_result:
+            pattern_matches = pattern_result.pattern_matches
+            categories = pattern_result.categories
+            political_context = pattern_result.political_context
+        else:
+            pattern_matches = []
+            categories = []
+            political_context = []
         
         return {
             'category': None,  # Will be set by caller
-            'pattern_matches': pattern_results['pattern_matches'],
+            'pattern_matches': [{'matched_text': pm.matched_text, 'category': pm.category, 'description': pm.description} for pm in pattern_matches],
             'topic_classification': {
-                'primary_topic': topics[0]['category'] if topics else "no_político",
-                'all_topics': [{
-                    'category': topics[0]['category'],
-                    'subcategory': topics[0]['subcategory']
-                }] if topics else [],
-                'political_context': unified_result.political_context if hasattr(unified_result, 'political_context') else []
+                'primary_topic': categories[0] if categories else "general",
+                'all_topics': [{'category': cat} for cat in categories],
+                'political_context': political_context
             },
-            'claims_detected': [{
-                'text': claim.text,
-                'type': claim.claim_type.value,
-                'urgency': claim.urgency.value,
-                'verifiability': claim.verifiability.value
-            } for claim in claims],
             'content_insights': insights,
-            'unified_categories': unified_result.categories if hasattr(unified_result, 'categories') else []
+            'unified_categories': categories
         }
     
 
-    def _extract_targeted_groups(self, text: str, far_right_result: Dict) -> List[str]:
+    def _extract_targeted_groups(self, text: str, pattern_result: 'AnalysisResult') -> List[str]:
         """Extract targeted groups based on actual matched text, not generic categories."""
-        pattern_matches = far_right_result.get('pattern_matches', [])
+        pattern_matches = pattern_result.pattern_matches if pattern_result else []
         
         targeted_groups = []
         text_lower = text.lower()
         
         # Extract groups based on what was actually mentioned in the text
         for match in pattern_matches:
-            matched_text = match.get('matched_text', '').lower()
-            context = match.get('context', '').lower()
+            matched_text = match.matched_text.lower() if hasattr(match, 'matched_text') else ''
+            context = match.context.lower() if hasattr(match, 'context') else ''
             full_context = matched_text + ' ' + context
             
             # Look for specific group mentions in the matched text and context
@@ -671,8 +610,7 @@ class EnhancedAnalyzer:
         else:
             print("⚠️ LLM Pipeline: Not available")
         
-        print(f"🔍 Unified analyzer: {'✓' if self.unified_analyzer else '❌'}")
-        print(f"🔎 Claim detector: {'✓' if self.claim_detector else '❌'}")
+        print(f"🔍 Pattern analyzer: {'✓' if self.pattern_analyzer else '❌'}")
         
         # Check database
         try:

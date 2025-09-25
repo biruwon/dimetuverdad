@@ -1018,17 +1018,12 @@ class EnhancedLLMPipeline:
     def _determine_analysis_type(self, context: Dict) -> AnalysisType:
         """Determine the optimal analysis type based on context."""
         far_right_score = context.get('far_right_score', 0.0)
-        claims_count = context.get('claims_count', 0)
         
         # High-risk content needs detailed analysis
         if far_right_score > 0.7:
             return AnalysisType.COMPREHENSIVE
         
-        # Content with claims needs verification focus
-        if claims_count > 0:
-            return AnalysisType.CLAIM_VERIFICATION
-        
-        # Default comprehensive analysis
+        # Default comprehensive analysis for all other cases
         return AnalysisType.COMPREHENSIVE
     
     def _run_enhanced_analysis(self, text: str, analysis_type: AnalysisType, prompt_context) -> Dict:
