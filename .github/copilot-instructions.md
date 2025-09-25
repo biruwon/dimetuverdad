@@ -211,16 +211,18 @@ migrate_database_schema()  # Reset schema and connections
 
 When working on this codebase, prioritize understanding the multi-stage analysis pipeline and always test with both pattern-only and LLM-enhanced modes to ensure comprehensive coverage.
 
-## Terminal Usage Best Practices
+## Terminal Usage - ABSOLUTE RESTRICTIONS
 
-**CRITICAL**: Always use existing terminals instead of creating new ones unnecessarily.
+**FORBIDDEN**: Creating new terminals is COMPLETELY PROHIBITED.
 
-### Terminal Management Rules:
-1. **Check existing terminals first**: Use `get_terminal_output` or `terminal_last_command` to see available terminals
-2. **Continue in same terminal**: For sequential commands, use the same terminal session to maintain context
-3. **Only create new terminals when**: 
-   - Running background processes that need isolation
-   - Existing terminal is occupied by a blocking process
-   - Need different working directories simultaneously
-4. **Background process management**: Use `isBackground=true` only for long-running services (web servers, watchers)
-5. **Working directory**: Use `cd` commands within existing terminals instead of creating new ones
+### MANDATORY Terminal Rules:
+1. **ONLY USE EXISTING TERMINALS**: Never, under any circumstances, create new terminal sessions
+2. **ONE TERMINAL ONLY**: The system must have exactly one active terminal throughout the entire session
+3. **USE `run_in_terminal` ONLY**: All terminal commands must use the existing terminal
+4. **NO EXCEPTIONS**: Background processes, directory changes, and all operations must use the same terminal
+5. **CHECK BEFORE RUNNING**: Always use `terminal_last_command` or `get_terminal_output` first
+6. **SEQUENTIAL EXECUTION**: Run commands one at a time in the same terminal context
+
+**CRITICAL**: The `run_in_terminal` tool automatically uses the existing terminal. Creating new terminals is a SYSTEM VIOLATION that breaks virtual environment activation and workflow continuity.
+
+**IF VIRTUAL ENV ISSUES OCCUR**: Use navigation commands like `cd ..` and `source venv/bin/activate` within the existing terminal rather than creating new ones.

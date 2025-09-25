@@ -46,6 +46,7 @@
         .tweet-card.analysis-conspiracy_theory { border-left-color: #6f42c1; }
         .tweet-card.analysis-far_right_bias { border-left-color: #e83e8c; }
         .tweet-card.analysis-call_to_action { border-left-color: #20c997; }
+        .tweet-card.analysis-political_general { border-left-color: #007bff; }
         .tweet-card.analysis-general { border-left-color: #6c757d; }
         
         .stats-card {
@@ -248,6 +249,9 @@
                             </a>
                             <a href="?category=call_to_action" class="btn btn-sm {% if current_category == 'call_to_action' %}btn-success{% else %}btn-outline-success{% endif %}">
                                 📢 Llamada a Acción
+                            </a>
+                            <a href="?category=political_general" class="btn btn-sm {% if current_category == 'political_general' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                                🗳️ Política General
                             </a>
                             <a href="?category=general" class="btn btn-sm {% if current_category == 'general' %}btn-dark{% else %}btn-outline-dark{% endif %}">
                                 ✅ General
