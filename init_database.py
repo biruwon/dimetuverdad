@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""
+Database initialization script - Creates clean database from scratch.
+Run this to set up a fresh DiMeTuVerdad database with proper schema.
+"""
+
+import sqlite3
+import os
+from datetime import datetime
+
+DB_PATH = "accounts.db"
+
+def drop_existing_database():
+    """Remove existing database file if it exists."""
+    if os.path.exists(DB_PATH):
+        print(f"🗑️  Removing existing database: {DB_PATH}")
+        os.remove(DB_PATH)
+    else:
+        print(f"📋 No existing database found")
+
+def create_fresh_database():
+    """Create a clean database with optimized schema."""
+    print("🏗️  Creating fresh database schema...")
+    
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    try:
+        # Core accounts table
+        print("  📝 Creating accounts table...")
+        c.execute('''
+            CREATE TABLE accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                profile_pic_url TEXT,
+                last_scraped TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Core tweets table (simplified)
+        print("  📝 Creating tweets table...")
+        c.execute('''
+            CREATE TABLE tweets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tweet_id TEXT UNIQUE NOT NULL,
+                tweet_url TEXT NOT NULL,
+                username TEXT NOT NULL,
+                content TEXT NOT NULL,
+                
+                -- Post classification (simplified)
+                post_type TEXT DEFAULT 'original', -- original, repost_own, repost_other, reply, quote, thread
+                is_pinned INTEGER DEFAULT 0,
+                
+                -- RT/Quote data (only when needed)
+                original_author TEXT,     -- For reposts/quotes
+                original_tweet_id TEXT,   -- For reposts/quotes
+                original_content TEXT,    -- For reposts/quotes (if different)
+                reply_to_username TEXT,   -- For replies
+                
+                -- Media and content
+                media_links TEXT,         -- Comma-separated URLs
+                media_count INTEGER DEFAULT 0,
+                hashtags TEXT,           -- JSON array
+                mentions TEXT,           -- JSON array
+                external_links TEXT,     -- JSON array
+                
+                -- Basic engagement (optional)
+                engagement_likes INTEGER DEFAULT 0,
+                engagement_retweets INTEGER DEFAULT 0,
+                engagement_replies INTEGER DEFAULT 0,
+                
+                -- Essential status tracking
+                is_deleted INTEGER DEFAULT 0,
+                is_edited INTEGER DEFAULT 0,
+                
+                -- RT optimization
+                rt_original_analyzed INTEGER DEFAULT 0, -- Avoid duplicate analysis
+                
+                -- Timestamps (minimal)
+                tweet_timestamp TEXT,
+                scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                
+                FOREIGN KEY (username) REFERENCES accounts (username)
+            )
+        ''')
+        
+        # Content analysis results
+        print("  📝 Creating content_analyses table...")
+        c.execute('''
+            CREATE TABLE content_analyses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tweet_id TEXT NOT NULL,
+                category TEXT NOT NULL,
+                llm_explanation TEXT,
+                analysis_method TEXT DEFAULT 'pattern', -- 'pattern' or 'llm'
+                confidence REAL DEFAULT 1.0,
+                username TEXT NOT NULL,
+                analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                
+                FOREIGN KEY (tweet_id) REFERENCES tweets (tweet_id),
+                FOREIGN KEY (username) REFERENCES accounts (username),
+                UNIQUE(tweet_id) -- One analysis per tweet
+            )
+        ''')
+        
+        # Edit history (simplified)
+        print("  📝 Creating edit_history table...")
+        c.execute('''
+            CREATE TABLE edit_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tweet_id TEXT NOT NULL,
+                version_number INTEGER NOT NULL,
+                previous_content TEXT NOT NULL,
+                detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                
+                FOREIGN KEY (tweet_id) REFERENCES tweets (tweet_id),
+                UNIQUE(tweet_id, version_number)
+            )
+        ''')
+        
+        # Performance indexes
+        print("  📝 Creating indexes...")
+        indexes = [
+            ('idx_tweets_username', 'tweets', 'username'),
+            ('idx_tweets_post_type', 'tweets', 'post_type'),
+            ('idx_tweets_timestamp', 'tweets', 'scraped_at'),
+            ('idx_tweets_deleted', 'tweets', 'is_deleted'),
+            ('idx_tweets_edited', 'tweets', 'is_edited'),
+            ('idx_analyses_tweet', 'content_analyses', 'tweet_id'),
+            ('idx_analyses_category', 'content_analyses', 'category'),
+            ('idx_analyses_username', 'content_analyses', 'username'),
+            ('idx_edit_history_tweet', 'edit_history', 'tweet_id')
+        ]
+        
+        for idx_name, table, columns in indexes:
+            c.execute(f'CREATE INDEX {idx_name} ON {table}({columns})')
+            
+        print(f"    ✅ Created {len(indexes)} performance indexes")
+        
+        conn.commit()
+        print("✅ Clean database schema created successfully!")
+        
+        # Show summary
+        c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in c.fetchall()]
+        print(f"📊 Created {len(tables)} tables: {', '.join(tables)}")
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Database creation failed: {e}")
+        raise
+    finally:
+        conn.close()
+
+def verify_schema():
+    """Verify the database schema is correct."""
+    print("🔍 Verifying database schema...")
+    
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    try:
+        # Check tables exist
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        tables = [row[0] for row in c.fetchall()]
+        expected_tables = ['accounts', 'tweets', 'content_analyses', 'edit_history']
+        
+        print(f"  📋 Tables found: {tables}")
+        for table in expected_tables:
+            if table in tables:
+                print(f"    ✅ {table}")
+            else:
+                print(f"    ❌ {table} MISSING!")
+                return False
+        
+        # Check key fields exist in tweets table
+        c.execute("PRAGMA table_info(tweets)")
+        columns = [row[1] for row in c.fetchall()]
+        essential_fields = ['tweet_id', 'username', 'content', 'post_type', 'is_deleted', 'is_edited']
+        
+        print(f"  📋 Tweet table columns: {len(columns)} total")
+        for field in essential_fields:
+            if field in columns:
+                print(f"    ✅ {field}")
+            else:
+                print(f"    ❌ {field} MISSING!")
+                return False
+        
+        print("✅ Database schema verification passed!")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Schema verification failed: {e}")
+        return False
+    finally:
+        conn.close()
+
+def show_usage():
+    """Show how to use this script."""
+    print("""
+🎯 DiMeTuVerdad Database Initialization
+
+This script creates a clean database from scratch with an optimized schema.
+
+Usage:
+    python init_database.py [--force]
+    
+Options:
+    --force    Force recreation even if database exists
+    
+What it does:
+    1. Removes existing database (if --force or no database exists)
+    2. Creates clean schema with essential fields only
+    3. Sets up proper indexes for performance
+    4. Verifies schema correctness
+
+After running this script, you can:
+    1. Run fetch_tweets.py to collect data
+    2. Run analysis scripts to analyze content
+    3. Start the web interface to view results
+    """)
+
+if __name__ == "__main__":
+    import sys
+    
+    force_recreate = "--force" in sys.argv
+    show_help = "--help" in sys.argv or "-h" in sys.argv
+    
+    if show_help:
+        show_usage()
+        sys.exit(0)
+    
+    print("🚀 DiMeTuVerdad Database Initialization")
+    print("=" * 50)
+    
+    # Check if database exists
+    db_exists = os.path.exists(DB_PATH)
+    
+    if db_exists and not force_recreate:
+        print(f"⚠️  Database {DB_PATH} already exists!")
+        print("Use --force to recreate it, or --help for more options.")
+        print("\nTo recreate: python init_database.py --force")
+        sys.exit(1)
+    
+    try:
+        # Remove existing database
+        if db_exists:
+            drop_existing_database()
+        
+        # Create fresh schema
+        create_fresh_database()
+        
+        # Verify it worked
+        if verify_schema():
+            print("\n🎉 Database initialization completed successfully!")
+            print("\nNext steps:")
+            print("  1. Run: python fetch_tweets.py --max 10")
+            print("  2. Run: python analyze_db_tweets.py") 
+            print("  3. Start web interface: cd web && python app.py")
+        else:
+            print("\n❌ Database verification failed!")
+            sys.exit(1)
+            
+    except Exception as e:
+        print(f"\n💥 Initialization failed: {e}")
+        sys.exit(1)

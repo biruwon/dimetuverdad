@@ -42,6 +42,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     c = conn.cursor()
     
     # Build query - exclude already analyzed tweets unless force_reanalyze is True
+    # Also skip RT posts where the original content has already been analyzed
     if force_reanalyze:
         print("🔄 Force reanalyze mode: Will process ALL tweets (including already analyzed)")
         query = """
@@ -56,6 +57,10 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
             FROM tweets t 
             LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id 
             WHERE ca.tweet_id IS NULL
+            AND NOT (
+                t.post_type IN ('repost_other', 'repost_own') 
+                AND t.rt_original_content_analyzed = 1
+            )
         """
         if username:
             query += " AND t.username = ?"

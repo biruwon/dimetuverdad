@@ -178,7 +178,9 @@ def user_page(username):
             t.tweet_url, t.content, t.media_links, t.hashtags, t.mentions,
             t.tweet_timestamp, t.post_type, t.tweet_id,
             ca.category as analysis_category, ca.llm_explanation, ca.analysis_method, ca.analysis_timestamp,
-            ca.categories_detected, t.profile_pic_url
+            ca.categories_detected,
+            t.is_deleted, t.is_edited, t.rt_original_analyzed,
+            t.original_author, t.original_tweet_id, t.reply_to_username
         FROM tweets t
         LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
         WHERE t.username = ?
@@ -240,8 +242,40 @@ def user_page(username):
                 'analysis_method': row[10],
                 'analysis_timestamp': row[11],
                 'categories_detected': categories_detected,
-                'profile_pic_url': row[13]  # Add profile picture URL
+                'profile_pic_url': user_profile_pic,  # Use profile from accounts table
+                # Post status fields from simplified schema (corrected indexes)
+                'is_deleted': row[13],  # Fixed: was row[12], now row[13]
+                'is_edited': row[14],   # Fixed: was row[13], now row[14] 
+                'rt_original_analyzed': row[15],  # Fixed: was row[14], now row[15]
+                'original_author': row[16],       # Fixed: was row[15], now row[16]
+                'original_tweet_id': row[17],     # Fixed: was row[16], now row[17]
+                'reply_to_username': row[18]      # Fixed: was row[17], now row[18]
             }
+            
+            # Post status warnings (simplified schema)
+            tweet['post_status_warnings'] = []
+            if tweet['is_deleted']:
+                tweet['post_status_warnings'].append({
+                    'type': 'deleted',
+                    'message': 'Este tweet fue eliminado',
+                    'icon': 'fas fa-trash',
+                    'class': 'alert-danger'
+                })
+            if tweet['is_edited']:
+                tweet['post_status_warnings'].append({
+                    'type': 'edited',
+                    'message': 'Este tweet fue editado',
+                    'icon': 'fas fa-edit',
+                    'class': 'alert-warning'
+                })
+            
+            # RT display logic
+            if tweet['post_type'] in ['repost_other', 'repost_own', 'quote']:
+                tweet['is_rt'] = True
+                tweet['rt_type'] = tweet['post_type']
+            else:
+                tweet['is_rt'] = False
+                tweet['rt_type'] = None
             
             # Use the llm_explanation directly - it contains the best analysis available
             tweet['analysis_display'] = tweet['llm_explanation'] or "Sin análisis disponible"

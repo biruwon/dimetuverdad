@@ -41,6 +41,33 @@
             background: #fafafa;
         }
         
+        /* Enhanced RT styling */
+        .tweet-card.rt-repost_other { 
+            border-left-color: #1da1f2;
+            background: linear-gradient(135deg, #e3f2fd 0%, #fafafa 100%);
+        }
+        .tweet-card.rt-repost_own { 
+            border-left-color: #28a745;
+            background: linear-gradient(135deg, #e8f5e8 0%, #fafafa 100%);
+        }
+        .tweet-card.rt-quote { 
+            border-left-color: #ffc107;
+            background: linear-gradient(135deg, #fff8e1 0%, #fafafa 100%);
+        }
+        
+        /* Deleted post styling */
+        .tweet-card.deleted {
+            border-left-color: #dc3545;
+            background: linear-gradient(135deg, #f8d7da 0%, #fafafa 100%);
+            opacity: 0.85;
+        }
+        
+        /* Edited post styling */
+        .tweet-card.edited {
+            border-left-color: #fd7e14;
+            background: linear-gradient(135deg, #fff3cd 0%, #fafafa 100%);
+        }
+        
         .tweet-card.analysis-hate_speech { border-left-color: #dc3545; }
         .tweet-card.analysis-disinformation { border-left-color: #fd7e14; }
         .tweet-card.analysis-conspiracy_theory { border-left-color: #6f42c1; }
@@ -311,8 +338,55 @@
         <div class="row">
             {% for tweet in tweets_data.tweets %}
             <div class="col-12 mb-4">
-                <div class="card tweet-card {% if tweet.analysis_category %}analysis-{{ tweet.analysis_category }}{% endif %}">
+                <div class="card tweet-card {% if tweet.analysis_category %}analysis-{{ tweet.analysis_category }}{% endif %}{% if tweet.is_rt %} rt-{{ tweet.rt_type }}{% endif %}{% if tweet.is_deleted %} deleted{% endif %}{% if tweet.is_edited %} edited{% endif %}">
                     <div class="card-body">
+                        <!-- Post Status Warnings -->
+                        {% if tweet.post_status_warnings %}
+                        <div class="post-status-warnings mb-3">
+                            {% for warning in tweet.post_status_warnings %}
+                            <div class="alert {{ warning.class }} alert-sm py-2">
+                                <i class="{{ warning.icon }} me-2"></i>
+                                <strong>{{ warning.message }}</strong>
+                                {% if warning.type == 'deleted' %}
+                                    - Mostrando contenido guardado
+                                {% elif warning.type == 'edited' %}
+                                    - <a href="#" class="alert-link show-versions" data-tweet-id="{{ tweet.tweet_id }}">Ver versiones anteriores</a>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- RT Header (if applicable) -->
+                        {% if tweet.is_rt %}
+                        <div class="rt-header mb-2">
+                            {% if tweet.rt_type == 'repost_other' %}
+                            <div class="alert alert-info py-2">
+                                <i class="fas fa-retweet me-2"></i>
+                                <strong>Retweet de @{{ tweet.original_author or 'usuario' }}</strong>
+                                {% if tweet.original_tweet_id %}
+                                <small class="ms-2">
+                                    <a href="https://x.com/i/web/status/{{ tweet.original_tweet_id }}" 
+                                       target="_blank" class="alert-link">
+                                        Ver original <i class="fas fa-external-link-alt"></i>
+                                    </a>
+                                </small>
+                                {% endif %}
+                            </div>
+                            {% elif tweet.rt_type == 'repost_own' %}
+                            <div class="alert alert-success py-2">
+                                <i class="fas fa-retweet me-2"></i>
+                                <strong>Retweet propio</strong>
+                            </div>
+                            {% elif tweet.rt_type == 'quote' %}
+                            <div class="alert alert-warning py-2">
+                                <i class="fas fa-quote-left me-2"></i>
+                                <strong>Quote Tweet de @{{ tweet.reply_to_username or 'usuario' }}</strong>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
                         <!-- Tweet Header -->
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div>
@@ -335,6 +409,12 @@
                                     {% endif %}
                                     {% if tweet.post_type and tweet.post_type != 'original' %}
                                         <span class="ms-2 badge bg-secondary">{{ tweet.post_type }}</span>
+                                    {% endif %}
+                                    {% if tweet.is_deleted %}
+                                        <span class="ms-2 badge bg-danger">Eliminado</span>
+                                    {% endif %}
+                                    {% if tweet.is_edited %}
+                                        <span class="ms-2 badge bg-warning text-dark">Editado</span>
                                     {% endif %}
                                 </small>
                             </div>
@@ -380,10 +460,63 @@
                             {% endif %}
                         </div>
 
-                        <!-- Embedded Tweet (fallback to stored content) -->
+                        <!-- Content Display: Embedded Tweet or Fallback -->
                         <div class="embedded-tweet-container">
-                            {% if tweet.tweet_url %}
-                            <!-- Twitter embed iframe approach -->
+                            {% if tweet.is_deleted %}
+                            <!-- Always show fallback content for deleted tweets -->
+                            <div class="fallback-content">
+                                <div class="tweet-content">
+                                    <!-- RT Content Display -->
+                                    {% if tweet.is_rt and tweet.original_content %}
+                                    <div class="original-tweet-content mb-3 p-3 border-start border-3 border-primary bg-light">
+                                        <h6 class="text-primary mb-2">
+                                            <i class="fas fa-quote-left me-1"></i>
+                                            Contenido original{% if tweet.original_author %} de @{{ tweet.original_author }}{% endif %}:
+                                        </h6>
+                                        <p class="mb-0">{{ tweet.original_content }}</p>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <p>{{ tweet.content }}</p>
+                                    
+                                    <!-- Hashtags -->
+                                    {% if tweet.hashtags_parsed %}
+                                    <div class="mb-2">
+                                        {% for hashtag in tweet.hashtags_parsed %}
+                                        <span class="hashtag me-2">#{{ hashtag }}</span>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <!-- Mentions -->
+                                    {% if tweet.mentions_parsed %}
+                                    <div class="mb-2">
+                                        {% for mention in tweet.mentions_parsed %}
+                                        <span class="mention me-2">@{{ mention }}</span>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <!-- Media -->
+                                    {% if tweet.media_links %}
+                                    <div class="media-container mb-2">
+                                        {% for media_url in tweet.media_links.split(',') %}
+                                        {% if media_url.strip() %}
+                                            {% if media_url.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')) %}
+                                            <img src="{{ media_url.strip() }}" alt="Media" class="media-preview" loading="lazy">
+                                            {% else %}
+                                            <a href="{{ media_url.strip() }}" target="_blank" class="btn btn-outline-primary btn-sm me-2">
+                                                <i class="fas fa-external-link-alt me-1"></i>Ver Media
+                                            </a>
+                                            {% endif %}
+                                        {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% else %}
+                            <!-- Try to embed first, fallback if failed -->
                             <div class="embedded-tweet" data-tweet-url="{{ tweet.tweet_url }}">
                                 <iframe 
                                     src="https://platform.twitter.com/embed/Tweet.html?dnt=true&embedId=twitter-widget-0&features=eyJ0ZndfdGltZWxpbmVfbGlzdCI6eyJidWNrZXQiOlsibGlua3RyLmVlIiwidHIuZWUiLCJ0ZXJyYS5jb20uYnIiLCJ3d3cubGlua3RyLmVlIiwid3d3LnRyLmVlIiwid3d3LnRlcnJhLmNvbS5iciJdLCJ2ZXJzaW9uIjpudWxsfSwidGZ3X2hvcml6b25fdGltZWxpbmVfMTIwMzQiOnsiYnVja2V0IjoidHJlYXRtZW50IiwidmVyc2lvbiI6bnVsbH0sInRmd190d2VldF9lZGl0X2JhY2tlbmQiOnsiYnVja2V0Ijoib24iLCJ2ZXJzaW9uIjpudWxsfSwidGZ3X3JlZnNyY19zZXNzaW9uIjp7ImJ1Y2tldCI6Im9uIiwidmVyc2lvbiI6bnVsbH0sInRmd19jaGluX3BpbGxzXzE0NzQxIjp7ImJ1Y2tldCI6ImNvbnRyb2wiLCJ2ZXJzaW9uIjpudWxsfSwidGZ3X21peGVkX21lZGlhXzE1ODk3Ijp7ImJ1Y2tldCI6InRyZWF0bWVudCIsInZlcnNpb24iOm51bGx9LCJ0Zndfc3BhY2VfY2FyZCI6eyJidWNrZXQiOiJvZmYiLCJ2ZXJzaW9uIjpudWxsfX0%3D&frame=false&hideCard=false&hideThread=false&id={{ tweet.tweet_url.split('/')[-1] }}&lang=es&origin={{ request.url_root|urlencode }}&sessionId=a47c7ee76b8ad407be2a6a4b659a78a6e82a7749&theme=light&widgetsVersion=1&width=550px"
@@ -398,6 +531,17 @@
                             <!-- Fallback content (shown if tweet fails to load) -->
                             <div class="fallback-content" style="display: none;">
                                 <div class="tweet-content">
+                                    <!-- RT Content Display -->
+                                    {% if tweet.is_rt and tweet.original_content %}
+                                    <div class="original-tweet-content mb-3 p-3 border-start border-3 border-primary bg-light">
+                                        <h6 class="text-primary mb-2">
+                                            <i class="fas fa-quote-left me-1"></i>
+                                            Contenido original{% if tweet.original_author %} de @{{ tweet.original_author }}{% endif %}:
+                                        </h6>
+                                        <p class="mb-0">{{ tweet.original_content }}</p>
+                                    </div>
+                                    {% endif %}
+                                    
                                     <p>{{ tweet.content }}</p>
                                     
                                     <!-- Hashtags -->
@@ -436,9 +580,9 @@
                                     {% endif %}
                                 </div>
                                 
-                                <div class="alert alert-warning mb-0">
-                                    <i class="fas fa-exclamation-triangle me-2"></i>
-                                    <strong>Tweet no disponible:</strong> Este tweet podría haber sido eliminado. Mostrando contenido guardado.
+                                <div class="alert alert-info mb-0">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Embed no disponible:</strong> Mostrando contenido guardado en su lugar.
                                 </div>
                             </div>
                             {% endif %}
@@ -573,9 +717,12 @@
         });
         {% endif %}
 
-        // Handle Twitter widget loading and fallback
+        // Enhanced tweet handling with version support and deleted post management
         document.addEventListener('DOMContentLoaded', function() {
-            // Wait for Twitter widgets to load
+            // Initialize version display handlers
+            initializeVersionHandlers();
+            
+            // Handle Twitter widget loading and fallback
             setTimeout(function() {
                 checkEmbeddedTweets();
             }, 3000);
@@ -584,23 +731,161 @@
             setTimeout(function() {
                 checkEmbeddedTweets();
             }, 10000);
+            
+            // Auto-hide deleted tweet embeds and show fallback content
+            handleDeletedTweets();
         });
 
+        function initializeVersionHandlers() {
+            // Handle "show versions" links for edited tweets
+            document.querySelectorAll('.show-versions').forEach(function(link) {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const tweetId = this.getAttribute('data-tweet-id');
+                    showTweetVersions(tweetId);
+                });
+            });
+        }
+
+        function showTweetVersions(tweetId) {
+            // Fetch tweet versions from API
+            fetch(`/api/tweet-versions/${tweetId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('Error al cargar versiones: ' + data.error);
+                        return;
+                    }
+                    
+                    // Create modal to display versions
+                    const modal = createVersionModal(data);
+                    document.body.appendChild(modal);
+                    
+                    // Show modal
+                    const bsModal = new bootstrap.Modal(modal);
+                    bsModal.show();
+                    
+                    // Remove modal when hidden
+                    modal.addEventListener('hidden.bs.modal', function() {
+                        document.body.removeChild(modal);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching tweet versions:', error);
+                    alert('Error al cargar las versiones del tweet');
+                });
+        }
+
+        function createVersionModal(data) {
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.setAttribute('tabindex', '-1');
+            
+            let versionsHtml = '';
+            if (data.versions && data.versions.length > 0) {
+                data.versions.forEach(function(version, index) {
+                    const versionDate = new Date(version.detected_at).toLocaleString('es-ES');
+                    versionsHtml += `
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-history me-2"></i>
+                                    Versión ${version.version_number}
+                                    <small class="text-muted ms-2">${versionDate}</small>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <p>${version.content}</p>
+                                ${version.hashtags ? '<div class="mb-2">' + JSON.parse(version.hashtags).map(tag => '<span class="hashtag me-2">#' + tag + '</span>').join('') + '</div>' : ''}
+                                ${version.mentions ? '<div class="mb-2">' + JSON.parse(version.mentions).map(mention => '<span class="mention me-2">@' + mention + '</span>').join('') + '</div>' : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                versionsHtml = '<p class="text-muted">No hay versiones anteriores disponibles.</p>';
+            }
+            
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-edit me-2"></i>
+                                Historial de Ediciones
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Versión actual:</strong> ${data.current_content}
+                            </div>
+                            
+                            <h6 class="mt-4 mb-3">Versiones anteriores:</h6>
+                            ${versionsHtml}
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            return modal;
+        }
+
+        function handleDeletedTweets() {
+            // For deleted tweets, ensure fallback content is always shown
+            document.querySelectorAll('.tweet-card.deleted .embedded-tweet').forEach(function(embeddedTweet) {
+                const fallback = embeddedTweet.parentNode.querySelector('.fallback-content');
+                if (fallback) {
+                    embeddedTweet.style.display = 'none';
+                    fallback.style.display = 'block';
+                }
+            });
+        }
+
         function checkEmbeddedTweets() {
-            const embeddedTweets = document.querySelectorAll('.embedded-tweet');
+            const embeddedTweets = document.querySelectorAll('.embedded-tweet:not(.deleted .embedded-tweet)');
             
             embeddedTweets.forEach(function(container) {
                 const tweetFrame = container.querySelector('iframe');
                 const fallback = container.parentNode.querySelector('.fallback-content');
                 
-                // If no iframe loaded or iframe is empty, show fallback
-                if (!tweetFrame || tweetFrame.style.display === 'none' || 
-                    (tweetFrame.contentDocument && tweetFrame.contentDocument.body.innerHTML === '')) {
-                    if (fallback) {
+                if (!tweetFrame || !fallback) return;
+                
+                let hasShownFallback = false;
+                
+                // Listen for iframe load events
+                tweetFrame.onload = function() {
+                    // If iframe loaded, assume success (Twitter embeds handle their own error states)
+                    console.log('Tweet iframe loaded successfully');
+                };
+                
+                tweetFrame.onerror = function() {
+                    // Only show fallback on explicit error
+                    if (!hasShownFallback) {
+                        console.log('Tweet iframe failed to load, showing fallback');
                         container.style.display = 'none';
                         fallback.style.display = 'block';
+                        hasShownFallback = true;
                     }
-                }
+                };
+                
+                // Much longer timeout, and only for obvious failures
+                setTimeout(function() {
+                    // Only check if iframe is completely missing or has clear failure indicators
+                    if (!tweetFrame.src || tweetFrame.src === '' || tweetFrame.src === 'about:blank') {
+                        if (!hasShownFallback) {
+                            console.log('Tweet iframe has no src or blank, showing fallback');
+                            container.style.display = 'none';
+                            fallback.style.display = 'block';
+                            hasShownFallback = true;
+                        }
+                    }
+                    // Note: We removed the cross-origin checks that were causing false positives
+                }, 15000); // Longer timeout (15 seconds)
             });
         }
     </script>

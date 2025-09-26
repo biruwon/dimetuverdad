@@ -219,13 +219,21 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 1. **ONLY USE EXISTING TERMINALS**: Never, under any circumstances, create new terminal sessions
 2. **ONE TERMINAL ONLY**: The system must have exactly one active terminal throughout the entire session
 3. **USE `run_in_terminal` ONLY**: All terminal commands must use the existing terminal
-4. **NO EXCEPTIONS**: Background processes, directory changes, and all operations must use the same terminal
-5. **CHECK BEFORE RUNNING**: Always use `terminal_last_command` or `get_terminal_output` first
-6. **SEQUENTIAL EXECUTION**: Run commands one at a time in the same terminal context
+4. **USE `run_in_venv.sh` FOR PROJECT COMMANDS**: Always use the project's runner script for Python operations
+5. **NO EXCEPTIONS**: Background processes, directory changes, and all operations must use the same terminal
+6. **CHECK BEFORE RUNNING**: Always use `terminal_last_command` or `get_terminal_output` first
+7. **SEQUENTIAL EXECUTION**: Run commands one at a time in the same terminal context
 
 **CRITICAL**: The `run_in_terminal` tool automatically uses the existing terminal. Creating new terminals is a SYSTEM VIOLATION that breaks virtual environment activation and workflow continuity.
 
-**IF VIRTUAL ENV ISSUES OCCUR**: Use navigation commands like `cd ..` and `source venv/bin/activate` within the existing terminal rather than creating new ones.
+**PROJECT RUNNER USAGE**: 
+- Web app: `./run_in_venv.sh web`
+- Analysis: `./run_in_venv.sh analyze-db`
+- Fetch tweets: `./run_in_venv.sh fetch`
+- Test status: `./run_in_venv.sh test-status`
+- Install: `./run_in_venv.sh install`
+
+**IF VIRTUAL ENV ISSUES OCCUR**: The `run_in_venv.sh` script automatically handles virtual environment activation. Never manually activate with `source venv/bin/activate` - always use the runner script.
 
 ## Automatic Git Workflow
 

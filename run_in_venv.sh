@@ -40,6 +40,25 @@ fetch(){
   "$PY" "$ROOT_DIR/fetch_tweets.py"
 }
 
+analyze_db(){
+  ensure_venv
+  echo "Starting database analysis..."
+  "$PY" "$ROOT_DIR/analyze_db_tweets.py"
+}
+
+web(){
+  ensure_venv
+  echo "Starting web application on port 5000..."
+  cd "$ROOT_DIR/web"
+  "$PY" "$ROOT_DIR/web/app.py"
+}
+
+test_status(){
+  ensure_venv
+  echo "Running post status tests..."
+  "$PY" "$ROOT_DIR/test_post_status.py" "$@"
+}
+
 case "${1-}" in
   install)
     install
@@ -50,13 +69,20 @@ case "${1-}" in
   analyze-db)
     analyze_db
     ;;
+  web)
+    web
+    ;;
+  test-status)
+    shift
+    test_status "$@"
+    ;;
   full)
     install || true
     fetch
     analyze_db
     ;;
   *)
-    echo "Usage: $0 {install|fetch|analyze-db|full}"
+    echo "Usage: $0 {install|fetch|analyze-db|web|test-status|full}"
     exit 1
     ;;
 esac
