@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 import sqlite3
 import os
 import json
@@ -6,9 +6,40 @@ from datetime import datetime, timedelta
 from collections import Counter
 import re
 import math
+from functools import wraps
+import secrets
+from pathlib import Path
+
+# Load environment variables from .env file
+def load_env_file():
+    env_path = Path(__file__).parent.parent / '.env'
+    if env_path.exists():
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key] = value
+
+load_env_file()
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
+
+# Admin configuration
+ADMIN_TOKEN = os.environ.get('ADMIN_TOKEN', 'admin123')  # Change this in production!
+
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'accounts.db')
+
+def admin_required(f):
+    """Decorator to require admin access for certain routes."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('admin_authenticated'):
+            flash('Acceso administrativo requerido', 'error')
+            return redirect(url_for('admin_login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 def get_db_connection():
     """Get database connection with row factory for easier access."""
@@ -100,6 +131,547 @@ def get_all_accounts(page=1, per_page=10):
         'per_page': per_page,
         'total_pages': math.ceil(total_count / per_page)
     }
+
+# Admin Routes
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+    """Simple admin login page."""
+    if request.method == 'POST':
+        token = request.form.get('token')
+        print(f"DEBUG: Received token: '{token}'")
+        print(f"DEBUG: Expected token: '{ADMIN_TOKEN}'")
+        print(f"DEBUG: Tokens match: {token == ADMIN_TOKEN}")
+        if token == ADMIN_TOKEN:
+            session['admin_authenticated'] = True
+            flash('Acceso administrativo concedido', 'success')
+            return redirect(url_for('admin_dashboard'))
+        else:
+            flash('Token administrativo incorrecto', 'error')
+    
+    return render_template('admin/login.html')
+
+@app.route('/admin/logout')
+def admin_logout():
+    """Admin logout."""
+    session.pop('admin_authenticated', None)
+    flash('Sesión administrativa cerrada', 'info')
+    return redirect(url_for('index'))
+
+@app.route('/admin')
+@admin_required
+def admin_dashboard():
+    """Admin dashboard with reanalysis and management options."""
+    conn = get_db_connection()
+    
+    # Get analysis statistics
+    stats = conn.execute("""
+        SELECT 
+            COUNT(DISTINCT t.tweet_id) as total_tweets,
+            COUNT(CASE WHEN ca.tweet_id IS NOT NULL THEN 1 END) as analyzed_tweets,
+            COUNT(CASE WHEN ca.analysis_method = 'pattern' THEN 1 END) as pattern_analyzed,
+            COUNT(CASE WHEN ca.analysis_method = 'llm' THEN 1 END) as llm_analyzed
+        FROM tweets t
+        LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
+    """).fetchone()
+    
+    # Get category distribution
+    categories = conn.execute("""
+        SELECT category, COUNT(*) as count 
+        FROM content_analyses 
+        GROUP BY category 
+        ORDER BY count DESC
+    """).fetchall()
+    
+    # Get recent analysis activity
+    recent_analyses = conn.execute("""
+        SELECT 
+            ca.analysis_timestamp,
+            ca.category,
+            ca.analysis_method,
+            t.username,
+            SUBSTR(t.content, 1, 100) as content_preview
+        FROM content_analyses ca
+        JOIN tweets t ON ca.tweet_id = t.tweet_id
+        ORDER BY ca.analysis_timestamp DESC
+        LIMIT 10
+    """).fetchall()
+    
+    conn.close()
+    
+    return render_template('admin/dashboard.html',
+                         stats=dict(stats) if stats else {},
+                         categories=[dict(row) for row in categories],
+                         recent_analyses=[dict(row) for row in recent_analyses])
+
+@app.route('/admin/reanalyze', methods=['POST'])
+@admin_required
+def admin_reanalyze():
+    """Trigger reanalysis of tweets."""
+    action = request.form.get('action')
+    
+    if action == 'all':
+        # Reanalyze all tweets with background subprocess
+        import subprocess
+        import threading
+        from pathlib import Path
+        
+        base_dir = Path(__file__).parent.parent
+        
+        def run_analysis_background():
+            try:
+                cmd = ["./run_in_venv.sh", "analyze-db", "--force-reanalyze"]
+                subprocess.run(cmd, cwd=base_dir, check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError as e:
+                print(f"Analysis error: {e}")
+        
+        thread = threading.Thread(target=run_analysis_background)
+        thread.daemon = True
+        thread.start()
+        flash('Reanálisis de TODOS los tweets iniciado (sin límite)', 'success')
+    
+    elif action == 'category':
+        category = request.form.get('category')
+        if category:
+            # Reanalyze tweets from specific category using direct analysis
+            import threading
+            
+            def reanalyze_category():
+                try:
+                    import sys
+                    import os
+                    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+                    
+                    from enhanced_analyzer import EnhancedAnalyzer, save_content_analysis
+                    
+                    # Get tweets from specific category
+                    conn = get_db_connection()
+                    tweets = conn.execute("""
+                        SELECT t.tweet_id, t.content, t.username 
+                        FROM tweets t
+                        JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
+                        WHERE ca.category = ?
+                        LIMIT 20
+                    """, (category,)).fetchall()
+                    
+                    if tweets:
+                        analyzer = EnhancedAnalyzer(model_priority="balanced")
+                        
+                        for tweet in tweets:
+                            # Delete existing analysis
+                            conn.execute("DELETE FROM content_analyses WHERE tweet_id = ?", (tweet[0],))
+                            conn.commit()
+                            
+                            # Reanalyze
+                            analysis_result = analyzer.analyze_content(tweet[1])
+                            save_content_analysis(
+                                tweet_id=tweet[0],
+                                username=tweet[2],
+                                analysis_result=analysis_result
+                            )
+                            print(f"✅ Reanálizado tweet {tweet[0]} de @{tweet[2]}: {analysis_result.category}")
+                    
+                    conn.close()
+                    
+                except Exception as e:
+                    print(f"Error en reanálisis por categoría: {e}")
+            
+            thread = threading.Thread(target=reanalyze_category)
+            thread.daemon = True
+            thread.start()
+            flash(f'Reanálisis de categoría "{category}" iniciado (máximo 20 tweets)', 'success')
+    
+    elif action == 'user':
+        username = request.form.get('username')
+        if username:
+            import subprocess
+            import threading
+            from pathlib import Path
+            
+            base_dir = Path(__file__).parent.parent
+            
+            def run_user_analysis():
+                try:
+                    cmd = ["./run_in_venv.sh", "analyze-db", "--username", username, "--force-reanalyze"]
+                    subprocess.run(cmd, cwd=base_dir, check=True, capture_output=True, text=True)
+                except subprocess.CalledProcessError as e:
+                    print(f"Analysis error: {e}")
+            
+            thread = threading.Thread(target=run_user_analysis)
+            thread.daemon = True
+            thread.start()
+            flash(f'Reanálisis de usuario "@{username}" iniciado', 'success')
+    
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/edit-analysis/<tweet_id>', methods=['GET', 'POST'])
+@admin_required
+def admin_edit_analysis(tweet_id):
+    """Edit analysis results for a specific tweet."""
+    conn = get_db_connection()
+    
+    # Get referrer (user page) for proper redirect
+    referrer = request.args.get('from') or request.referrer
+    
+    if request.method == 'POST':
+        action = request.form.get('action', 'update')
+        new_category = request.form.get('category')
+        new_explanation = request.form.get('explanation')
+        
+        try:
+            if action == 'reanalyze':
+                # Trigger full reanalysis using the analysis pipeline
+                import sys
+                import os
+                sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+                
+                from enhanced_analyzer import EnhancedAnalyzer, save_content_analysis
+                
+                # Get tweet data for reanalysis
+                tweet_data = conn.execute("""
+                    SELECT tweet_id, content, username FROM tweets WHERE tweet_id = ?
+                """, (tweet_id,)).fetchone()
+                
+                if not tweet_data:
+                    flash('Tweet no encontrado', 'error')
+                    conn.close()
+                    return redirect(referrer or url_for('admin_dashboard'))
+                
+                # Delete existing analysis to force reanalysis
+                conn.execute("DELETE FROM content_analyses WHERE tweet_id = ?", (tweet_id,))
+                conn.commit()
+                conn.close()
+                
+                # Initialize analyzer and reanalyze
+                analyzer = EnhancedAnalyzer(model_priority="balanced")
+                print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data[2]}")
+                
+                # Analyze the content
+                analysis_result = analyzer.analyze_content(tweet_data[1])  # content
+                
+                # Save the new analysis
+                save_content_analysis(
+                    tweet_id=tweet_data[0],
+                    username=tweet_data[2], 
+                    analysis_result=analysis_result
+                )
+                
+                flash(f'Tweet reanálizado correctamente. Nueva categoría: {analysis_result.category}', 'success')
+                
+            else:
+                # Manual update
+                if not new_category or not new_explanation:
+                    flash('Categoría y explicación son requeridas', 'error')
+                    conn.close()
+                    return redirect(request.url)
+                
+                # Update analysis manually
+                conn.execute("""
+                    UPDATE content_analyses 
+                    SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = datetime('now')
+                    WHERE tweet_id = ?
+                """, (new_category, new_explanation, tweet_id))
+                
+                if conn.total_changes == 0:
+                    # Create new analysis if none exists
+                    conn.execute("""
+                        INSERT INTO content_analyses (tweet_id, category, llm_explanation, analysis_method, analysis_timestamp, username)
+                        SELECT ?, ?, ?, 'manual', datetime('now'), username FROM tweets WHERE tweet_id = ?
+                    """, (tweet_id, new_category, new_explanation, tweet_id))
+                
+                conn.commit()
+                conn.close()
+                
+                flash('Análisis actualizado correctamente', 'success')
+            
+            # Redirect back to user view if possible, otherwise admin dashboard
+            if referrer and '/user/' in referrer:
+                return redirect(referrer)
+            else:
+                return redirect(url_for('admin_dashboard'))
+                
+        except Exception as e:
+            app.logger.error(f"Error in admin_edit_analysis: {str(e)}")
+            flash('Ocurrió un error al procesar la solicitud. Inténtalo de nuevo.', 'error')
+            conn.close()
+            return redirect(referrer or url_for('admin_dashboard'))
+    
+    # GET request - show edit form
+    try:
+        # Get tweet and current analysis
+        tweet_data = conn.execute("""
+            SELECT 
+                t.content, t.username, t.tweet_timestamp,
+                ca.category, ca.llm_explanation, t.tweet_url
+            FROM tweets t
+            LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
+            WHERE t.tweet_id = ?
+        """, (tweet_id,)).fetchone()
+        
+        conn.close()
+        
+        if not tweet_data:
+            flash('Tweet no encontrado', 'error')
+            return redirect(referrer or url_for('admin_dashboard'))
+        
+        # Convert to dict safely
+        tweet_dict = {
+            'content': tweet_data[0] or '',
+            'username': tweet_data[1] or '',
+            'tweet_timestamp': tweet_data[2] or '',
+            'category': tweet_data[3] or 'general',
+            'llm_explanation': tweet_data[4] or '',
+            'tweet_url': tweet_data[5] or ''
+        }
+        
+        categories = ['general', 'hate_speech', 'disinformation', 'conspiracy_theory', 
+                      'far_right_bias', 'call_to_action', 'political_general']
+        
+        return render_template('admin/edit_analysis.html',
+                             tweet=tweet_dict,
+                             tweet_id=tweet_id,
+                             categories=categories,
+                             referrer=referrer)
+    
+    except Exception as e:
+        app.logger.error(f"Error loading edit analysis for {tweet_id}: {str(e)}")
+        flash('No se pudo cargar la información del tweet. Inténtalo de nuevo.', 'error')
+        return redirect(referrer or url_for('admin_dashboard'))
+
+@app.route('/admin/reanalyze-single/<tweet_id>', methods=['POST'])
+@admin_required
+def admin_reanalyze_single(tweet_id):
+    """Reanalyze a single tweet using the analysis pipeline directly."""
+    try:
+        # Import the analyzer directly
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+        
+        from enhanced_analyzer import EnhancedAnalyzer, save_content_analysis
+        
+        # Get tweet data
+        conn = get_db_connection()
+        tweet_data = conn.execute("""
+            SELECT tweet_id, content, username FROM tweets WHERE tweet_id = ?
+        """, (tweet_id,)).fetchone()
+        
+        if not tweet_data:
+            conn.close()
+            flash('Tweet no encontrado', 'error')
+            return redirect(request.referrer or url_for('index'))
+        
+        # Delete existing analysis to force reanalysis
+        conn.execute("DELETE FROM content_analyses WHERE tweet_id = ?", (tweet_id,))
+        conn.commit()
+        conn.close()
+        
+        # Initialize analyzer and reanalyze
+        analyzer = EnhancedAnalyzer(model_priority="balanced")
+        
+        print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data[2]}")
+        
+        # Analyze the content
+        analysis_result = analyzer.analyze_content(tweet_data[1])  # content
+        
+        # Save the new analysis
+        save_content_analysis(
+            tweet_id=tweet_data[0],
+            username=tweet_data[2], 
+            analysis_result=analysis_result
+        )
+        
+        flash(f'Tweet reanálizado correctamente. Nueva categoría: {analysis_result.category}', 'success')
+        
+    except Exception as e:
+        print(f"Error durante reanálisis: {e}")
+        flash('El reanálisis falló. Inténtalo de nuevo más tarde.', 'error')
+    
+    return redirect(request.referrer or url_for('index'))
+
+@app.route('/admin/category/<category_name>')
+@admin_required
+def admin_view_category(category_name):
+    """View all tweets from a specific category (admin only)."""
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    
+    try:
+        conn = get_db_connection()
+        
+        # Debug: Check if category exists
+        category_check = conn.execute("""
+            SELECT COUNT(*) FROM content_analyses WHERE category = ?
+        """, (category_name,)).fetchone()
+        
+        if not category_check or category_check[0] == 0:
+            conn.close()
+            flash(f'No se encontraron tweets para la categoría "{category_name}"', 'info')
+            return redirect(url_for('admin_dashboard'))
+        
+        # Get total count for pagination
+        total_count_result = conn.execute("""
+            SELECT COUNT(*) 
+            FROM content_analyses ca
+            JOIN tweets t ON ca.tweet_id = t.tweet_id
+            WHERE ca.category = ?
+        """, (category_name,)).fetchone()
+        
+        total_count = 0
+        if total_count_result and len(total_count_result) > 0 and total_count_result[0] is not None:
+            total_count = total_count_result[0]
+        
+        if total_count == 0:
+            conn.close()
+            flash(f'No hay tweets disponibles para la categoría "{category_name}"', 'info')
+            return redirect(url_for('admin_dashboard'))
+        
+        # Get tweets from this category across all users
+        offset = (page - 1) * per_page
+        tweets_query = """
+            SELECT 
+                t.tweet_url, t.content, t.username, t.tweet_timestamp, t.tweet_id,
+                ca.category, ca.llm_explanation, ca.analysis_method, ca.analysis_timestamp,
+                t.is_deleted, t.is_edited, t.post_type
+            FROM content_analyses ca
+            JOIN tweets t ON ca.tweet_id = t.tweet_id
+            WHERE ca.category = ?
+            ORDER BY ca.analysis_timestamp DESC
+            LIMIT ? OFFSET ?
+        """
+        
+        tweets = conn.execute(tweets_query, (category_name, per_page, offset)).fetchall()
+        
+        # Get category statistics with comprehensive null safety
+        category_stats_query = """
+            SELECT 
+                COUNT(*) as total_tweets,
+                COUNT(DISTINCT t.username) as unique_users,
+                COUNT(CASE WHEN ca.analysis_method = 'llm' THEN 1 END) as llm_analyzed,
+                COUNT(CASE WHEN ca.analysis_method = 'pattern' THEN 1 END) as pattern_analyzed
+            FROM content_analyses ca
+            JOIN tweets t ON ca.tweet_id = t.tweet_id
+            WHERE ca.category = ?
+        """
+        
+        category_stats_result = conn.execute(category_stats_query, (category_name,)).fetchone()
+        
+        # Build category stats with comprehensive null checking
+        category_stats = {
+            'total_tweets': 0,
+            'unique_users': 0, 
+            'llm_analyzed': 0,
+            'pattern_analyzed': 0
+        }
+        
+        if category_stats_result and len(category_stats_result) >= 4:
+            category_stats = {
+                'total_tweets': category_stats_result[0] if category_stats_result[0] is not None else 0,
+                'unique_users': category_stats_result[1] if category_stats_result[1] is not None else 0,
+                'llm_analyzed': category_stats_result[2] if category_stats_result[2] is not None else 0,
+                'pattern_analyzed': category_stats_result[3] if category_stats_result[3] is not None else 0
+            }
+        
+        # Get top users in this category
+        top_users_query = """
+            SELECT t.username, COUNT(*) as tweet_count
+            FROM content_analyses ca
+            JOIN tweets t ON ca.tweet_id = t.tweet_id
+            WHERE ca.category = ?
+            GROUP BY t.username
+            ORDER BY tweet_count DESC
+            LIMIT 10
+        """
+        
+        top_users_result = conn.execute(top_users_query, (category_name,)).fetchall()
+        top_users = top_users_result if top_users_result else []
+        
+        conn.close()
+        
+        # Process tweets for display with null safety
+        processed_tweets = []
+        if tweets:
+            for row in tweets:
+                if len(row) >= 12:  # Ensure row has enough columns
+                    tweet = {
+                        'tweet_url': row[0] or '',
+                        'content': row[1] or '',
+                        'username': row[2] or '',
+                        'tweet_timestamp': row[3] or '',
+                        'tweet_id': row[4] or '',
+                        'category': row[5] or category_name,
+                        'llm_explanation': row[6] or '',
+                        'analysis_method': row[7] or 'unknown',
+                        'analysis_timestamp': row[8] or '',
+                        'is_deleted': bool(row[9]) if row[9] is not None else False,
+                        'is_edited': bool(row[10]) if row[10] is not None else False,
+                        'post_type': row[11] or 'original'
+                    }
+                    processed_tweets.append(tweet)
+        
+        pagination = {
+            'page': page,
+            'per_page': per_page,
+            'total': total_count,
+            'total_pages': math.ceil(total_count / per_page) if total_count > 0 else 1
+        }
+        
+        return render_template('admin/category_view.html',
+                             category_name=category_name,
+                             tweets=processed_tweets,
+                             pagination=pagination,
+                             category_stats=category_stats,
+                             top_users=[dict(row) for row in top_users] if top_users else [])
+    
+    except Exception as e:
+        app.logger.error(f"Error in admin_view_category for {category_name}: {str(e)}")
+        app.logger.error(f"Error details: {type(e).__name__}: {e}")
+        import traceback
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+        flash('No se pudo cargar la información de la categoría. Inténtalo de nuevo.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/user-category/<username>/<category>')
+@admin_required  
+def admin_view_user_category(username, category):
+    """View specific user's tweets in a specific category (admin only)."""
+    return redirect(url_for('user_page', username=username, category=category))
+
+@app.route('/admin/quick-edit-category/<tweet_id>', methods=['POST'])
+@admin_required
+def admin_quick_edit_category(tweet_id):
+    """Quickly change the category of a tweet."""
+    new_category = request.form.get('category')
+    
+    if not new_category:
+        flash('Categoría requerida', 'error')
+        return redirect(request.referrer or url_for('index'))
+    
+    conn = get_db_connection()
+    
+    # Check if analysis exists, if not create one
+    existing = conn.execute("""
+        SELECT tweet_id FROM content_analyses WHERE tweet_id = ?
+    """, (tweet_id,)).fetchone()
+    
+    if existing:
+        # Update existing analysis
+        conn.execute("""
+            UPDATE content_analyses 
+            SET category = ?, analysis_timestamp = datetime('now')
+            WHERE tweet_id = ?
+        """, (new_category, tweet_id))
+    else:
+        # Create new analysis entry
+        conn.execute("""
+            INSERT INTO content_analyses (tweet_id, category, llm_explanation, analysis_method, analysis_timestamp)
+            SELECT ?, ?, 'Categoría asignada manualmente por administrador', 'manual', datetime('now')
+        """, (tweet_id, new_category))
+    
+    conn.commit()
+    conn.close()
+    
+    flash(f'Categoría cambiada a "{new_category}" correctamente', 'success')
+    return redirect(request.referrer or url_for('index'))
 
 @app.route('/')
 def index():

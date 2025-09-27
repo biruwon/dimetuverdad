@@ -233,6 +233,13 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 - Test status: `./run_in_venv.sh test-status`
 - Install: `./run_in_venv.sh install`
 
+**WEB APPLICATION MANAGEMENT**:
+- **CHECK BEFORE STARTING**: Always use `lsof -i :5000` to check if web app is already running
+- **DO NOT STOP EXISTING INSTANCES**: If port 5000 is in use, assume web app is running elsewhere and DO NOT attempt to kill processes
+- **USE EXISTING WEB APP**: If web app is already running, simply use the existing instance at localhost:5000
+- **ONLY START IF NOT RUNNING**: Only run `./run_in_venv.sh web` if port check shows port 5000 is free
+- **BACKGROUND PROCESSES**: Web app should run as background process with `isBackground=true`
+
 **IF VIRTUAL ENV ISSUES OCCUR**: The `run_in_venv.sh` script automatically handles virtual environment activation. Never manually activate with `source venv/bin/activate` - always use the runner script.
 
 ## Automatic Git Workflow

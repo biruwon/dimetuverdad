@@ -195,6 +195,14 @@
                 DimeTuVerdad
             </a>
             <div class="navbar-nav ms-auto">
+                {% if session.admin_authenticated %}
+                    <a href="{{ url_for('admin_dashboard') }}" class="nav-link text-success me-3">
+                        <i class="fas fa-shield-alt me-1"></i>Admin Panel
+                    </a>
+                    <a href="{{ url_for('admin_logout') }}" class="nav-link text-muted me-3">
+                        <i class="fas fa-sign-out-alt me-1"></i>Logout
+                    </a>
+                {% endif %}
                 <span class="navbar-text">
                     <i class="fab fa-twitter text-primary me-1"></i>
                     @{{ username }}
@@ -606,6 +614,17 @@
                                 <i class="fas fa-clock me-1"></i>
                                 Analizado: {{ tweet.analysis_timestamp[:19].replace('T', ' ') }}
                             </small>
+                            {% endif %}
+                            
+                            {% if session.admin_authenticated %}
+                            <div class="admin-controls mt-3 border-top pt-3">
+                                <h6 class="text-warning mb-2">
+                                    <i class="fas fa-shield-alt me-1"></i>Admin Controls
+                                </h6>
+                                <a href="{{ url_for('admin_edit_analysis', tweet_id=tweet.tweet_id, from=request.url) }}" class="btn btn-sm btn-warning">
+                                    <i class="fas fa-edit me-1"></i>Editar Análisis
+                                </a>
+                            </div>
                             {% endif %}
                         </div>
                         {% endif %}

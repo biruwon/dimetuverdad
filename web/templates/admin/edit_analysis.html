@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Análisis - Admin DiMeTuVerdad</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .admin-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .tweet-content {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 1rem;
+            border-radius: 0 10px 10px 0;
+        }
+        .form-card {
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <!-- Admin Header -->
+    <header class="admin-header py-3">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-edit me-2"></i>Editar Análisis
+                    </h1>
+                    <small class="opacity-75">Modificar categoría y explicación</small>
+                </div>
+                <div>
+                    {% if referrer and '/user/' in referrer %}
+                    <a href="{{ referrer }}" class="btn btn-outline-light me-2">
+                        <i class="fas fa-arrow-left me-1"></i>Volver al usuario
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-light">
+                        <i class="fas fa-shield-alt me-1"></i>Panel Admin
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container my-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <!-- Tweet Information -->
+                <div class="card form-card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-info-circle me-2"></i>Información del Tweet
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Usuario:</strong></label>
+                            <div>@{{ tweet.username }}</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Fecha:</strong></label>
+                            <div>{{ tweet.tweet_timestamp }}</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Contenido:</strong></label>
+                            <div class="tweet-content">
+                                {{ tweet.content }}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Categoría Actual:</strong></label>
+                            <div>
+                                <span class="badge bg-{{ 
+                                    'danger' if tweet.category == 'hate_speech' else
+                                    'warning' if tweet.category == 'disinformation' else
+                                    'dark' if tweet.category == 'conspiracy_theory' else
+                                    'primary' if tweet.category == 'far_right_bias' else
+                                    'success' if tweet.category == 'call_to_action' else
+                                    'secondary' if tweet.category == 'general' else
+                                    'info'
+                                }} fs-6">
+                                    {{ tweet.category or 'Sin categoría' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <!-- Edit Form -->
+                <div class="card form-card">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">
+                            <i class="fas fa-edit me-2"></i>Editar Análisis
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Reanalysis Option -->
+                        <div class="alert alert-info mb-4">
+                            <h6><i class="fas fa-robot me-2"></i>Reanálisis Automático</h6>
+                            <p class="mb-2">Ejecuta el análisis completo del sistema (patrones + LLM) para obtener una nueva categorización automática.</p>
+                            <form method="POST" action="{{ url_for('admin_edit_analysis', tweet_id=tweet_id) }}" style="display: inline;">
+                                <input type="hidden" name="action" value="reanalyze">
+                                {% if referrer %}<input type="hidden" name="from" value="{{ referrer }}">{% endif %}
+                                <button type="submit" class="btn btn-info btn-sm" onclick="return confirm('¿Reanalizar este tweet automáticamente?\n\nEsto sobrescribirá la categoría y explicación actuales.')">
+                                    <i class="fas fa-sync-alt me-1"></i>Reanalizar Automáticamente
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div class="mb-3 text-center">
+                            <strong>— O —</strong>
+                        </div>
+                        
+                        <!-- Manual Edit Form -->
+                        <form method="POST" action="{{ url_for('admin_edit_analysis', tweet_id=tweet_id) }}">
+                            <input type="hidden" name="action" value="update">
+                            {% if referrer %}<input type="hidden" name="from" value="{{ referrer }}">{% endif %}
+                            
+                            <div class="mb-3">
+                                <label for="category" class="form-label">Cambiar Categoría Manualmente</label>
+                                <select name="category" id="category" class="form-select" required>
+                                    {% for cat in categories %}
+                                        <option value="{{ cat }}" {{ 'selected' if cat == tweet.category else '' }}>
+                                            {% if cat == 'general' %}✅ General
+                                            {% elif cat == 'hate_speech' %}🚫 Discurso de Odio
+                                            {% elif cat == 'disinformation' %}❌ Desinformación
+                                            {% elif cat == 'conspiracy_theory' %}🕵️ Teoría Conspiratoria
+                                            {% elif cat == 'far_right_bias' %}⚡ Sesgo Extrema Derecha
+                                            {% elif cat == 'call_to_action' %}📢 Llamada a la Acción
+                                            {% elif cat == 'political_general' %}🗳️ Política General
+                                            {% else %}{{ cat }}
+                                            {% endif %}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">
+                                    Selecciona la categoría más apropiada para este contenido.
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="explanation" class="form-label">Editar Explicación Manualmente</label>
+                                <textarea name="explanation" id="explanation" class="form-control" rows="8" required>{{ tweet.llm_explanation or '' }}</textarea>
+                                <div class="form-text">
+                                    Proporciona una explicación detallada del por qué este contenido pertenece a la categoría seleccionada.
+                                </div>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-save me-2"></i>Guardar Cambios Manuales
+                                </button>
+                                <a href="{{ referrer if referrer and '/user/' in referrer else url_for('admin_dashboard') }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-times me-2"></i>Cancelar
+                                </a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
