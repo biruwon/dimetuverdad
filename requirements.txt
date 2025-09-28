@@ -1,0 +1,25 @@
+# Core web framework
+Flask==2.3.3
+
+# Machine learning and NLP
+torch>=2.0.0
+transformers>=4.21.0
+
+# Web scraping
+playwright>=1.30.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# HTTP requests
+requests>=2.31.0
+
+# LLM integration
+openai>=1.0.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Additional utilities
+python-dotenv>=1.0.0
+Werkzeug>=2.3.0

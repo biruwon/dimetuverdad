@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Performance Benchmarks Script for DiMeTuVerdad
+Performance Benchmarks Script for dimetuverdad
 Establishes baseline performance metrics for the analysis system.
 """
 
@@ -18,7 +18,7 @@ sys.path.append(str(Path(__file__).parent))
 from enhanced_analyzer import EnhancedAnalyzer
 
 class PerformanceBenchmarks:
-    """Run performance benchmarks for the DiMeTuVerdad system."""
+    """Run performance benchmarks for the dimetuverdad system."""
 
     def __init__(self, db_path="accounts.db"):
         self.db_path = db_path
@@ -180,7 +180,7 @@ class PerformanceBenchmarks:
 
     def run_all_benchmarks(self):
         """Run all performance benchmarks."""
-        print("🚀 Running DiMeTuVerdad Performance Benchmarks")
+        print("🚀 Running dimetuverdad Performance Benchmarks")
         print("=" * 50)
 
         # Database stats
@@ -233,7 +233,7 @@ def main():
     """Main function to run benchmarks."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='Run DiMeTuVerdad performance benchmarks')
+    parser = argparse.ArgumentParser(description='Run dimetuverdad performance benchmarks')
     parser.add_argument('--output', '-o', help='Output file for results (default: auto-generated)')
     parser.add_argument('--sample-size', '-s', type=int, default=5, help='Number of tweets to sample for analysis benchmark')
     parser.add_argument('--quiet', '-q', action='store_true', help='Quiet mode, only save results')

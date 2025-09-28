@@ -1,10 +1,10 @@
-# DiMeTuVerdad - Spanish Far-Right Content Analysis System
+# dimetuverdad - Spanish Far-Right Content Analysis System
 
 A comprehensive AI-powered system for detecting and analyzing far-right discourse, hate speech, disinformation, and extremist content in Spanish social media, particularly Twitter/X. The project combines advanced pattern matching, machine learning models, and Large Language Models (LLMs) to provide accurate content moderation and political discourse analysis.
 
 ## 🎯 Project Overview
 
-**DiMeTuVerdad** ("Tell Me Your Truth") is designed to combat the spread of far-right extremism and disinformation in Spanish-speaking online communities. The system identifies:
+**dimetuverdad** ("Tell Me Your Truth") is designed to combat the spread of far-right extremism and disinformation in Spanish-speaking online communities. The system identifies:
 
 - **Hate Speech**: Direct attacks, slurs, dehumanization
 - **Disinformation**: False medical/scientific claims, conspiracy theories  
@@ -114,7 +114,245 @@ X_EMAIL_OR_PHONE=your_email
 python -c "from enhanced_analyzer import migrate_database_schema; migrate_database_schema()"
 ```
 
-## 📋 Usage Guide
+## � Docker Deployment
+
+For easy containerized deployment, the project includes Docker configuration for production use.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- At least 16GB RAM (recommended 32GB+ for LLM models)
+- At least 50GB free disk space for models and data
+
+### Quick Start
+
+1. **Clone and setup environment:**
+   ```bash
+   git clone <repository-url>
+   cd dimetuverdad
+   cp .env.template .env
+   # Edit .env with your configuration
+   ```
+
+2. **Build and start services:**
+   ```bash
+   docker-compose up --build
+   ```
+
+3. **Access the application:**
+   - Web interface: http://localhost:5000
+   - Ollama API: http://localhost:11434
+
+### Detailed Setup
+
+#### 1. Environment Configuration
+
+Copy the template and configure your environment variables:
+
+```bash
+cp .env.template .env
+```
+
+Edit `.env` with your settings:
+```env
+# Flask Configuration
+FLASK_SECRET_KEY=your-secure-random-key-here
+ADMIN_TOKEN=your-admin-password
+
+# Database (will be created automatically)
+DATABASE_PATH=/app/accounts.db
+
+# Ollama Configuration
+OLLAMA_BASE_URL=http://ollama:11434
+
+# Optional: Twitter/X credentials for data collection
+X_USERNAME=your_twitter_username
+X_PASSWORD=your_twitter_password
+```
+
+#### 2. Build and Deploy
+
+```bash
+# Build the images
+docker-compose build
+
+# Start all services
+docker-compose up -d
+
+# Check service status
+docker-compose ps
+
+# View logs
+docker-compose logs -f dimetuverdad
+docker-compose logs -f ollama
+```
+
+#### 3. Initialize Ollama Models
+
+After starting the services, initialize the required LLM models:
+
+```bash
+# Connect to the Ollama container
+docker-compose exec ollama bash
+
+# Pull the required models
+ollama pull gpt-oss:20b
+ollama pull llama3.1:8b
+
+# List available models
+ollama list
+
+# Exit container
+exit
+```
+
+#### 4. First Data Collection (Optional)
+
+If you have Twitter/X credentials configured:
+
+```bash
+# Run data collection
+docker-compose exec dimetuverdad ./run_in_venv.sh fetch --max 15
+
+# Run analysis on collected data
+docker-compose exec dimetuverdad ./run_in_venv.sh analyze-db
+```
+
+### Service Architecture
+
+#### dimetuverdad Service
+- **Port:** 5000
+- **Health Check:** `/` endpoint
+- **Dependencies:** Ollama service
+- **Volumes:**
+  - `./accounts.db` - SQLite database
+  - `./.env` - Environment configuration
+
+#### Ollama Service
+- **Port:** 11434
+- **Health Check:** `ollama list` command
+- **Volumes:**
+  - `ollama_data` - Model storage and cache
+- **Models:** gpt-oss:20b, llama3.1:8b
+
+### Management Commands
+
+#### View Logs
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f dimetuverdad
+docker-compose logs -f ollama
+```
+
+#### Restart Services
+```bash
+# Restart all services
+docker-compose restart
+
+# Restart specific service
+docker-compose restart dimetuverdad
+```
+
+#### Update Deployment
+```bash
+# Pull latest changes
+git pull
+
+# Rebuild and restart
+docker-compose up --build -d
+```
+
+#### Backup Data
+```bash
+# Backup database
+docker-compose exec dimetuverdad cp accounts.db accounts.db.backup
+
+# Copy backup to host
+docker cp $(docker-compose ps -q dimetuverdad):/app/accounts.db.backup ./backup.db
+```
+
+### Troubleshooting
+
+#### Common Issues
+
+**Out of Memory**
+```
+ERROR: LLM analysis failed - CUDA out of memory
+```
+- Increase Docker memory limit to 16GB+
+- Use smaller models: `ollama pull llama3.1:8b` instead of `gpt-oss:20b`
+
+**Database Locked**
+```
+Database is locked
+```
+- Ensure only one instance is running
+- Restart the dimetuverdad service
+
+**Ollama Connection Failed**
+```
+Connection refused to Ollama
+```
+- Check Ollama service status: `docker-compose ps`
+- Wait for Ollama health check to pass
+- Verify network connectivity between containers
+
+**Port Already in Use**
+```
+Port 5000 already in use
+```
+- Stop local Flask development server
+- Check: `lsof -i :5000`
+
+#### Health Checks
+
+```bash
+# Check service health
+docker-compose ps
+
+# Test web interface
+curl http://localhost:5000
+
+# Test Ollama API
+curl http://localhost:11434/api/tags
+```
+
+#### Logs Analysis
+
+```bash
+# View recent errors
+docker-compose logs --tail=100 dimetuverdad | grep -i error
+
+# Monitor resource usage
+docker stats
+```
+
+### Production Considerations
+
+#### Security
+- Change default `ADMIN_TOKEN` and `FLASK_SECRET_KEY`
+- Use environment-specific `.env` files
+- Consider using Docker secrets for sensitive data
+
+#### Performance
+- Use SSD storage for Ollama models
+- Allocate sufficient RAM (32GB+ recommended)
+- Monitor disk I/O during model loading
+
+#### Monitoring
+- Set up log aggregation
+- Monitor container resource usage
+- Implement health check alerts
+
+#### Backup Strategy
+- Regular database backups
+- Model cache persistence via Docker volumes
+- Configuration file versioning
+
+## �📋 Usage Guide
 
 ### Quick Content Analysis
 
@@ -325,6 +563,9 @@ python compare_models.py --quick
 dimetuverdad/
 ├── README.md                    # This documentation
 ├── requirements.txt             # Python dependencies
+├── docker-compose.yml           # Docker deployment configuration
+├── Dockerfile                   # Application container definition
+├── .env.template               # Environment configuration template
 ├── .env                        # Configuration (create manually)
 ├── accounts.db                 # SQLite database (auto-created)
 │

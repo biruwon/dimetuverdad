@@ -1,8 +1,8 @@
-# DiMeTuVerdad AI Agent Instructions
+# dimetuverdad AI Agent Instructions
 
 ## Project Overview
 
-**DiMeTuVerdad** is a Spanish far-right content analysis system that combines pattern matching, machine learning, and LLMs to detect hate speech, disinformation, and extremist content in Twitter/X data. The system follows a **multi-stage pipeline**: data collection → storage → analysis → web visualization.
+**dimetuverdad** is a Spanish far-right content analysis system that combines pattern matching, machine learning, and LLMs to detect hate speech, disinformation, and extremist content in Twitter/X data. The system follows a **multi-stage pipeline**: data collection → storage → analysis → web visualization.
 
 ## Core Architecture
 

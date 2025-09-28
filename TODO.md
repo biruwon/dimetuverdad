@@ -1,4 +1,4 @@
-# DiMeTuVerdad - TODO List
+# dimetuverdad - TODO List
 
 ## 🚀 High Priority
 
@@ -35,9 +35,7 @@ Top priority:
 - [M] **Implement batch processing**: Process multiple tweets simultaneously to improve throughput
 
 ### Database & Performance
-- [S] **Database indexing**: Add proper indexes on frequently queried columns (username, category, analysis_timestamp)
 - [M] **Analysis result caching**: Cache LLM results to avoid re-analysis of identical content
-- [S] **Database cleanup**: Remove duplicate tweets and optimize storage
 - [M] **Incremental analysis**: Only analyze new tweets instead of full database scans
 
 ### Web Interface Enhancements
@@ -54,10 +52,9 @@ Top priority:
 ## 🛠️ Low Priority
 
 ### Documentation & Maintenance
-- [S] **API documentation**: Create comprehensive API docs for all endpoints
+- [x] **API documentation**: Create comprehensive API docs for all endpoints (skipped)
 - [M] **Code coverage**: Increase test coverage to >90%
-- [S] **Performance benchmarks**: Establish baseline performance metrics
-- [S] **Deployment guide**: Docker containerization and deployment instructions
+- [x] **Deployment guide**: Docker containerization and deployment instructions
 
 ### Analytics & Reporting
 - [L] **Trend analysis**: Implement temporal analysis to track narrative evolution

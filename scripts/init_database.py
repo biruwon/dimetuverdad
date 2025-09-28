@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Database initialization script - Creates clean database from scratch.
-Run this to set up a fresh DiMeTuVerdad database with proper schema.
+Run this to set up a fresh dimetuverdad database with proper schema.
 """
 
 import sqlite3
@@ -206,7 +206,7 @@ def verify_schema():
 def show_usage():
     """Show how to use this script."""
     print("""
-🎯 DiMeTuVerdad Database Initialization
+🎯 dimetuverdad Database Initialization
 
 This script creates a clean database from scratch with an optimized schema.
 
@@ -238,7 +238,7 @@ if __name__ == "__main__":
         show_usage()
         sys.exit(0)
     
-    print("🚀 DiMeTuVerdad Database Initialization")
+    print("🚀 dimetuverdad Database Initialization")
     print("=" * 50)
     
     # Check if database exists
