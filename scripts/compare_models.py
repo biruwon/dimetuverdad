@@ -13,9 +13,14 @@ Co            # === DISINFORMATION ===
 import json
 import time
 import argparse
+import sys
+from pathlib import Path
 from typing import List, Dict
 from dataclasses import dataclass, asdict
 from datetime import datetime
+
+# Add parent directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
 
 from llm_models import LLMModelConfig, EnhancedLLMPipeline
 from categories import Categories

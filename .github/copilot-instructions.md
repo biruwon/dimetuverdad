@@ -126,13 +126,13 @@ The system detects 6 categories with specific priority order:
 ### Comprehensive Test Suite
 ```bash
 # Quick test (2 cases per category, ~1 minute)
-python comprehensive_test_suite.py --quick
+python scripts/test_suite.py --quick
 
 # Full validation (all cases, ~6 minutes)
-python comprehensive_test_suite.py --full
+python scripts/test_suite.py --full
 
 # Pattern-only testing (fastest)
-python comprehensive_test_suite.py --patterns-only
+python scripts/test_suite.py --patterns-only
 ```
 
 ### Individual Content Testing

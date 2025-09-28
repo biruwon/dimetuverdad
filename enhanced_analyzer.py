@@ -471,5 +471,5 @@ def save_content_analysis(analysis: ContentAnalysis):
 
 if __name__ == '__main__':
     print("❌ Este módulo no debe ejecutarse directamente")
-    print("💡 Usa comprehensive_test_suite.py para ejecutar tests")
+    print("💡 Usa scripts/test_suite.py para ejecutar tests")
     print("💡 O importa EnhancedAnalyzer para usar la funcionalidad de análisis")

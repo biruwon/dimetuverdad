@@ -6,7 +6,12 @@ Run this to set up a fresh DiMeTuVerdad database with proper schema.
 
 import sqlite3
 import os
+import sys
 from datetime import datetime
+from pathlib import Path
+
+# Add parent directory to path for imports (if needed)
+sys.path.append(str(Path(__file__).parent.parent))
 
 DB_PATH = "accounts.db"
 

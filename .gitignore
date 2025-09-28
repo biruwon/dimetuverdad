@@ -24,6 +24,6 @@ storage_state.json
 config.json
 *.env
 x_session.json
-model_comparison_*.json
-test_results.json
-performance_benchmarks_*.json
+scripts/model_comparison_*.json
+scripts/test_results.json
+scripts/performance_benchmarks_*.json

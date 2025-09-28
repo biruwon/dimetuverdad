@@ -143,19 +143,19 @@ Run the full test suite to validate system performance:
 
 ```bash
 # Quick test (2 cases per category, ~1 minute)
-python comprehensive_test_suite.py --quick
+python scripts/test_suite.py --quick
 
 # Full test suite (all cases, ~6 minutes)  
-python comprehensive_test_suite.py --full
+python scripts/test_suite.py --full
 
 # Pattern-only tests (fast, ~10 seconds)
-python comprehensive_test_suite.py --patterns-only
+python scripts/test_suite.py --patterns-only
 
 # LLM-only tests
-python comprehensive_test_suite.py --llm-only
+python scripts/test_suite.py --llm-only
 
 # Test specific categories
-python comprehensive_test_suite.py --categories hate_speech disinformation
+python scripts/test_suite.py --categories hate_speech disinformation
 ```
 
 ### Twitter Data Collection
@@ -270,14 +270,24 @@ Recent comprehensive test suite results:
 ### Running Tests
 
 ```bash
+```bash
 # Full test suite with explanations
-python comprehensive_test_suite.py --quick
+python scripts/test_suite.py --quick
 
 # Test specific functionality
 python test_llm_fallback.py
 
 # Validate pattern detection
 python -c "from far_right_patterns import FarRightAnalyzer; analyzer = FarRightAnalyzer(); print(analyzer.analyze_text('test content'))"
+```
+
+### Model Comparison
+
+Compare different LLM models:
+
+```bash
+python scripts/compare_models.py --quick
+```
 ```
 
 ### Adding New Patterns
@@ -306,7 +316,7 @@ python compare_models.py --quick
 1. Fork the repository
 2. Create feature branch: `git checkout -b feature-name`
 3. Add comprehensive tests for new functionality
-4. Ensure all tests pass: `python comprehensive_test_suite.py --full`
+4. Ensure all tests pass: `python scripts/test_suite.py --full`
 5. Submit pull request with detailed description
 
 ## 📁 Project Structure
@@ -328,8 +338,11 @@ dimetuverdad/
 ├── fetch_tweets.py            # Twitter data collection
 ├── query_tweets.py            # Database querying utilities
 ├── quick_test.py              # Individual content testing
-├── comprehensive_test_suite.py # Full system validation
-├── compare_models.py          # Model performance comparison
+├── scripts/                   # Utility scripts and tools
+│   ├── test_suite.py          # Full system validation
+│   ├── compare_models.py      # Model performance comparison
+│   ├── performance_benchmarks.py # Performance benchmarking
+│   └── init_database.py       # Database initialization
 │
 ├── web/                       # Flask web interface
 │   ├── app.py                # Web application

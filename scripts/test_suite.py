@@ -22,6 +22,12 @@ Optimized version with essential test cases only - much faster execution.
 import argparse
 import json
 import time
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
+
 from typing import Dict, Any
 from enhanced_analyzer import EnhancedAnalyzer
 from categories import Categories
