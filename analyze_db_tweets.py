@@ -10,7 +10,16 @@ from enhanced_analyzer import EnhancedAnalyzer, save_content_analysis, ContentAn
 from categories import Categories
 from datetime import datetime
 
-DB_PATH = "accounts.db"
+# Import utility modules
+import sys
+from pathlib import Path
+project_root = Path(__file__).resolve().parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from utils import database, analyzer, paths
+
+DB_PATH = paths.get_db_path()
 
 def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False):
     """
@@ -31,14 +40,14 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     # Initialize analyzer
     print("🚀 Initializing Enhanced Analyzer...")
     try:
-        analyzer = EnhancedAnalyzer(use_llm=True, verbose=False)  # Always use LLM for better explanations
+        analyzer_instance = analyzer.create_analyzer(use_llm=True, verbose=False)  # Always use LLM for better explanations
         print("✅ Analyzer ready!")
     except Exception as e:
         print(f"❌ Error initializing analyzer: {e}")
         return
     
     # Connect to database and get tweets
-    conn = sqlite3.connect(DB_PATH)
+    conn = database.get_db_connection()
     c = conn.cursor()
     
     # Build query - exclude already analyzed tweets unless force_reanalyze is True
@@ -120,7 +129,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
         
         try:
             # Run analysis (suppress verbose output)
-            result = analyzer.analyze_content(
+            result = analyzer_instance.analyze_content(
                 tweet_id=tweet_id,
                 tweet_url=tweet_url,
                 username=tweet_username,

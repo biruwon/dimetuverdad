@@ -10,10 +10,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Add parent directory to path for imports (if needed)
-sys.path.append(str(Path(__file__).parent.parent))
+# Import utility modules
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
-DB_PATH = "accounts.db"
+from utils import paths
+
+DB_PATH = paths.get_db_path()
 
 def drop_existing_database():
     """Remove existing database file if it exists."""

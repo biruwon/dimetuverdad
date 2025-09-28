@@ -12,7 +12,7 @@ Top priority:
 - [M] Improve LLM explanation
 - [M] Fetch new tweets only
 - [L] Blog/instagram explanining how disinformation works easier to understand
-- [L] Detect topic of the day/week: which accounts promote it, real data, what do they target∫
+- [L] Detect topic of the day/week: which accounts promote it, real data, what do they target
 
 - [M] **Pattern refinement**: Review and improve pattern matching rules based on analysis results
 - [L] **A/B testing framework**: Compare different LLM models and prompting strategies
@@ -40,7 +40,6 @@ Top priority:
 
 ### Web Interface Enhancements
 - [M] **Advanced filtering**: Add date range, confidence level, and analysis method filters
-- [S] **Export functionality**: Allow CSV/JSON export of analysis results
 - [M] **User feedback system**: Allow users to flag incorrect classifications for model improvement
 
 ### Category System Improvements
@@ -54,7 +53,6 @@ Top priority:
 ### Documentation & Maintenance
 - [x] **API documentation**: Create comprehensive API docs for all endpoints (skipped)
 - [M] **Code coverage**: Increase test coverage to >90%
-- [x] **Deployment guide**: Docker containerization and deployment instructions
 
 ### Analytics & Reporting
 - [L] **Trend analysis**: Implement temporal analysis to track narrative evolution

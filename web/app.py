@@ -9,6 +9,15 @@ import math
 from functools import wraps
 import secrets
 from pathlib import Path
+import time
+
+# Import utility modules
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from utils import database, analyzer, paths
 
 # Load environment variables from .env file
 def load_env_file():
@@ -29,7 +38,104 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
 # Admin configuration
 ADMIN_TOKEN = os.environ.get('ADMIN_TOKEN', 'admin123')  # Change this in production!
 
-DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'accounts.db')
+DB_PATH = paths.get_db_path()
+
+# Rate limiting storage (in production, use Redis or similar)
+rate_limit_store = {}
+
+# Error handlers
+@app.errorhandler(404)
+def page_not_found(e):
+    """Handle 404 errors with a user-friendly page."""
+    return render_template('error.html', 
+                         error_code=404, 
+                         error_title="Página no encontrada",
+                         error_message="La página que buscas no existe."), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle internal server errors with detailed logging."""
+    app.logger.error(f"Internal server error: {str(error)}")
+    import traceback
+    app.logger.error(f"Traceback: {traceback.format_exc()}")
+    
+    return render_template('error.html', 
+                         error_code=500, 
+                         error_title="Error interno del servidor",
+                         error_message="Ha ocurrido un error interno. Por favor, inténtalo de nuevo más tarde.",
+                         error_icon="fas fa-exclamation-triangle",
+                         show_back_button=True), 500
+
+@app.errorhandler(sqlite3.OperationalError)
+def handle_database_error(error):
+    """Handle SQLite operational errors (database locked, corrupted, etc.)."""
+    app.logger.error(f"Database operational error: {str(error)}")
+    
+    if "database is locked" in str(error).lower():
+        return render_template('error.html', 
+                             error_code=503, 
+                             error_title="Base de datos ocupada",
+                             error_message="La base de datos está siendo utilizada por otro proceso. Por favor, inténtalo de nuevo en unos momentos.",
+                             error_icon="fas fa-database",
+                             show_back_button=True), 503
+    elif "no such table" in str(error).lower():
+        return render_template('error.html', 
+                             error_code=500, 
+                             error_title="Error de esquema de base de datos",
+                             error_message="La estructura de la base de datos no es correcta. Contacta al administrador.",
+                             error_icon="fas fa-database",
+                             show_back_button=True), 500
+    else:
+        return render_template('error.html', 
+                             error_code=500, 
+                             error_title="Error de base de datos",
+                             error_message="Ha ocurrido un error en la base de datos. Por favor, inténtalo de nuevo más tarde.",
+                             error_icon="fas fa-database",
+                             show_back_button=True), 500
+
+@app.errorhandler(sqlite3.IntegrityError)
+def handle_integrity_error(error):
+    """Handle SQLite integrity constraint violations."""
+    app.logger.error(f"Database integrity error: {str(error)}")
+    
+    return render_template('error.html', 
+                         error_code=400, 
+                         error_title="Error de integridad de datos",
+                         error_message="Los datos proporcionados violan las restricciones de integridad. Verifica la información e inténtalo de nuevo.",
+                         error_icon="fas fa-exclamation-circle",
+                         show_back_button=True), 400
+
+@app.errorhandler(TimeoutError)
+def handle_timeout_error(error):
+    """Handle timeout errors for long-running operations."""
+    app.logger.error(f"Timeout error: {str(error)}")
+    
+    return render_template('error.html', 
+                         error_code=504, 
+                         error_title="Tiempo de espera agotado",
+                         error_message="La operación está tardando demasiado tiempo. Por favor, inténtalo de nuevo más tarde o contacta al administrador.",
+                         error_icon="fas fa-clock",
+                         show_back_button=True), 504
+
+@app.errorhandler(MemoryError)
+def handle_memory_error(error):
+    """Handle memory exhaustion errors."""
+    app.logger.error(f"Memory error: {str(error)}")
+    
+    return render_template('error.html', 
+                         error_code=507, 
+                         error_title="Error de memoria insuficiente",
+                         error_message="El servidor no tiene suficiente memoria para procesar la solicitud. Por favor, inténtalo de nuevo más tarde.",
+                         error_icon="fas fa-memory",
+                         show_back_button=True), 507
+
+@app.errorhandler(403)
+def forbidden_error(e):
+    """Handle 403 errors."""
+    return render_template('error.html', 
+                         error_code=403, 
+                         error_title="Acceso denegado",
+                         error_message="No tienes permisos para acceder a esta página."), 403
 
 def admin_required(f):
     """Decorator to require admin access for certain routes."""
@@ -41,11 +147,99 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def validate_input(*required_params):
+    """Decorator to validate required parameters in request."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            for param in required_params:
+                if param not in request.form and param not in request.args:
+                    flash(f'Parámetro requerido faltante: {param}', 'error')
+                    return redirect(request.referrer or url_for('index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def handle_db_errors(f):
+    """Decorator to handle database errors gracefully."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except sqlite3.OperationalError as e:
+            app.logger.error(f"Database operational error: {str(e)}")
+            if "locked" in str(e).lower():
+                flash('La base de datos está ocupada. Por favor, inténtalo de nuevo en unos momentos.', 'warning')
+            else:
+                flash('Error de base de datos. Por favor, inténtalo de nuevo.', 'error')
+            return redirect(request.referrer or url_for('index'))
+        except sqlite3.IntegrityError as e:
+            app.logger.error(f"Database integrity error: {str(e)}")
+            flash('Error de integridad de datos. La operación no se pudo completar.', 'error')
+            return redirect(request.referrer or url_for('index'))
+        except Exception as e:
+            app.logger.error(f"Unexpected database error: {str(e)}")
+            flash('Ha ocurrido un error inesperado. Por favor, inténtalo de nuevo.', 'error')
+            return redirect(request.referrer or url_for('index'))
+    return decorated_function
+
+def rate_limit(max_requests=10, window_seconds=60):
+    """Rate limiting decorator for admin endpoints."""
+    def decorator(f):
+        @wraps(f)
+        def wrapped_function(*args, **kwargs):
+            # Get client identifier (IP address)
+            client_id = request.remote_addr
+            
+            # Create key for this endpoint and client
+            key = f"{client_id}:{request.endpoint}"
+            
+            # Get current time
+            now = time.time()
+            
+            # Clean up old entries (simple in-memory store)
+            if key not in rate_limit_store:
+                rate_limit_store[key] = []
+            
+            # Remove entries older than window
+            rate_limit_store[key] = [t for t in rate_limit_store[key] if now - t < window_seconds]
+            
+            # Check if rate limit exceeded
+            if len(rate_limit_store[key]) >= max_requests:
+                app.logger.warning(f"Rate limit exceeded for {client_id} on {request.endpoint}")
+                return render_template('error.html', 
+                                     error_code=429, 
+                                     error_title="Demasiadas solicitudes",
+                                     error_message="Has excedido el límite de solicitudes. Por favor, espera un momento antes de intentar de nuevo.",
+                                     error_icon="fas fa-shield-alt",
+                                     show_back_button=True), 429
+            
+            # Add current request timestamp
+            rate_limit_store[key].append(now)
+            
+            return f(*args, **kwargs)
+        return wrapped_function
+    return decorator
+
 def get_db_connection():
     """Get database connection with row factory for easier access."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return database.get_db_connection()
+
+def get_analyzer():
+    """Get initialized EnhancedAnalyzer instance."""
+    return analyzer.create_analyzer()
+
+def get_tweet_data(tweet_id):
+    """Get tweet data for analysis."""
+    return database.get_tweet_data(tweet_id)
+
+def delete_existing_analysis(tweet_id):
+    """Delete existing analysis for a tweet."""
+    database.delete_existing_analysis(tweet_id)
+
+def reanalyze_tweet(tweet_id):
+    """Reanalyze a single tweet and return the result."""
+    return analyzer.reanalyze_tweet(tweet_id)
 
 def get_account_statistics(username):
     """Get comprehensive statistics for an account."""
@@ -205,6 +399,9 @@ def admin_dashboard():
 
 @app.route('/admin/reanalyze', methods=['POST'])
 @admin_required
+@rate_limit(max_requests=5, window_seconds=300)  # 5 requests per 5 minutes
+@handle_db_errors
+@validate_input('action')
 def admin_reanalyze():
     """Trigger reanalysis of tweets."""
     action = request.form.get('action')
@@ -220,86 +417,98 @@ def admin_reanalyze():
         def run_analysis_background():
             try:
                 cmd = ["./run_in_venv.sh", "analyze-db", "--force-reanalyze"]
-                subprocess.run(cmd, cwd=base_dir, check=True, capture_output=True, text=True)
+                result = subprocess.run(cmd, cwd=base_dir, check=True, capture_output=True, text=True, timeout=300)
+                app.logger.info(f"Background analysis completed successfully")
+            except subprocess.TimeoutExpired:
+                app.logger.error("Background analysis timed out after 5 minutes")
             except subprocess.CalledProcessError as e:
-                print(f"Analysis error: {e}")
+                app.logger.error(f"Analysis subprocess failed: {e}")
+                app.logger.error(f"Stdout: {e.stdout}")
+                app.logger.error(f"Stderr: {e.stderr}")
+            except Exception as e:
+                app.logger.error(f"Unexpected error in background analysis: {str(e)}")
         
-        thread = threading.Thread(target=run_analysis_background)
-        thread.daemon = True
+        thread = threading.Thread(target=run_analysis_background, daemon=True)
         thread.start()
         flash('Reanálisis de TODOS los tweets iniciado (sin límite)', 'success')
     
     elif action == 'category':
         category = request.form.get('category')
-        if category:
-            # Reanalyze tweets from specific category using direct analysis
-            import threading
+        if not category:
+            flash('Categoría requerida para reanálisis', 'error')
+            return redirect(url_for('admin_dashboard'))
             
-            def reanalyze_category():
-                try:
-                    import sys
-                    import os
-                    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-                    
-                    from enhanced_analyzer import EnhancedAnalyzer, save_content_analysis
-                    
-                    # Get tweets from specific category
-                    conn = get_db_connection()
-                    tweets = conn.execute("""
-                        SELECT t.tweet_id, t.content, t.username 
-                        FROM tweets t
-                        JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
-                        WHERE ca.category = ?
-                        LIMIT 20
-                    """, (category,)).fetchall()
-                    
-                    if tweets:
-                        analyzer = EnhancedAnalyzer(model_priority="balanced")
-                        
-                        for tweet in tweets:
-                            # Delete existing analysis
-                            conn.execute("DELETE FROM content_analyses WHERE tweet_id = ?", (tweet[0],))
-                            conn.commit()
-                            
-                            # Reanalyze
-                            analysis_result = analyzer.analyze_content(tweet[1])
-                            save_content_analysis(
-                                tweet_id=tweet[0],
-                                username=tweet[2],
-                                analysis_result=analysis_result
-                            )
-                            print(f"✅ Reanálizado tweet {tweet[0]} de @{tweet[2]}: {analysis_result.category}")
-                    
-                    conn.close()
-                    
-                except Exception as e:
-                    print(f"Error en reanálisis por categoría: {e}")
-            
-            thread = threading.Thread(target=reanalyze_category)
-            thread.daemon = True
-            thread.start()
-            flash(f'Reanálisis de categoría "{category}" iniciado (máximo 20 tweets)', 'success')
+        # Reanalyze tweets from specific category using direct analysis
+        import threading
+        
+        def reanalyze_category():
+            try:
+                # Get tweets from specific category
+                conn = get_db_connection()
+                tweets = conn.execute("""
+                    SELECT t.tweet_id, t.content, t.username 
+                    FROM tweets t
+                    JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
+                    WHERE ca.category = ?
+                    LIMIT 20
+                """, (category,)).fetchall()
+                conn.close()
+                
+                if not tweets:
+                    app.logger.warning(f"No tweets found for category: {category}")
+                    return
+                
+                reanalyzed_count = 0
+                
+                for tweet in tweets:
+                    try:
+                        result = reanalyze_tweet(tweet[0])
+                        if result:
+                            reanalyzed_count += 1
+                            app.logger.info(f"✅ Reanálizado tweet {tweet[0]} de @{tweet[2]}: {result.category}")
+                    except Exception as e:
+                        app.logger.error(f"Failed to reanalyze tweet {tweet[0]}: {str(e)}")
+                        continue
+                
+                app.logger.info(f"Category reanalysis completed: {reanalyzed_count}/{len(tweets)} tweets processed")
+                
+            except Exception as e:
+                app.logger.error(f"Error in category reanalysis: {str(e)}")
+        
+        thread = threading.Thread(target=reanalyze_category, daemon=True)
+        thread.start()
+        flash(f'Reanálisis de categoría "{category}" iniciado (máximo 20 tweets)', 'success')
     
     elif action == 'user':
         username = request.form.get('username')
-        if username:
-            import subprocess
-            import threading
-            from pathlib import Path
+        if not username:
+            flash('Nombre de usuario requerido para reanálisis', 'error')
+            return redirect(url_for('admin_dashboard'))
             
-            base_dir = Path(__file__).parent.parent
-            
-            def run_user_analysis():
-                try:
-                    cmd = ["./run_in_venv.sh", "analyze-db", "--username", username, "--force-reanalyze"]
-                    subprocess.run(cmd, cwd=base_dir, check=True, capture_output=True, text=True)
-                except subprocess.CalledProcessError as e:
-                    print(f"Analysis error: {e}")
-            
-            thread = threading.Thread(target=run_user_analysis)
-            thread.daemon = True
-            thread.start()
-            flash(f'Reanálisis de usuario "@{username}" iniciado', 'success')
+        import subprocess
+        import threading
+        from pathlib import Path
+        
+        base_dir = Path(__file__).parent.parent
+        
+        def run_user_analysis():
+            try:
+                cmd = ["./run_in_venv.sh", "analyze-db", "--username", username, "--force-reanalyze"]
+                result = subprocess.run(cmd, cwd=base_dir, check=True, capture_output=True, text=True, timeout=180)
+                app.logger.info(f"User analysis completed for @{username}")
+            except subprocess.TimeoutExpired:
+                app.logger.error(f"User analysis timed out for @{username}")
+            except subprocess.CalledProcessError as e:
+                app.logger.error(f"User analysis failed for @{username}: {e}")
+            except Exception as e:
+                app.logger.error(f"Unexpected error in user analysis for @{username}: {str(e)}")
+        
+        thread = threading.Thread(target=run_user_analysis, daemon=True)
+        thread.start()
+        flash(f'Reanálisis de usuario "@{username}" iniciado', 'success')
+    
+    else:
+        flash('Acción de reanálisis no válida', 'error')
     
     return redirect(url_for('admin_dashboard'))
 
@@ -320,40 +529,16 @@ def admin_edit_analysis(tweet_id):
         try:
             if action == 'reanalyze':
                 # Trigger full reanalysis using the analysis pipeline
-                import sys
-                import os
-                sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-                
-                from enhanced_analyzer import EnhancedAnalyzer, save_content_analysis
-                
-                # Get tweet data for reanalysis
-                tweet_data = conn.execute("""
-                    SELECT tweet_id, content, username FROM tweets WHERE tweet_id = ?
-                """, (tweet_id,)).fetchone()
+                tweet_data = get_tweet_data(tweet_id)
                 
                 if not tweet_data:
                     flash('Tweet no encontrado', 'error')
-                    conn.close()
                     return redirect(referrer or url_for('admin_dashboard'))
                 
-                # Delete existing analysis to force reanalysis
-                conn.execute("DELETE FROM content_analyses WHERE tweet_id = ?", (tweet_id,))
-                conn.commit()
-                conn.close()
-                
-                # Initialize analyzer and reanalyze
-                analyzer = EnhancedAnalyzer(model_priority="balanced")
                 print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data[2]}")
                 
-                # Analyze the content
-                analysis_result = analyzer.analyze_content(tweet_data[1])  # content
-                
-                # Save the new analysis
-                save_content_analysis(
-                    tweet_id=tweet_data[0],
-                    username=tweet_data[2], 
-                    analysis_result=analysis_result
-                )
+                # Reanalyze the content
+                analysis_result = reanalyze_tweet(tweet_id)
                 
                 flash(f'Tweet reanálizado correctamente. Nueva categoría: {analysis_result.category}', 'success')
                 
@@ -442,43 +627,16 @@ def admin_edit_analysis(tweet_id):
 def admin_reanalyze_single(tweet_id):
     """Reanalyze a single tweet using the analysis pipeline directly."""
     try:
-        # Import the analyzer directly
-        import sys
-        import os
-        sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-        
-        from enhanced_analyzer import EnhancedAnalyzer, save_content_analysis
-        
-        # Get tweet data
-        conn = get_db_connection()
-        tweet_data = conn.execute("""
-            SELECT tweet_id, content, username FROM tweets WHERE tweet_id = ?
-        """, (tweet_id,)).fetchone()
+        tweet_data = get_tweet_data(tweet_id)
         
         if not tweet_data:
-            conn.close()
             flash('Tweet no encontrado', 'error')
             return redirect(request.referrer or url_for('index'))
         
-        # Delete existing analysis to force reanalysis
-        conn.execute("DELETE FROM content_analyses WHERE tweet_id = ?", (tweet_id,))
-        conn.commit()
-        conn.close()
-        
-        # Initialize analyzer and reanalyze
-        analyzer = EnhancedAnalyzer(model_priority="balanced")
-        
         print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data[2]}")
         
-        # Analyze the content
-        analysis_result = analyzer.analyze_content(tweet_data[1])  # content
-        
-        # Save the new analysis
-        save_content_analysis(
-            tweet_id=tweet_data[0],
-            username=tweet_data[2], 
-            analysis_result=analysis_result
-        )
+        # Reanalyze the content
+        analysis_result = reanalyze_tweet(tweet_id)
         
         flash(f'Tweet reanálizado correctamente. Nueva categoría: {analysis_result.category}', 'success')
         
@@ -728,6 +886,8 @@ def index():
                          current_category=category_filter)
 
 @app.route('/user/<username>')
+@handle_db_errors
+@validate_input('username')
 def user_page(username):
     """User profile page with tweets and analysis focus."""
     page = request.args.get('page', 1, type=int)
@@ -906,18 +1066,12 @@ def user_page(username):
     
     except Exception as e:
         app.logger.error(f"Error in user_page for {username}: {str(e)}")
-        return render_template('user.html', 
-                             username=username, 
-                             tweets_data={
-                                 'tweets': [],
-                                 'page': 1,
-                                 'per_page': per_page,
-                                 'total_tweets': 0,
-                                 'total_pages': 1
-                             },
-                             stats={'basic': {}, 'analysis': []},
-                             current_category=None,
-                             error=f"Error loading data: {str(e)}")
+        return render_template('error.html', 
+                             error_code=500, 
+                             error_title="Error interno del servidor",
+                             error_message="Ocurrió un error al cargar los detalles del usuario.",
+                             error_icon="fas fa-exclamation-triangle",
+                             show_back_button=True), 500
 
 @app.route('/api/tweet-status/<tweet_id>')
 def check_tweet_status(tweet_id):
@@ -927,6 +1081,8 @@ def check_tweet_status(tweet_id):
 
 @app.route('/admin/export/csv')
 @admin_required
+@rate_limit(max_requests=3, window_seconds=600)  # 3 requests per 10 minutes
+@handle_db_errors
 def export_csv():
     """Export analysis results as CSV."""
     try:
@@ -1003,6 +1159,8 @@ def export_csv():
 
 @app.route('/admin/export/json')
 @admin_required
+@rate_limit(max_requests=3, window_seconds=600)  # 3 requests per 10 minutes
+@handle_db_errors
 def export_json():
     """Export analysis results as JSON."""
     try:

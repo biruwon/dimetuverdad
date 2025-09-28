@@ -25,8 +25,12 @@ import time
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
+# Import utility modules
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from utils import paths
 
 from typing import Dict, Any
 from enhanced_analyzer import EnhancedAnalyzer

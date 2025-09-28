@@ -244,32 +244,32 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 
 ## Automatic Git Workflow
 
-**AUTOMATIC COMMITS**: When a complete feature, fix, or refactor is finished, ask for confirmation then commit and push changes to GitHub.
+**MANDATORY CONFIRMATION REQUIREMENT**: Before committing and pushing ANY changes to GitHub, you MUST ask the user for explicit confirmation. This includes documentation updates, code changes, configuration files, or any other modifications.
 
 ### Git Automation Rules:
-1. **Completion Triggers**: 
+1. **ALWAYS ASK FIRST**: Never commit or push without explicit user confirmation
+2. **Completion Triggers**: 
    - Complete feature implementation is finished
    - Bug fix is fully resolved and tested
    - Refactoring work is completed
    - Multi-step enhancement is done
-2. **NOT triggered by**: Single file edits, partial implementations, or intermediate steps
-3. **Ask for Confirmation**: Prompt user before committing with suggested commit message
-4. **Automatic Commit**: Stage all changes and create a descriptive commit message (after confirmation)
-5. **Automatic Push**: Push directly to the main branch without user intervention (after confirmation)
-6. **Commit Message Format**: Use format: `feat: [brief description]`, `fix: [description]`, or `refactor: [description]`
-7. **Include All Related Files**: Stage and commit all files modified during the complete work session
-8. **Push Immediately**: Execute `git push origin main` after successful commit
-
-**COMMIT MESSAGE EXAMPLES**:
-- `feat: add political_general category with distinct UI styling and filtering`
-- `fix: resolve tweet sorting to prioritize political content over general posts`
-- `refactor: consolidate terminal usage rules and eliminate multiple terminal creation`
-- `feat: implement automatic git workflow for completed features`
+   - Documentation updates are complete
+3. **NOT triggered by**: Single file edits, partial implementations, or intermediate steps
+4. **Ask for Confirmation**: Prompt user before committing with suggested commit message
+5. **User Response Required**: Wait for explicit "yes" or "go ahead" before proceeding
+6. **Automatic Commit**: Stage all changes and create a descriptive commit message (after confirmation)
+7. **Automatic Push**: Push directly to the main branch without user intervention (after confirmation)
+8. **Commit Message Format**: Use format: `feat: [brief description]`, `fix: [description]`, or `refactor: [description]`
+9. **Include All Related Files**: Stage and commit all files modified during the complete work session
+10. **Push Immediately**: Execute `git push origin main` after successful commit
 
 **EXECUTION STEPS**:
 1. Verify the complete feature/fix/refactor is finished
 2. Ask user: "This feature/fix/refactor appears complete. Would you like me to commit and push these changes with message: '[proposed commit message]'?"
-3. If confirmed: `git add .` to stage all changes
-4. `git commit -m "descriptive message"`
-5. `git push origin main`
-6. Confirm successful push with brief status message
+3. **WAIT FOR USER RESPONSE** - Do not proceed without explicit confirmation
+4. If confirmed: `git add .` to stage all changes
+5. `git commit -m "descriptive message"`
+6. `git push origin main`
+7. Confirm successful push with brief status message
+
+**VIOLATION CONSEQUENCES**: Never commit or push without user confirmation. This is a critical workflow requirement to prevent unwanted changes.
