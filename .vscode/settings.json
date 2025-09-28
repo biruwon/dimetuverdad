@@ -1,0 +1,14 @@
+{
+  // Treat templates under web/templates as Jinja to improve highlighting
+  "files.associations": {
+    "web/templates/*.html": "jinja"
+  },
+
+  // Optionally include Jinja in Emmet rules
+  "emmet.includeLanguages": {
+    "jinja-html": "html"
+  },
+
+  // Disable HTML script validation for templates to avoid JS errors caused by Jinja tokens
+  "html.validate.scripts": false
+}

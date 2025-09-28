@@ -4,7 +4,6 @@ Eliminates redundancy between SpanishPoliticalTopicClassifier and FarRightAnalyz
 """
 
 import re
-import unicodedata
 from typing import Dict, List
 from dataclasses import dataclass
 from categories import Categories
@@ -35,48 +34,6 @@ class PatternAnalyzer:
     def __init__(self):
         self.patterns = self._initialize_unified_patterns()
         self.political_entities = self._initialize_political_entities()
-    
-    def _normalize_unicode_text(self, text: str) -> str:
-        """
-        Normalize Unicode text to handle emojis and special characters properly.
-        
-        - Decomposes Unicode characters (NFKD) to separate base characters from combining characters
-        - Removes non-spacing marks (like accents) but preserves emojis and symbols
-        - Handles case conversion properly for Unicode
-        """
-        if not text:
-            return ""
-        
-        # Normalize to NFKD form to decompose characters
-        normalized = unicodedata.normalize('NFKD', text)
-        
-        # Convert to lowercase with Unicode support
-        normalized = normalized.lower()
-        
-        # Re-compose back to NFC for proper display
-        normalized = unicodedata.normalize('NFC', normalized)
-        
-        return normalized
-    
-    def _safe_regex_match(self, pattern: str, text: str) -> List[re.Match]:
-        """
-        Perform regex matching with proper Unicode support and error handling.
-        
-        Args:
-            pattern: Regex pattern string
-            text: Text to search in
-            
-        Returns:
-            List of regex match objects
-        """
-        try:
-            # Use UNICODE flag for proper Unicode handling (though it's default in Python 3)
-            # Use IGNORECASE for case-insensitive matching
-            return list(re.finditer(pattern, text, re.IGNORECASE | re.UNICODE))
-        except re.error as e:
-            # Log regex compilation errors but don't crash
-            print(f"⚠️ Regex error in pattern '{pattern[:50]}...': {e}")
-            return []
     
     def _initialize_unified_patterns(self) -> Dict[str, Dict]:
         """Initialize consolidated pattern detection with merged overlapping categories."""
@@ -321,7 +278,6 @@ class PatternAnalyzer:
     def analyze_content(self, text: str) -> AnalysisResult:
         """
         Unified content analysis combining topic classification and extremism detection.
-        Now with improved Unicode and emoji handling.
         """
         if not text or len(text.strip()) < 5:
             return AnalysisResult(
@@ -332,8 +288,7 @@ class PatternAnalyzer:
                 keywords=[]
             )
         
-        # Normalize text for Unicode handling while preserving original for context
-        text_normalized = self._normalize_unicode_text(text)
+        text_lower = text.lower()
         pattern_matches = []
         detected_categories = []
         all_keywords = set()
@@ -342,25 +297,15 @@ class PatternAnalyzer:
         for category, config in self.patterns.items():
             category_matches = []
             
-            # Check all patterns with Unicode-safe regex matching
+            # Check all patterns (no more primary/secondary distinction)
             for pattern in config['patterns']:
-                matches = self._safe_regex_match(pattern, text_normalized)
+                matches = list(re.finditer(pattern, text_lower, re.IGNORECASE))
                 for match in matches:
-                    # Get the matched text from the original text for accurate context
-                    matched_text = match.group()
-                    start_pos = match.start()
-                    end_pos = match.end()
-                    
-                    # Find corresponding position in original text (approximate)
-                    # This is a simplified approach - for exact mapping we'd need more complex logic
-                    context_start = max(0, start_pos - 20)
-                    context_end = min(len(text), start_pos + len(matched_text) + 20)
-                    
                     category_matches.append(PatternMatch(
                         category=category,
-                        matched_text=matched_text,
+                        matched_text=match.group(),
                         description=config['description'],
-                        context=text[context_start:context_end].strip()
+                        context=text[max(0, match.start()-20):match.end()+20].strip()
                     ))
             
             if category_matches:
@@ -368,8 +313,8 @@ class PatternAnalyzer:
                 pattern_matches.extend(category_matches)
                 all_keywords.update(config['keywords'])
         
-        # Detect political context with Unicode-safe processing
-        political_context = self._detect_political_context(text_normalized)
+        # Detect political context
+        political_context = self._detect_political_context(text)
         
         # Determine primary category - first detected category (no scoring)
         primary_category = detected_categories[0] if detected_categories else "non_political"
@@ -388,18 +333,16 @@ class PatternAnalyzer:
         )
     
     def _detect_political_context(self, text: str) -> List[str]:
-        """
-        Detect political entities and context with Unicode-safe processing.
-        """
+        """Detect political entities and context."""
+        import re
         context = []
-        text_normalized = self._normalize_unicode_text(text)
+        text_lower = text.lower()
         
         for entity_type, entities in self.political_entities.items():
             for entity in entities:
                 # Use word boundaries to avoid false positives like "que" matching "ue"
-                # Escape the entity for regex safety
                 pattern = r'\b' + re.escape(entity) + r'\b'
-                if re.search(pattern, text_normalized, re.IGNORECASE | re.UNICODE):
+                if re.search(pattern, text_lower):
                     context.append(f"{entity_type}:{entity}")
         
         return context[:10]  # Limit context items

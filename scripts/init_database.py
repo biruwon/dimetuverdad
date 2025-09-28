@@ -58,13 +58,13 @@ def create_fresh_database():
                 content TEXT NOT NULL,
                 
                 -- Post classification (simplified)
-                post_type TEXT DEFAULT 'original', -- original, repost_own, repost_other, reply, quote, thread
+                post_type TEXT DEFAULT 'original', -- original, repost_own, repost_other, repost_reply, thread
                 is_pinned INTEGER DEFAULT 0,
                 
-                -- RT/Quote data (only when needed)
-                original_author TEXT,     -- For reposts/quotes
-                original_tweet_id TEXT,   -- For reposts/quotes
-                original_content TEXT,    -- For reposts/quotes (if different)
+                -- RT / embedded/referenced content data (only when needed)
+                original_author TEXT,     -- For reposts or referenced tweets
+                original_tweet_id TEXT,   -- For reposts or referenced tweets
+                original_content TEXT,    -- For reposts or referenced tweets (if different)
                 reply_to_username TEXT,   -- For replies
                 
                 -- Media and content

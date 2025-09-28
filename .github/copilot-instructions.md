@@ -4,6 +4,8 @@
 
 **dimetuverdad** is a Spanish far-right content analysis system that combines pattern matching, machine learning, and LLMs to detect hate speech, disinformation, and extremist content in Twitter/X data. The system follows a **multi-stage pipeline**: data collection → storage → analysis → web visualization.
 
+<!-- NOTE: Keep Copilot-generated text concise. Prefer short explanations and avoid unnecessary verbosity. -->
+
 ## Core Architecture
 
 ### Analysis Pipeline Flow
@@ -107,9 +109,9 @@ analyzer = EnhancedAnalyzer(model_priority="quality")
 - Use timeout=30.0 for all SQLite connections due to concurrent access
 
 ### LLM Model Management
-- **Preload models**: `ollama run gpt-oss:20b --keepalive 24h` (critical for performance)
+- Keep models concise: prefer small, fast models for short explanations. Avoid overly verbose LLM responses by using compact prompts and concise settings.
+- Preload models when possible: `ollama run gpt-oss:20b --keepalive 24h` to improve latency.
 - Check model status: `ollama ps`
-- Model loading takes 3+ minutes without preloading vs 30-60 seconds with preload
 
 ## Category Detection Logic
 

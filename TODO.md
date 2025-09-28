@@ -13,6 +13,8 @@ Top priority:
 - [M] Fetch new tweets only
 - [L] Blog/instagram explanining how disinformation works easier to understand
 - [L] Detect topic of the day/week: which accounts promote it, real data, what do they target
+- DB snapshots when project it's almost ready
+- Cover the project with unit/integrations tests
 
 - [M] **Pattern refinement**: Review and improve pattern matching rules based on analysis results
 - [L] **A/B testing framework**: Compare different LLM models and prompting strategies
@@ -69,7 +71,6 @@ Top priority:
 - [M] **Memory optimization**: Reduce memory usage during large batch analysis
 
 ### Data Quality Issues
-- [S] **Emoji and special characters**: Improve handling of Unicode characters in analysis
 <!-- URL expansion TODO skipped as requested -->
 
 ### Analysis Accuracy
@@ -79,11 +80,6 @@ Top priority:
 - [M] **Political bias calibration**: Ensure balanced classification across political spectrum
 
 ## 📊 Analytics & Metrics to Track
-
-### Performance Metrics
-- [S] **Analysis throughput**: Tweets processed per hour/minute
-- [S] **Classification accuracy**: Manual validation of random samples
-- [S] **Resource usage**: CPU, memory, and storage consumption
 
 ### Content Metrics
 - [M] **Category distribution trends**: Track changes in content categories over time
