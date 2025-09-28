@@ -69,9 +69,8 @@ Top priority:
 - [M] **Memory optimization**: Reduce memory usage during large batch analysis
 
 ### Data Quality Issues
-- [S] **Tweet text truncation**: Handle tweets longer than database field limits
 - [S] **Emoji and special characters**: Improve handling of Unicode characters in analysis
-- [S] **URL expansion**: Resolve shortened URLs to analyze linked content
+<!-- URL expansion TODO skipped as requested -->
 
 ### Analysis Accuracy
 - [L] **Sarcasm detection**: Improve detection of ironic/sarcastic content

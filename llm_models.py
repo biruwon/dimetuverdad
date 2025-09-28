@@ -22,6 +22,7 @@ from enhanced_prompts import (
     build_ollama_system_prompt,
     build_generation_system_prompt
 )
+from utils.text_utils import normalize_text
 
 # Suppress warnings including the parameter conflict warnings
 warnings.filterwarnings("ignore")
@@ -1017,9 +1018,14 @@ class EnhancedLLMPipeline:
             "processing_time": 0.0,
             "model_info": self.get_model_info()
         }
-        
+
         start_time = time.time()
-        
+
+        # Normalize text before classification and generation to avoid
+        # issues with combining marks or invisible characters that may
+        # affect pattern/LLM prompting. Emojis and symbols are preserved.
+        text_normalized = normalize_text(text)
+
         try:
             # Handle case where category is passed as first argument for backwards compatibility
             if isinstance(analysis_context, str):
@@ -1035,12 +1041,14 @@ class EnhancedLLMPipeline:
             
             # Fast classification first (if available)
             if self.classification_model:
-                class_result = self._classify_content(text)
+                # Use normalized text for classification
+                class_result = self._classify_content(text_normalized)
                 result.update(class_result)
             
             # Generate sophisticated prompt using EnhancedPromptGenerator with category
             if self.generation_model:
-                sophisticated_result = self._run_enhanced_analysis(text, category or Categories.GENERAL, prompt_context)
+                # Use normalized text for generation prompts
+                sophisticated_result = self._run_enhanced_analysis(text_normalized, category or Categories.GENERAL, prompt_context)
                 result.update(sophisticated_result)
             
             result["processing_time"] = time.time() - start_time

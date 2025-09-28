@@ -15,6 +15,7 @@ from datetime import datetime
 
 # Import our enhanced components
 from pattern_analyzer import PatternAnalyzer, AnalysisResult, PatternMatch
+from utils.text_utils import normalize_text
 from llm_models import EnhancedLLMPipeline
 from categories import Categories
 
@@ -133,23 +134,28 @@ class EnhancedAnalyzer:
         if self.verbose:
             print(f"\n🔍 Content analysis: @{username}")
             print(f"📝 Contenido: {content[:80]}...")
-        
-        # Pipeline Step 1: Pattern analysis (all analyzers run once)
-        pattern_results = self._run_pattern_analysis(content)
+
+        # Normalize content for pattern matching and LLM prompts while
+        # preserving the original content for storage/display.
+        content_normalized = normalize_text(content)
+
+        # Pipeline Step 1: Pattern analysis (all analyzers run once) using normalized text
+        pattern_results = self._run_pattern_analysis(content_normalized)
 
         # Pipeline Step 2: Content categorization (using pattern results + LLM fallback)
         if self.verbose:
             print(f"🔍 Step 2: Categorization starting...")
-        category, analysis_method = self._categorize_content(content, pattern_results)
+        # Use normalized content for categorization and LLM explanation
+        category, analysis_method = self._categorize_content(content_normalized, pattern_results)
         if self.verbose:
             print(f"🔍 Step 2: Category determined: {category}")
 
-        # Pipeline Step 3: Smart LLM integration for uncertain cases  
-        llm_explanation = self._generate_explanation_with_smart_llm(content, category, pattern_results, analysis_method)
-        
+        # Pipeline Step 3: Smart LLM integration for uncertain cases
+        llm_explanation = self._generate_explanation_with_smart_llm(content_normalized, category, pattern_results, analysis_method)
+
         # Pipeline Step 4: Create final analysis structure with multi-category support
         analysis_data = self._build_analysis_data(pattern_results)
-        
+
         # Extract multi-category information from pattern results
         pattern_result = pattern_results.get('pattern_result', None)
         if pattern_result:
@@ -157,7 +163,7 @@ class EnhancedAnalyzer:
         else:
             # Fallback for LLM-only analysis
             categories_detected = [category]
-        
+
         return ContentAnalysis(
             tweet_id=tweet_id,
             tweet_url=tweet_url,
