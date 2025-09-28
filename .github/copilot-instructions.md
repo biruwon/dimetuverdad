@@ -273,3 +273,29 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 7. Confirm successful push with brief status message
 
 **VIOLATION CONSEQUENCES**: Never commit or push without user confirmation. This is a critical workflow requirement to prevent unwanted changes.
+
+## Test Script Management
+
+**MANDATORY WORKFLOW**: When creating temporary test scripts for debugging or validation, follow this exact process to maintain repository cleanliness.
+
+### Test Script Creation Rules:
+1. **TEMPORARY ONLY**: Test scripts are for debugging and validation only - never commit them to repository
+2. **NAMING CONVENTION**: Use descriptive names like `test_truncation.py`, `debug_extraction.py`, `validate_content.py`
+3. **LOCATION**: Create in project root directory alongside other scripts
+4. **PURPOSE LIMITATION**: Only for testing specific functionality - not for production features
+
+### Test Script Cleanup Rules:
+1. **IMMEDIATE DELETION**: Delete test scripts immediately after validation is complete
+2. **NO EXCEPTIONS**: Never leave test scripts in the repository, even temporarily
+3. **VERIFICATION**: Confirm deletion with `ls` command to ensure clean workspace
+4. **DOCUMENTATION**: If test reveals permanent code changes needed, implement them in proper source files before cleanup
+
+### Test Script Workflow:
+1. Create test script for specific validation
+2. Run test and verify results
+3. If test passes and no code changes needed: delete immediately
+4. If test reveals bugs: implement fixes in proper source files, then delete test script
+5. If test reveals new features needed: implement in proper files, then delete test script
+6. **ALWAYS END WITH CLEAN REPO**: Repository must be clean of test scripts before any commit
+
+**VIOLATION CONSEQUENCES**: Test scripts found in commits will break the workflow. Always clean up before git operations.

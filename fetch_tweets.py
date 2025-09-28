@@ -172,7 +172,7 @@ def init_db():
     return conn
 
 def save_enhanced_tweet(conn, tweet_data: Dict):
-    """Save tweet with enhanced data structure."""
+    """Save tweet with enhanced data structure - simplified for current schema."""
     c = conn.cursor()
     try:
         # Check if tweet already exists
@@ -181,40 +181,25 @@ def save_enhanced_tweet(conn, tweet_data: Dict):
             print(f"  ⏭️ Tweet {tweet_data['tweet_id']} already exists, skipping")
             return
         
-        # Insert with all enhanced fields including profile picture
+        # Insert with only the columns that exist in current schema
         c.execute("""
             INSERT INTO tweets (
-                tweet_id, tweet_url, username, content,
-                post_type, is_pinned, 
-                original_author, original_tweet_id, original_content,
-                reply_to_username, reply_to_tweet_id, reply_to_content,
-                thread_position, thread_root_id,
-                media_links, media_count, media_types,
-                has_external_link, external_links,
-                hashtags, mentions,
-                engagement_retweets, engagement_likes, engagement_replies, engagement_views,
-                tweet_timestamp, scrape_timestamp,
-                is_repost, is_like, is_comment, parent_tweet_id, profile_pic_url
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                tweet_id, content, username, tweet_url, tweet_timestamp,
+                media_count, hashtags, mentions
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            tweet_data['tweet_id'], tweet_data['tweet_url'], tweet_data['username'], tweet_data['content'],
-            tweet_data['post_type'], tweet_data['is_pinned'],
-            tweet_data.get('original_author'), tweet_data.get('original_tweet_id'), tweet_data.get('original_content'),
-            tweet_data.get('reply_to_username'), tweet_data.get('reply_to_tweet_id'), tweet_data.get('reply_to_content'), 
-            tweet_data.get('thread_position', 0), tweet_data.get('thread_root_id'),
-            tweet_data.get('media_links'), tweet_data.get('media_count', 0), tweet_data.get('media_types'),
-            tweet_data.get('has_external_link', 0), tweet_data.get('external_links'),
-            tweet_data.get('hashtags'), tweet_data.get('mentions'),
-            tweet_data.get('engagement_retweets', 0), tweet_data.get('engagement_likes', 0), 
-            tweet_data.get('engagement_replies', 0), tweet_data.get('engagement_views', 0),
-            tweet_data.get('tweet_timestamp'), datetime.now().isoformat(),
-            tweet_data.get('is_repost', 0), tweet_data.get('is_like', 0), 
-            tweet_data.get('is_comment', 0), tweet_data.get('parent_tweet_id'),
-            tweet_data.get('profile_pic_url')
+            tweet_data['tweet_id'],
+            tweet_data['content'],
+            tweet_data['username'],
+            tweet_data['tweet_url'],
+            tweet_data['tweet_timestamp'],
+            tweet_data.get('media_count', 0),
+            tweet_data.get('hashtags'),
+            tweet_data.get('mentions')
         ))
         
         conn.commit()
-        print(f"  ✅ Saved {tweet_data['post_type']} tweet: {tweet_data['tweet_id']}")
+        print(f"  ✅ Saved tweet: {tweet_data['tweet_id']}")
         
     except Exception as e:
         print(f"  ❌ Error saving tweet {tweet_data.get('tweet_id', 'unknown')}: {e}")
@@ -421,6 +406,70 @@ def extract_engagement_metrics(article) -> Dict[str, int]:
                             continue
     
     return engagement
+
+def extract_full_tweet_content(article) -> str:
+    """
+    Extract full tweet content, handling truncation by attempting to expand first.
+
+    Twitter/X sometimes truncates long tweets in the feed and shows "... Show more" or similar.
+    This function tries to expand truncated content before extracting.
+    """
+    try:
+        # First, try to find and click any "Show more" or expand buttons
+        expand_selectors = [
+            '[role="button"][aria-label*="Show more"]',
+            '[role="button"][aria-label*="show more"]',
+            '[data-testid*="showMore"]',
+            '[aria-label*="Show more"]',
+            'span[role="button"]:has-text("...")',
+            'span:has-text("..."):has(+ span[role="button"])'
+        ]
+
+        for selector in expand_selectors:
+            try:
+                expand_button = article.query_selector(selector)
+                if expand_button:
+                    print("    🔓 Found expand button, clicking to show full content...")
+                    expand_button.click()
+                    # Wait a bit for expansion
+                    article.wait_for_timeout(500)
+                    break
+            except Exception:
+                continue
+
+        # Also try clicking on the tweet text itself if it's truncated
+        text_elem = article.query_selector('[data-testid="tweetText"]')
+        if text_elem:
+            # Check if content appears truncated (contains "..." at the end)
+            current_text = text_elem.inner_text().strip()
+            if current_text.endswith('...') or '...' in current_text[-10:]:
+                print("    ✂️ Content appears truncated, attempting expansion...")
+                try:
+                    # Try clicking the text element itself
+                    text_elem.click()
+                    article.wait_for_timeout(500)
+
+                    # Check if content expanded
+                    expanded_text = text_elem.inner_text().strip()
+                    if len(expanded_text) > len(current_text):
+                        print(f"    ✅ Content expanded: {len(current_text)} → {len(expanded_text)} chars")
+                        return expanded_text
+                except Exception:
+                    pass
+
+            # Return the best content we have
+            return current_text
+
+        return ""
+
+    except Exception as e:
+        print(f"    ⚠️ Error in content expansion: {e}")
+        # Fallback to basic extraction
+        try:
+            text_elem = article.query_selector('[data-testid="tweetText"]')
+            return text_elem.inner_text().strip() if text_elem else ""
+        except Exception:
+            return ""
 
 def extract_content_elements(article) -> Dict[str, any]:
     """Extract hashtags, mentions, and external links."""
@@ -738,12 +787,8 @@ def fetch_enhanced_tweets(page, username: str, max_tweets: int = 30, resume_from
                 
                 tweet_url = f"https://x.com{href}"
                 
-                # Extract tweet content
-                text_elem = article.query_selector('[data-testid="tweetText"]')
-                content = ""
-                if text_elem:
-                    # Get full text including all spans and links
-                    content = text_elem.inner_text().strip()
+                # Extract tweet content with expansion handling
+                content = extract_full_tweet_content(article)
                 
                 # Skip if no content (media-only posts still have some text usually)
                 if not content:

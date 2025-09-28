@@ -42,7 +42,7 @@ install(){
 fetch(){
   ensure_venv
   echo "Starting fetch_tweets.py (will open Chromium). Make sure your .env has X_USERNAME/X_PASSWORD)."
-  "$PY" "$ROOT_DIR/fetch_tweets.py"
+  "$PY" "$ROOT_DIR/fetch_tweets.py" "$@"
 }
 
 analyze_db(){
