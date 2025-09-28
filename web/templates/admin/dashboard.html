@@ -112,8 +112,8 @@
                     <div class="card-body">
                         <form method="POST" action="{{ url_for('admin_reanalyze') }}" class="mb-3">
                             <input type="hidden" name="action" value="all">
-                            <button type="submit" class="btn reanalyze-btn text-white w-100 mb-2" onclick="return confirm('⚠️ ADVERTENCIA: Esto reanalizar TODOS los tweets (máximo 50).\n\n• Puede tomar 30-60 minutos\n• Utilizará recursos del sistema\n• Las categorizaciones actuales se perderán\n\n¿Estás seguro de continuar?')">
-                                <i class="fas fa-globe me-2"></i>Reanalizar Todos los Tweets (Máx. 50)
+                            <button type="submit" class="btn reanalyze-btn text-white w-100 mb-2" onclick="return confirm('⚠️ ADVERTENCIA: Esto reanalizar TODOS los tweets.\n\n• Puede tomar 30-60 minutos\n• Utilizará recursos del sistema\n• Las categorizaciones actuales se perderán\n\n¿Estás seguro de continuar?')">
+                                <i class="fas fa-globe me-2"></i>Reanalizar Todos los Tweets
                             </button>
                         </form>
 
@@ -147,8 +147,42 @@
                 </div>
             </div>
 
-            <!-- Category Distribution -->
+            <!-- Data Export Tools -->
             <div class="col-md-6 mb-4">
+                <div class="card admin-card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-download me-2"></i>Exportar Datos
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted mb-3">Exportar todos los resultados de análisis para análisis externo o respaldo.</p>
+                        
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('export_csv') }}" class="btn btn-outline-success" target="_blank">
+                                <i class="fas fa-file-csv me-2"></i>Exportar como CSV
+                            </a>
+                            <small class="text-muted">Formato CSV para Excel, Google Sheets, etc.</small>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('export_json') }}" class="btn btn-outline-success" target="_blank">
+                                <i class="fas fa-file-code me-2"></i>Exportar como JSON
+                            </a>
+                            <small class="text-muted">Formato JSON completo con todos los metadatos.</small>
+                        </div>
+                        
+                        <div class="mt-3 p-2 bg-light rounded">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Incluye {{ stats.analyzed_tweets or 0 }} registros de análisis con contenido completo de tweets.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
                 <div class="card admin-card">
                     <div class="card-header bg-info text-white">
                         <h5 class="mb-0">

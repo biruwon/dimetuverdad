@@ -925,5 +925,174 @@ def check_tweet_status(tweet_id):
     # This would be used by JavaScript to fallback to stored content if tweet is deleted
     return jsonify({'exists': True})  # Placeholder - would need actual Twitter API integration
 
+@app.route('/admin/export/csv')
+@admin_required
+def export_csv():
+    """Export analysis results as CSV."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all analysis results with tweet data
+        cursor.execute('''
+            SELECT 
+                ca.tweet_id,
+                ca.username,
+                ca.category,
+                ca.llm_explanation,
+                ca.analysis_method,
+                ca.analysis_timestamp,
+                t.content as tweet_content,
+                t.tweet_url,
+                t.tweet_timestamp
+            FROM content_analyses ca
+            JOIN tweets t ON ca.tweet_id = t.tweet_id
+            ORDER BY ca.analysis_timestamp DESC
+        ''')
+        
+        results = cursor.fetchall()
+        conn.close()
+        
+        # Create CSV response
+        import csv
+        import io
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Tweet ID', 'Username', 'Category', 'LLM Explanation', 
+            'Analysis Method', 'Analysis Timestamp', 'Tweet Content', 
+            'Tweet URL', 'Tweet Timestamp'
+        ])
+        
+        # Write data
+        for row in results:
+            writer.writerow([
+                row['tweet_id'],
+                row['username'], 
+                row['category'],
+                row['llm_explanation'],
+                row['analysis_method'],
+                row['analysis_timestamp'],
+                row['tweet_content'],
+                row['tweet_url'],
+                row['tweet_timestamp']
+            ])
+        
+        output.seek(0)
+        csv_data = output.getvalue()
+        output.close()
+        
+        # Create response
+        from flask import Response
+        response = Response(
+            csv_data,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename=dimetuverdad_analysis_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+            }
+        )
+        return response
+        
+    except Exception as e:
+        app.logger.error(f"Error exporting CSV: {str(e)}")
+        flash(f'Error exporting CSV: {str(e)}', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/export/json')
+@admin_required
+def export_json():
+    """Export analysis results as JSON."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all analysis results with tweet data
+        cursor.execute('''
+            SELECT 
+                ca.tweet_id,
+                ca.username,
+                ca.category,
+                ca.llm_explanation,
+                ca.analysis_method,
+                ca.analysis_timestamp,
+                t.content as tweet_content,
+                t.tweet_url,
+                t.tweet_timestamp,
+                ca.subcategory,
+                ca.targeted_groups,
+                ca.calls_to_action,
+                ca.evidence_sources,
+                ca.verification_status,
+                ca.misinformation_risk,
+                ca.categories_detected,
+                ca.category_scores
+            FROM content_analyses ca
+            JOIN tweets t ON ca.tweet_id = t.tweet_id
+            ORDER BY ca.analysis_timestamp DESC
+        ''')
+        
+        results = cursor.fetchall()
+        conn.close()
+        
+        # Convert to JSON-serializable format
+        export_data = {
+            'export_timestamp': datetime.now().isoformat(),
+            'total_records': len(results),
+            'data': []
+        }
+        
+        for row in results:
+            record = {
+                'tweet_id': row['tweet_id'],
+                'username': row['username'],
+                'category': row['category'],
+                'llm_explanation': row['llm_explanation'],
+                'analysis_method': row['analysis_method'],
+                'analysis_timestamp': row['analysis_timestamp'],
+                'tweet_content': row['tweet_content'],
+                'tweet_url': row['tweet_url'],
+                'tweet_timestamp': row['tweet_timestamp']
+            }
+            
+            # Add optional fields if they exist
+            if row['subcategory']:
+                record['subcategory'] = row['subcategory']
+            if row['targeted_groups']:
+                record['targeted_groups'] = row['targeted_groups']
+            if row['calls_to_action'] is not None:
+                record['calls_to_action'] = bool(row['calls_to_action'])
+            if row['evidence_sources']:
+                record['evidence_sources'] = row['evidence_sources']
+            if row['verification_status']:
+                record['verification_status'] = row['verification_status']
+            if row['misinformation_risk']:
+                record['misinformation_risk'] = row['misinformation_risk']
+            if row['categories_detected']:
+                record['categories_detected'] = row['categories_detected']
+            if row['category_scores']:
+                record['category_scores'] = row['category_scores']
+                
+            export_data['data'].append(record)
+        
+        # Create response
+        from flask import Response
+        json_data = json.dumps(export_data, indent=2, ensure_ascii=False)
+        response = Response(
+            json_data,
+            mimetype='application/json',
+            headers={
+                'Content-Disposition': f'attachment; filename=dimetuverdad_analysis_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+            }
+        )
+        return response
+        
+    except Exception as e:
+        app.logger.error(f"Error exporting JSON: {str(e)}")
+        flash(f'Error exporting JSON: {str(e)}', 'error')
+        return redirect(url_for('admin_dashboard'))
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
