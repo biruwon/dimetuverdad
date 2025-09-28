@@ -26,3 +26,4 @@ config.json
 x_session.json
 model_comparison_*.json
 test_results.json
+performance_benchmarks_*.json
