@@ -125,11 +125,13 @@ def create_fresh_database():
             ('idx_tweets_username', 'tweets', 'username'),
             ('idx_tweets_post_type', 'tweets', 'post_type'),
             ('idx_tweets_timestamp', 'tweets', 'scraped_at'),
+            ('idx_tweets_tweet_timestamp', 'tweets', 'tweet_timestamp'),
             ('idx_tweets_deleted', 'tweets', 'is_deleted'),
             ('idx_tweets_edited', 'tweets', 'is_edited'),
             ('idx_analyses_tweet', 'content_analyses', 'tweet_id'),
             ('idx_analyses_category', 'content_analyses', 'category'),
             ('idx_analyses_username', 'content_analyses', 'username'),
+            ('idx_content_analyses_timestamp', 'content_analyses', 'analysis_timestamp'),
             ('idx_edit_history_tweet', 'edit_history', 'tweet_id')
         ]
         
