@@ -153,7 +153,19 @@ def validate_input(*required_params):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             for param in required_params:
-                if param not in request.form and param not in request.args:
+                # Allow parameter to come from form, query args, or route/view args
+                present = False
+                if param in request.form:
+                    present = True
+                elif param in request.args:
+                    present = True
+                else:
+                    # Flask route params are in request.view_args (e.g., /user/<username>)
+                    view_args = getattr(request, 'view_args', {}) or {}
+                    if param in view_args:
+                        present = True
+
+                if not present:
                     flash(f'Parámetro requerido faltante: {param}', 'error')
                     return redirect(request.referrer or url_for('index'))
             return f(*args, **kwargs)
@@ -895,6 +907,7 @@ def user_page(username):
     """User profile page with tweets and analysis focus."""
     page = request.args.get('page', 1, type=int)
     category_filter = request.args.get('category', None)
+    post_type_filter = request.args.get('post_type', None)
     per_page = 10
     
     try:
@@ -927,6 +940,11 @@ def user_page(username):
         if category_filter and category_filter != 'all':
             base_query += ' AND ca.category = ?'
             query_params.append(category_filter)
+
+        # Add post_type filter if specified
+        if post_type_filter and post_type_filter != 'all':
+            base_query += ' AND t.post_type = ?'
+            query_params.append(post_type_filter)
         
         # Order by truly problematic content first, then general content last
         order_clause = '''
@@ -1005,7 +1023,7 @@ def user_page(username):
                 })
             
             # RT display logic
-            if tweet['post_type'] in ['repost_other', 'repost_own', 'quote']:
+            if tweet['post_type'] in ['repost_other', 'repost_own', 'repost_reply']:
                 tweet['is_rt'] = True
                 tweet['rt_type'] = tweet['post_type']
             else:

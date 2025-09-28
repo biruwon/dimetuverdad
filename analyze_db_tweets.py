@@ -68,7 +68,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
             WHERE ca.tweet_id IS NULL
             AND NOT (
                 t.post_type IN ('repost_other', 'repost_own') 
-                AND t.rt_original_content_analyzed = 1
+                AND t.rt_original_analyzed = 1
             )
         """
         if username:

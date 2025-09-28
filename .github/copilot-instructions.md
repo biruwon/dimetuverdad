@@ -301,3 +301,42 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 6. **ALWAYS END WITH CLEAN REPO**: Repository must be clean of test scripts before any commit
 
 **VIOLATION CONSEQUENCES**: Test scripts found in commits will break the workflow. Always clean up before git operations.
+
+## Test File Organization
+
+**MANDATORY STRUCTURE**: Maintain clean, consolidated test file organization to prevent fragmentation and ensure maintainable test suites.
+
+### Test File Consolidation Rules:
+1. **ONE TEST FILE PER MODULE**: Each source module must have exactly one corresponding test file
+   - `fetcher/db.py` → `fetcher/tests/test_db.py`
+   - `fetcher/parsers.py` → `fetcher/tests/test_parsers.py`
+   - `fetch_tweets.py` → `fetcher/tests/test_fetch_tweets.py`
+   - `enhanced_analyzer.py` → `tests/test_enhanced_analyzer.py` (project root)
+
+2. **NO FRAGMENTED TESTS**: Never create multiple test files for the same module
+   - ❌ `test_parsers.py`, `test_parsers_additional.py`, `test_parsers_more.py`
+   - ✅ `test_parsers.py` (single comprehensive file)
+
+3. **COMPREHENSIVE COVERAGE**: Each test file must include all relevant test cases
+   - Unit tests for all public functions
+   - Integration tests for component interactions
+   - Edge cases and error conditions
+   - Mock objects for external dependencies
+
+4. **TEST FILE NAMING**: Use consistent naming: `test_[module_name].py`
+   - Located in appropriate test directories (`fetcher/tests/`, `tests/`)
+   - Match source module names exactly
+
+### Test Organization Workflow:
+1. **Identify Module**: Determine which source module the tests belong to
+2. **Check Existing**: Verify if `test_[module].py` already exists
+3. **Consolidate**: Add new tests to existing file or create if missing
+4. **Remove Fragments**: Delete any fragmented test files after consolidation
+5. **Verify**: Run consolidated tests to ensure functionality
+
+### Prohibited Patterns:
+- Creating `test_parsers_more.py` when `test_parsers.py` exists
+- Multiple test files for same functionality (e.g., `test_fetcher.py` + `test_fetch_enhanced_mock.py`)
+- Test files in wrong directories (e.g., db tests in project root instead of `fetcher/tests/`)
+
+**VIOLATION CONSEQUENCES**: Fragmented test files will be consolidated and removed. Always use the single test file per module pattern.

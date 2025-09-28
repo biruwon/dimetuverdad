@@ -50,11 +50,11 @@ fetch(){
 
   # Write a timestamped invocation line and the exact exec command to the log
   # Use portable date formatting (macOS/BSD date doesn't support --iso-8601)
-  echo "# [$(date -u +"%Y-%m-%dT%H:%M:%SZ")] RUN: $PY $ROOT_DIR/fetch_tweets.py $*" >> "$LOG_FILE"
+  echo "# [$(date -u +"%Y-%m-%dT%H:%M:%SZ")] RUN: $PY $ROOT_DIR/fetcher/fetch_tweets.py $*" >> "$LOG_FILE"
 
   # Execute Python and tee stdout/stderr to the log so we have a persistent record
   # Use exec so PID is the Python process
-  exec "$PY" "$ROOT_DIR/fetch_tweets.py" "$@" 2>&1 | tee -a "$LOG_FILE"
+  exec "$PY" "$ROOT_DIR/fetcher/fetch_tweets.py" "$@" 2>&1 | tee -a "$LOG_FILE"
 }
 
 analyze_db(){

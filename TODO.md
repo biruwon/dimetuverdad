@@ -5,8 +5,7 @@
 Top priority:
 
 - [L] Edited recent posts, how will affect fetching? And show the original
-- [M] Improve how to see RTs
-- [M] Disinformation and political posts retrieval data to be up to date
+- [M] Disinformation/political retrieval to get up to date data/checks
 - [L] Analyze images and videos, not just text
 - [L] Allow people to submit account to analyze or post to analyze
 - [M] Improve LLM explanation
