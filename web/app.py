@@ -328,6 +328,7 @@ def get_all_accounts(page=1, per_page=10):
 
 # Admin Routes
 @app.route('/admin/login', methods=['GET', 'POST'])
+@rate_limit(max_requests=5, window_seconds=300)  # 5 login attempts per 5 minutes
 def admin_login():
     """Simple admin login page."""
     if request.method == 'POST':
@@ -832,6 +833,7 @@ def admin_quick_edit_category(tweet_id):
     return redirect(request.referrer or url_for('index'))
 
 @app.route('/')
+@rate_limit(max_requests=30, window_seconds=60)  # 30 requests per minute for main dashboard
 def index():
     """Main dashboard with account overview (focus on analysis, not engagement)."""
     page = request.args.get('page', 1, type=int)
@@ -888,6 +890,7 @@ def index():
 @app.route('/user/<username>')
 @handle_db_errors
 @validate_input('username')
+@rate_limit(max_requests=20, window_seconds=60)  # 20 requests per minute per user page
 def user_page(username):
     """User profile page with tweets and analysis focus."""
     page = request.args.get('page', 1, type=int)
@@ -1074,6 +1077,7 @@ def user_page(username):
                              show_back_button=True), 500
 
 @app.route('/api/tweet-status/<tweet_id>')
+@rate_limit(max_requests=10, window_seconds=60)  # 10 requests per minute for API endpoints
 def check_tweet_status(tweet_id):
     """API endpoint to check if a tweet is still available."""
     # This would be used by JavaScript to fallback to stored content if tweet is deleted
