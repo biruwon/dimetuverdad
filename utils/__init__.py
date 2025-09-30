@@ -7,7 +7,7 @@ from .paths import *
 
 # NOTE: We avoid importing .analyzer here to prevent circular imports when
 # modules under the package (for example, `utils.text_utils`) are imported
-# by higher-level modules like `enhanced_analyzer`. Import `utils.analyzer`
+# by higher-level modules like `analyzer`. Import `utils.analyzer`
 # explicitly where needed instead (for example: `from utils import analyzer`).
 
 __all__ = [

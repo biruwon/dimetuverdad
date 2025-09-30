@@ -13,9 +13,9 @@ from transformers import (
     BitsAndBytesConfig
 )
 from openai import OpenAI
-from categories import Categories
+from .categories import Categories
 
-from enhanced_prompts import (
+from .prompts import (
     EnhancedPromptGenerator, 
     create_context_from_analysis, 
     build_spanish_classification_prompt,

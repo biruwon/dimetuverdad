@@ -14,7 +14,7 @@ Tweet Collection (fetch_tweets.py)
     ↓ [Playwright scraping]
 SQLite Database (accounts.db)
     ↓ [tweets + content_analyses tables]
-Enhanced Analyzer (enhanced_analyzer.py)
+Enhanced Analyzer (analyzer.py)
     ↓ [Unified Pattern Detection + LLM analysis]
 Web Interface (web/app.py)
     ↓ [Flask + Bootstrap visualization]
@@ -22,11 +22,11 @@ Web Interface (web/app.py)
 
 ### Key Components
 
-1. **`enhanced_analyzer.py`** - Main orchestration engine
-   - `EnhancedAnalyzer` class manages the entire analysis workflow
+1. **`analyzer.py`** - Main orchestration engine
+   - `Analyzer` class manages the entire analysis workflow
    - **Always** uses LLM as fallback when pattern detection fails
    - Returns `ContentAnalysis` objects with structured results
-   - Pipeline: `analyze_content()` → `_categorize_content()` → `_generate_explanation_with_smart_llm()`
+   - Pipeline: `analyze_content()` → `_categorize_content()` → `_generate_llm_explanation()`
 
 2. **`pattern_analyzer.py`** - Consolidated pattern detection
    - `PatternAnalyzer` combines far-right detection + topic classification + disinformation claims in single pass
@@ -94,13 +94,13 @@ cd web && python app.py  # Runs on localhost:5000
 ### Analyzer Initialization
 ```python
 # Default: balanced LLM models, LLM always enabled for fallback
-analyzer = EnhancedAnalyzer()
+analyzer = Analyzer()
 
 # Performance optimized for testing
-analyzer = EnhancedAnalyzer(model_priority="fast")
+analyzer = Analyzer(model_priority="fast")
 
 # Quality optimized for production
-analyzer = EnhancedAnalyzer(model_priority="quality")
+analyzer = Analyzer(model_priority="quality")
 ```
 
 ### Database Operations
@@ -128,13 +128,13 @@ The system detects 6 categories with specific priority order:
 ### Comprehensive Test Suite
 ```bash
 # Quick test (2 cases per category, ~1 minute)
-python scripts/test_suite.py --quick
+python analyzer/tests/test_analyzer_integration.py --quick
 
 # Full validation (all cases, ~6 minutes)
-python scripts/test_suite.py --full
+python analyzer/tests/test_analyzer_integration.py --full
 
 # Pattern-only testing (fastest)
-python scripts/test_suite.py --patterns-only
+python analyzer/tests/test_analyzer_integration.py --patterns-only
 ```
 
 ### Individual Content Testing
@@ -170,7 +170,7 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 ### Component Architecture
 - **`pattern_analyzer.py`**: Single-pass analysis combining topic classification + extremism detection + disinformation claims
 - **`llm_models.py`**: LLM integration for complex cases and explanations
-- **`enhanced_analyzer.py`**: Orchestration layer managing the complete pipeline
+- **`analyzer.py`**: Orchestration layer managing the complete pipeline
 
 ### External Dependencies
 - **Playwright**: Web scraping with anti-detection features
@@ -188,7 +188,7 @@ ollama pull gpt-oss:20b  # Re-download model if corrupted
 
 ### Database Locked
 ```python
-from enhanced_analyzer import migrate_database_schema
+from analyzer import migrate_database_schema
 migrate_database_schema()  # Reset schema and connections
 ```
 
@@ -232,7 +232,6 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 - Web app: `./run_in_venv.sh web`
 - Analysis: `./run_in_venv.sh analyze-db`
 - Fetch tweets: `./run_in_venv.sh fetch`
-- Test status: `./run_in_venv.sh test-status`
 - Install: `./run_in_venv.sh install`
 
 **WEB APPLICATION MANAGEMENT**:
@@ -311,7 +310,7 @@ When working on this codebase, prioritize understanding the multi-stage analysis
    - `fetcher/db.py` → `fetcher/tests/test_db.py`
    - `fetcher/parsers.py` → `fetcher/tests/test_parsers.py`
    - `fetch_tweets.py` → `fetcher/tests/test_fetch_tweets.py`
-   - `enhanced_analyzer.py` → `tests/test_enhanced_analyzer.py` (project root)
+   - `analyzer.py` → `tests/test_analyzer.py` (project root)
 
 2. **NO FRAGMENTED TESTS**: Never create multiple test files for the same module
    - ❌ `test_parsers.py`, `test_parsers_additional.py`, `test_parsers_more.py`

@@ -28,7 +28,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent))
 
-from enhanced_analyzer import EnhancedAnalyzer
+from analyzer.analyzer import Analyzer
 
 class PerformanceBenchmarks:
     """Run performance benchmarks for the dimetuverdad system."""
@@ -156,7 +156,7 @@ class PerformanceBenchmarks:
                 return {'error': 'No tweets found for benchmarking'}
 
             # Initialize analyzer
-            analyzer = EnhancedAnalyzer(model_priority='fast')  # Use fast mode for benchmarking
+            analyzer = Analyzer(model_priority='fast')  # Use fast mode for benchmarking
 
             # Run benchmark
             start_time = time.time()

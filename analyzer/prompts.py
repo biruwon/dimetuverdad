@@ -5,7 +5,7 @@ Provides sophisticated prompting strategies for different analysis scenarios.
 
 from typing import Dict, List
 from dataclasses import dataclass
-from categories import Categories, CATEGORY_INFO, get_category_info, CLASSIFICATION_PROMPT_MAPPINGS
+from .categories import Categories, CATEGORY_INFO, get_category_info, CLASSIFICATION_PROMPT_MAPPINGS
 
 # ============================================================================
 # DYNAMIC PROMPT BUILDERS

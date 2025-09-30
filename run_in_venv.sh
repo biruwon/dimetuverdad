@@ -6,7 +6,8 @@
 #   ./run_in_venv.sh analyze-db        # run analysis querying posts from DB
 #   ./run_in_venv.sh analyze-default   # run analysis on embedded default posts (fast)
 #   ./run_in_venv.sh web               # start web application on port 5000
-#   ./run_in_venv.sh test-suite        # run comprehensive test suite
+#   ./run_in_venv.sh test-analyzer-integration  # run analyzer integration tests
+#   ./run_in_venv.sh test-all                   # run all test files in project
 #   ./run_in_venv.sh init-db           # initialize/reset database schema
 #   ./run_in_venv.sh compare-models    # run model comparison benchmarks
 #   ./run_in_venv.sh benchmarks        # run performance benchmarks
@@ -60,7 +61,7 @@ fetch(){
 analyze_db(){
   ensure_venv
   echo "Starting database analysis..."
-  "$PY" "$ROOT_DIR/analyze_db_tweets.py" "$@"
+  "$PY" "$ROOT_DIR/analyzer/analyze_db_tweets.py" "$@"
 }
 
 web(){
@@ -70,10 +71,16 @@ web(){
   "$PY" "$ROOT_DIR/web/app.py"
 }
 
-test_suite(){
+test_analyzer_integration(){
   ensure_venv
-  echo "Running test suite..."
-  "$PY" "$ROOT_DIR/scripts/test_suite.py" "$@"
+  echo "Running analyzer integration tests..."
+  "$PY" "$ROOT_DIR/analyzer/tests/test_analyzer_integration.py" "$@"
+}
+
+test_all(){
+  ensure_venv
+  echo "Running all test files in the project..."
+  "$PY" -m pytest "$ROOT_DIR" -v --tb=short
 }
 
 init_db(){
@@ -94,12 +101,6 @@ benchmarks(){
   "$PY" "$ROOT_DIR/scripts/performance_benchmarks.py" "$@"
 }
 
-test_status(){
-  ensure_venv
-  echo "Running post status tests..."
-  "$PY" "$ROOT_DIR/test_post_status.py" "$@"
-}
-
 case "${1-}" in
   install)
     install
@@ -115,9 +116,12 @@ case "${1-}" in
   web)
     web
     ;;
-  test-suite)
+  test-analyzer-integration)
     shift
-    test_suite "$@"
+    test_analyzer_integration "$@"
+    ;;
+  test-all)
+    test_all
     ;;
   init-db)
     shift
@@ -130,10 +134,6 @@ case "${1-}" in
   benchmarks)
     shift
     benchmarks "$@"
-    ;;
-  test-status)
-    shift
-    test_status "$@"
     ;;
   full)
     install || true
@@ -148,16 +148,17 @@ case "${1-}" in
     echo "  fetch             Run fetch_tweets.py (requires X credentials in .env)"
     echo "  analyze-db        Run analysis on posts from database"
     echo "  web               Start web application on port 5000"
-    echo "  test-suite        Run comprehensive test suite"
+    echo "  test-analyzer-integration  Run analyzer integration tests"
+    echo "  test-all                   Run all test files in project"
     echo "  init-db           Initialize/reset database schema"
     echo "  compare-models    Run model comparison benchmarks"
     echo "  benchmarks        Run performance benchmarks"
-    echo "  test-status       Run post status tests"
     echo "  full              Run install, fetch, then analyze-db"
     echo ""
     echo "Examples:"
     echo "  $0 install"
-    echo "  $0 test-suite --quick"
+    echo "  $0 test-analyzer-integration --quick"
+    echo "  $0 test-all"
     echo "  $0 analyze-db --username Vox_es --limit 10"
     exit 1
     ;;

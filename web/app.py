@@ -17,7 +17,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from utils import database, analyzer, paths
+from utils import database, paths
+from analyzer.analyzer import create_analyzer, reanalyze_tweet as analyzer_reanalyze_tweet
 
 # Load environment variables from .env file
 def load_env_file():
@@ -239,7 +240,7 @@ def get_db_connection():
 
 def get_analyzer():
     """Get initialized EnhancedAnalyzer instance."""
-    return analyzer.create_analyzer()
+    return create_analyzer()
 
 def get_tweet_data(tweet_id):
     """Get tweet data for analysis."""
@@ -251,7 +252,7 @@ def delete_existing_analysis(tweet_id):
 
 def reanalyze_tweet(tweet_id):
     """Reanalyze a single tweet and return the result."""
-    return analyzer.reanalyze_tweet(tweet_id)
+    return analyzer_reanalyze_tweet(tweet_id)
 
 def get_account_statistics(username):
     """Get comprehensive statistics for an account."""

@@ -15,8 +15,9 @@
                 'content': '🚨 URGENTE!! Las vacunas COVID tienen grafeno para controlarnos con 5G!! Compartid antes de que lo censuren!!',
                 'expected_category': Categories.DISINFORMATION,
                 'description': 'Health disinformation with conspiracy elements'
-            }, Suite for Enhanced Analyzer
+            }, """, Integration Tests for Analyzer
 Optimized version with essential test cases only - much faster execution.
+"""
 """
 
 import argparse
@@ -26,22 +27,22 @@ import sys
 from pathlib import Path
 
 # Import utility modules
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from utils import paths
 
 from typing import Dict, Any
-from enhanced_analyzer import EnhancedAnalyzer
-from categories import Categories
+from analyzer.analyzer import Analyzer
+from analyzer.categories import Categories
 
-class TestSuite:
+class TestAnalyzerIntegration:
     """Test suite focusing on core consolidated categories."""
     
     def __init__(self, save_to_db: bool = False):
         print("🚀 Initializing Enhanced Analyzer...")
-        self.analyzer = EnhancedAnalyzer(model_priority="fast")
+        self.analyzer = Analyzer(model_priority="fast")
         self.save_to_db = save_to_db
     
     def get_essential_pattern_tests(self) -> Dict[str, Dict]:
@@ -364,7 +365,7 @@ class TestSuite:
         }
 
 def main():
-    parser = argparse.ArgumentParser(description='Test Suite for Enhanced Analyzer')
+    parser = argparse.ArgumentParser(description='Analyzer Integration Tests')
     parser.add_argument('--quick', action='store_true', help='Run quick mode (2 tests total for speed)')
     parser.add_argument('--patterns-only', action='store_true', help='Run only pattern tests')
     parser.add_argument('--llm-only', action='store_true', help='Run only LLM tests')
@@ -372,7 +373,7 @@ def main():
     
     args = parser.parse_args()
     
-    test_suite = TestSuite()
+    test_suite = TestAnalyzerIntegration()
     
     if args.patterns_only:
         results = test_suite.run_pattern_tests(quick_mode=args.quick)

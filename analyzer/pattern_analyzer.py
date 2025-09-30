@@ -6,7 +6,7 @@ Eliminates redundancy between SpanishPoliticalTopicClassifier and FarRightAnalyz
 import re
 from typing import Dict, List
 from dataclasses import dataclass
-from categories import Categories
+from .categories import Categories
 
 
 

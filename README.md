@@ -16,7 +16,7 @@ A comprehensive AI-powered system for detecting and analyzing far-right discours
 
 ### Core Components
 
-1. **Enhanced Analyzer** (`enhanced_analyzer.py`)
+1. **Enhanced Analyzer** (`analyzer.py`)
    - Main orchestration engine combining all analysis components
    - Multi-stage content analysis pipeline
    - Smart LLM fallback for ambiguous content
@@ -36,7 +36,7 @@ A comprehensive AI-powered system for detecting and analyzing far-right discours
    - Context-aware political topic detection
    - Specialized patterns for Spanish political landscape
 
-5. **Enhanced Prompting** (`enhanced_prompts.py`)
+5. **Enhanced Prompting** (`prompts.py`)
    - Sophisticated LLM prompt generation
    - Context-aware analysis strategies
    - Spanish-specific political understanding
@@ -111,7 +111,7 @@ X_EMAIL_OR_PHONE=your_email
 
 ```bash
 # Initialize the database schema
-python -c "from enhanced_analyzer import migrate_database_schema; migrate_database_schema()"
+python -c "from analyzer import migrate_database_schema; migrate_database_schema()"
 ```
 
 ## � Docker Deployment
@@ -381,19 +381,19 @@ Run the full test suite to validate system performance:
 
 ```bash
 # Quick test (2 cases per category, ~1 minute)
-python scripts/test_suite.py --quick
+python analyzer/tests/test_analyzer_integration.py --quick
 
 # Full test suite (all cases, ~6 minutes)  
-python scripts/test_suite.py --full
+python analyzer/tests/test_analyzer_integration.py --full
 
 # Pattern-only tests (fast, ~10 seconds)
-python scripts/test_suite.py --patterns-only
+python analyzer/tests/test_analyzer_integration.py --patterns-only
 
 # LLM-only tests
-python scripts/test_suite.py --llm-only
+python analyzer/tests/test_analyzer_integration.py --llm-only
 
 # Test specific categories
-python scripts/test_suite.py --categories hate_speech disinformation
+python analyzer/tests/test_analyzer_integration.py --categories hate_speech disinformation
 ```
 
 ### Twitter Data Collection
@@ -434,23 +434,23 @@ The system supports multiple LLM configurations:
 
 ```python
 # Speed-optimized (recommended for development)
-analyzer = EnhancedAnalyzer(model_priority="fast")
+analyzer = Analyzer(model_priority="fast")
 
 # Quality-optimized (for production)
-analyzer = EnhancedAnalyzer(model_priority="quality") 
+analyzer = Analyzer(model_priority="quality") 
 
 # Balanced (default)
-analyzer = EnhancedAnalyzer(model_priority="balanced")
+analyzer = Analyzer(model_priority="balanced")
 ```
 
 ### Analysis Modes
 
 ```python
 # Pattern + LLM enhancement (full analysis)
-analyzer = EnhancedAnalyzer(use_llm=True)
+analyzer = Analyzer(use_llm=True)
 
 # Pattern-only with LLM fallback
-analyzer = EnhancedAnalyzer(use_llm=False)
+analyzer = Analyzer(use_llm=False)
 ```
 
 ### Ollama Optimization
@@ -510,7 +510,7 @@ Recent comprehensive test suite results:
 ```bash
 ```bash
 # Full test suite with explanations
-python scripts/test_suite.py --quick
+python analyzer/tests/test_analyzer_integration.py --quick
 
 # Test specific functionality
 python test_llm_fallback.py
@@ -554,7 +554,7 @@ python compare_models.py --quick
 1. Fork the repository
 2. Create feature branch: `git checkout -b feature-name`
 3. Add comprehensive tests for new functionality
-4. Ensure all tests pass: `python scripts/test_suite.py --full`
+4. Ensure all tests pass: `python analyzer/tests/test_analyzer_integration.py --full`
 5. Submit pull request with detailed description
 
 ## 📁 Project Structure
@@ -569,11 +569,11 @@ dimetuverdad/
 ├── .env                        # Configuration (create manually)
 ├── accounts.db                 # SQLite database (auto-created)
 │
-├── enhanced_analyzer.py        # Main analysis orchestrator
+├── analyzer.py        # Main analysis orchestrator
 ├── far_right_patterns.py       # Pattern detection engine  
 ├── llm_models.py              # LLM integration & management
 ├── topic_classifier.py        # Political topic classification
-├── enhanced_prompts.py        # LLM prompt generation
+├── prompts.py        # LLM prompt generation
 ├── retrieval.py               # Evidence retrieval system
 │
 ├── fetch_tweets.py            # Twitter data collection
@@ -585,13 +585,25 @@ dimetuverdad/
 │   ├── performance_benchmarks.py # Performance benchmarking
 │   └── init_database.py       # Database initialization
 │
-├── web/                       # Flask web interface
-│   ├── app.py                # Web application
-│   └── templates/            # HTML templates
-│       ├── index.html
-│       └── user.html
+├── analyzer/                  # Analyzer package
+│   ├── analyzer.py           # Main analysis orchestrator
+│   ├── categories.py         # Category definitions
+│   ├── llm_models.py         # LLM integration
+│   ├── pattern_analyzer.py   # Pattern detection
+│   ├── prompts.py            # LLM prompts
+│   └── tests/                # Analyzer-specific tests
+│       ├── test_analyzer.py  # Unit tests for analyzer components
+│       └── test_analyzer_integration.py # Integration tests
 │
-├── tests/                    # Additional test files
+├── fetcher/                  # Data collection package
+│   ├── fetch_tweets.py       # Twitter data collection
+│   ├── db.py                 # Database operations
+│   ├── parsers.py            # Content parsing
+│   └── tests/                # Fetcher-specific tests
+│       ├── test_db.py        # Database tests
+│       ├── test_fetch_tweets.py # Fetching tests
+│       ├── test_fetch_live_smoke.py # Live fetch smoke tests
+│       └── test_parsers.py   # Parser tests
 └── venv/                     # Virtual environment
 ```
 
@@ -610,8 +622,8 @@ dimetuverdad/
 Check system health:
 
 ```python
-from enhanced_analyzer import EnhancedAnalyzer
-analyzer = EnhancedAnalyzer()
+from analyzer import Analyzer
+analyzer = Analyzer()
 analyzer.print_system_status()
 ```
 
@@ -649,7 +661,7 @@ ollama pull gpt-oss:20b
 **Database Locked**:
 ```python
 # Reset database connection
-from enhanced_analyzer import migrate_database_schema
+from analyzer import migrate_database_schema
 migrate_database_schema()
 ```
 

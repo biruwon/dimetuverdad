@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """
-Analyze Database Tweets - Enhanced Analyzer Pipeline
-Analyzes all tweets from the database using the enhanced analyzer system.
+Analyze Database Tweets - Analyzer Pipeline
+Analyzes all tweets from the database using the analyzer system.
 """
 
 import sqlite3
 import argparse
-from enhanced_analyzer import EnhancedAnalyzer, save_content_analysis, ContentAnalysis, migrate_database_schema
-from categories import Categories
 from datetime import datetime
 
 # Import utility modules
 import sys
 from pathlib import Path
-project_root = Path(__file__).resolve().parent
+project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from analyzer.analyzer import Analyzer, save_content_analysis, ContentAnalysis, migrate_database_schema, create_analyzer
+from analyzer.categories import Categories
 from utils import database, analyzer, paths
 
 DB_PATH = paths.get_db_path()
 
 def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False):
     """
-    Analyze tweets from the database using the enhanced analyzer with LLM enabled.
+    Analyze tweets from the database using the analyzer with LLM enabled.
     
     Args:
         username: Specific username to analyze (None for all)
@@ -38,9 +38,9 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     migrate_database_schema()
     
     # Initialize analyzer
-    print("🚀 Initializing Enhanced Analyzer...")
+    print("🚀 Initializing Analyzer...")
     try:
-        analyzer_instance = analyzer.create_analyzer(use_llm=True, verbose=False)  # Always use LLM for better explanations
+        analyzer_instance = create_analyzer(use_llm=True, verbose=False)  # Always use LLM for better explanations
         print("✅ Analyzer ready!")
     except Exception as e:
         print(f"❌ Error initializing analyzer: {e}")
@@ -215,7 +215,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Analyze tweets from database using Enhanced Analyzer",
+        description="Analyze tweets from database using Analyzer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

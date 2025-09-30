@@ -1,5 +1,5 @@
 """
-Enhanced analyzer: far-right activism detection with comprehensive coverage.
+Analyzer: far-right activism detection with comprehensive coverage.
 Integrates specialized components for content analysis workflow.
 """
 
@@ -9,21 +9,29 @@ import re
 import sqlite3
 import time
 import warnings
-from typing import List, Dict, Tuple
+import sys
+from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
-# Import our enhanced components
-from pattern_analyzer import PatternAnalyzer, AnalysisResult, PatternMatch
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Import our components
+from .pattern_analyzer import PatternAnalyzer, AnalysisResult, PatternMatch
 from utils.text_utils import normalize_text
-from llm_models import EnhancedLLMPipeline
-from categories import Categories
+from .llm_models import EnhancedLLMPipeline
+from .categories import Categories
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
 
 # DB path (same as other scripts)
-DB_PATH = os.path.join(os.path.dirname(__file__), 'accounts.db')
+from utils.paths import get_db_path
+DB_PATH = get_db_path()
 @dataclass
 class ContentAnalysis:
     """Content analysis result structure with multi-category support."""
@@ -65,9 +73,9 @@ class ContentAnalysis:
 
 
 
-class EnhancedAnalyzer:
+class Analyzer:
     """
-    Enhanced analyzer with improved LLM integration for content analysis workflows.
+    Analyzer with improved LLM integration for content analysis workflows.
     """
     
     def __init__(self, use_llm: bool = True, model_priority: str = "balanced", verbose: bool = False):
@@ -78,7 +86,7 @@ class EnhancedAnalyzer:
         self.llm_pipeline = None
         
         if self.verbose:
-            print("🚀 Iniciando Enhanced Analyzer...")
+            print("🚀 Iniciando Analyzer...")
             print("Componentes cargados:")
             print("- ✓ Analizador unificado de patrones (extrema derecha + temas políticos)")
             print("- ✓ Detector de afirmaciones verificables")
@@ -151,7 +159,7 @@ class EnhancedAnalyzer:
             print(f"🔍 Step 2: Category determined: {category}")
 
         # Pipeline Step 3: Smart LLM integration for uncertain cases
-        llm_explanation = self._generate_explanation_with_smart_llm(content_normalized, category, pattern_results, analysis_method)
+        llm_explanation = self._generate_llm_explanation(content_normalized, category, pattern_results)
 
         # Pipeline Step 4: Create final analysis structure with multi-category support
         analysis_data = self._build_analysis_data(pattern_results)
@@ -247,20 +255,6 @@ class EnhancedAnalyzer:
             print(f"⚠️ Error en categorización LLM: {e}")
             return Categories.GENERAL
     
-    def _generate_explanation_with_smart_llm(self, content: str, category: str, 
-                                           pattern_results: Dict, analysis_method: str) -> str:
-        """
-        Pipeline Step 3: Always use LLM for explanation generation.
-        
-        Simplified Strategy:
-        - Patterns are only used for faster category detection
-        - LLM is always used for explanation generation regardless of analysis_method
-        - This ensures consistent, high-quality explanations across all content
-        """
-        # Always use LLM for explanations - patterns are only for category detection
-        print("🧠 Using LLM for explanation generation (patterns used only for category detection)")
-        return self._generate_llm_explanation(content, category, pattern_results)
-    
     def _generate_llm_explanation(self, content: str, category: str, pattern_results: Dict) -> str:
         """Generate explanation using LLM - surface actual errors instead of hiding them."""
         if not self.llm_pipeline:
@@ -341,7 +335,7 @@ class EnhancedAnalyzer:
     
     def print_system_status(self):
         """Print current system status for debugging."""
-        print("🔧 ENHANCED ANALYZER SYSTEM STATUS")
+        print("🔧 ANALYZER SYSTEM STATUS")
         print("=" * 50)
         print(f"🤖 LLM Enabled: {self.use_llm}")
         if self.llm_pipeline:
@@ -478,4 +472,40 @@ def save_content_analysis(analysis: ContentAnalysis):
 if __name__ == '__main__':
     print("❌ Este módulo no debe ejecutarse directamente")
     print("💡 Usa scripts/test_suite.py para ejecutar tests")
-    print("💡 O importa EnhancedAnalyzer para usar la funcionalidad de análisis")
+    print("💡 O importa Analyzer para usar la funcionalidad de análisis")
+
+
+# Utility functions for analyzer operations
+def create_analyzer(use_llm: bool = True, model_priority: str = "balanced", verbose: bool = False) -> Analyzer:
+    """Create and return an Analyzer instance with specified parameters."""
+    return Analyzer(use_llm=use_llm, model_priority=model_priority, verbose=verbose)
+
+
+def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) -> Optional[ContentAnalysis]:
+    """Reanalyze a single tweet and return the result."""
+    from utils.database import get_tweet_data, delete_existing_analysis
+
+    # Get tweet data
+    tweet_data = get_tweet_data(tweet_id)
+    if not tweet_data:
+        return None
+
+    # Delete existing analysis
+    delete_existing_analysis(tweet_id)
+
+    # Use provided analyzer or create default one
+    if analyzer is None:
+        analyzer = create_analyzer()
+
+    # Reanalyze
+    analysis_result = analyzer.analyze_content(
+        tweet_id=tweet_data['tweet_id'],
+        tweet_url=f"https://twitter.com/placeholder/status/{tweet_data['tweet_id']}",
+        username=tweet_data['username'],
+        content=tweet_data['content']
+    )
+
+    # Save result
+    save_content_analysis(analysis_result)
+
+    return analysis_result

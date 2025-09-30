@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Quick test tool for enhanced analyzer without loading full models
+Quick test tool for analyzer without loading full models
 """
 
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from enhanced_analyzer import EnhancedAnalyzer
-from pattern_analyzer import PatternAnalyzer
-from categories import Categories
+from analyzer.analyzer import Analyzer
+from analyzer.pattern_analyzer import PatternAnalyzer
+from analyzer.categories import Categories
 import time
 import argparse
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Quickly analyze text content with the Enhanced Analyzer",
+        description="Quickly analyze text content with the Analyzer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -85,7 +85,7 @@ Categories:
 
 def interactive_mode(use_llm=False, json_output=False):
     """Interactive mode for continuous testing."""
-    print("🚀 Enhanced Analyzer - Interactive Mode")
+    print("🚀 Analyzer - Interactive Mode")
     print("=" * 50)
     mode = "LLM + Patterns" if use_llm else "Patterns Only"
     print(f"🔧 Analysis Mode: {mode}")
@@ -95,7 +95,7 @@ def interactive_mode(use_llm=False, json_output=False):
     
     # Initialize analyzer once and keep it loaded
     try:
-        analyzer = EnhancedAnalyzer(use_llm=use_llm)
+        analyzer = Analyzer(use_llm=use_llm)
         print("✅ Models loaded and ready!")
     except Exception as e:
         print(f"❌ Error initializing analyzer: {e}")
@@ -133,7 +133,7 @@ def analyze_text(text, use_llm=False, json_output=False):
     """Analyze a single text input."""
     try:
         # Initialize analyzer with verbose output by default
-        analyzer = EnhancedAnalyzer(use_llm=use_llm)
+        analyzer = Analyzer(use_llm=use_llm)
         
         # Show mode info
         mode = "LLM + Patterns" if use_llm else "Patterns Only"
