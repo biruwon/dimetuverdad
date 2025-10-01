@@ -865,7 +865,7 @@ class EnhancedLLMPipeline:
             # Ensure we don't pass generation parameters to classification models
             pipeline_kwargs = {
                 "device": device,
-                "return_all_scores": True,
+                "top_k": None,  # Use top_k=None instead of deprecated return_all_scores=True
                 "torch_dtype": torch.float32,
                 "trust_remote_code": False
             }

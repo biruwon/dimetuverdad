@@ -15,9 +15,7 @@
                 'content': '🚨 URGENTE!! Las vacunas COVID tienen grafeno para controlarnos con 5G!! Compartid antes de que lo censuren!!',
                 'expected_category': Categories.DISINFORMATION,
                 'description': 'Health disinformation with conspiracy elements'
-            }, """, Integration Tests for Analyzer
-Optimized version with essential test cases only - much faster execution.
-"""
+            }
 """
 
 import argparse

@@ -7,6 +7,7 @@
 #   ./run_in_venv.sh analyze-default   # run analysis on embedded default posts (fast)
 #   ./run_in_venv.sh web               # start web application on port 5000
 #   ./run_in_venv.sh test-analyzer-integration  # run analyzer integration tests
+#   ./run_in_venv.sh test-fetch-integration       # run fetch integration tests
 #   ./run_in_venv.sh test-all                   # run all test files in project
 #   ./run_in_venv.sh init-db           # initialize/reset database schema
 #   ./run_in_venv.sh compare-models    # run model comparison benchmarks
@@ -77,6 +78,12 @@ test_analyzer_integration(){
   "$PY" "$ROOT_DIR/analyzer/tests/test_analyzer_integration.py" "$@"
 }
 
+test_fetch_integration(){
+  ensure_venv
+  echo "Running fetch integration tests (requires Twitter/X credentials)..."
+  "$PY" "$ROOT_DIR/fetcher/tests/test_fetch_integration.py" --live-fetch
+}
+
 test_all(){
   ensure_venv
   echo "Running all test files in the project..."
@@ -120,6 +127,9 @@ case "${1-}" in
     shift
     test_analyzer_integration "$@"
     ;;
+  test-fetch-integration)
+    test_fetch_integration
+    ;;
   test-all)
     test_all
     ;;
@@ -149,6 +159,7 @@ case "${1-}" in
     echo "  analyze-db        Run analysis on posts from database"
     echo "  web               Start web application on port 5000"
     echo "  test-analyzer-integration  Run analyzer integration tests"
+    echo "  test-fetch-integration     Run fetch integration tests"
     echo "  test-all                   Run all test files in project"
     echo "  init-db           Initialize/reset database schema"
     echo "  compare-models    Run model comparison benchmarks"
@@ -158,6 +169,7 @@ case "${1-}" in
     echo "Examples:"
     echo "  $0 install"
     echo "  $0 test-analyzer-integration --quick"
+    echo "  $0 test-fetch-integration"
     echo "  $0 test-all"
     echo "  $0 analyze-db --username Vox_es --limit 10"
     exit 1
