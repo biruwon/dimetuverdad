@@ -10,5 +10,8 @@
   },
 
   // Disable HTML script validation for templates to avoid JS errors caused by Jinja tokens
-  "html.validate.scripts": false
+  "html.validate.scripts": false,
+
+  // Enable .env file loading in Python terminals
+  "python.terminal.useEnvFile": true
 }

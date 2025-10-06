@@ -9,7 +9,6 @@
 #   ./run_in_venv.sh test-analyzer-integration  # run analyzer integration tests
 #   ./run_in_venv.sh test-fetch-integration       # run fetch integration tests
 #   ./run_in_venv.sh test-all                   # run all test files in project
-#   ./run_in_venv.sh init-db           # initialize/reset database schema
 #   ./run_in_venv.sh compare-models    # run model comparison benchmarks
 #   ./run_in_venv.sh benchmarks        # run performance benchmarks
 #   ./run_in_venv.sh full              # run fetch then analyze-db
