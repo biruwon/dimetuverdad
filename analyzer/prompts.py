@@ -57,12 +57,12 @@ def build_ollama_system_prompt() -> str:
 
 GUÍAS DE DETECCIÓN MEJORADAS:
 
-🚫 HATE_SPEECH - Identifica:
-- Insultos directos o indirectos hacia grupos (étnicos, religiosos, nacionales)
-- Generalizaciones despectivas ("esa gente", "ya sabéis cómo son", "todos los [grupo] son...")
-- Deshumanización sutil (referencias a animales, objetos, amenazas)
-- Lenguaje que incita hostilidad o violencia hacia grupos específicos
-- Términos despectivos aunque no sean insultos obvios
+HATE_SPEECH - Identifica:
+- Insultos directos/indirectos hacia grupos étnicos, religiosos, nacionales
+- Generalizaciones despectivas ('esa gente', 'ya sabéis cómo son', 'todos los X')
+- Deshumanización sutil (comparaciones con animales/objetos)
+- Lenguaje que incita hostilidad hacia grupos específicos
+- Ataques basados en características protegidas (raza, religión, origen)
 
 ❌ DISINFORMATION - Identifica:
 - Afirmaciones médicas/científicas falsas sin evidencia
@@ -76,16 +76,21 @@ GUÍAS DE DETECCIÓN MEJORADAS:
 - Afirmaciones sobre manipulación masiva por organizaciones
 - Referencias a "la agenda" sin especificar fuente verificable
 
-⚡ FAR_RIGHT_BIAS - Identifica:
-- Retórica extrema contra "rojos", "comunistas", izquierda
-- Nacionalismo extremo excluyente
-- Marcos interpretativos de "nosotros vs ellos" radicalizados
-- Anti-inmigración con lenguaje alarmista ("invasión")
+FAR_RIGHT_BIAS - Identifica:
+- Ataques a ideologías políticas de izquierda ('progres', 'comunistas', 'izquierda')
+- Lenguaje alarmista sobre supuesta infiltración ideológica en instituciones
+- Narrativas de 'guerra cultural' contra valores tradicionales
+- Marcos 'nosotros vs ellos' radicalizados por motivos políticos
+- Anti-inmigración con deshumanización
+- Lenguaje que presenta ideologías como amenazas existenciales
 
 📢 CALL_TO_ACTION - Identifica:
 - Llamadas explícitas a manifestaciones, protestas, movilización
 - Instrucciones específicas de acción ("todos a [lugar]", "hay que salir")
 - Urgencia para actuar colectivamente
+- Llamadas a organizarse o 'hacer algo' sin especificar detalles
+- Lenguaje que incita a la acción colectiva ('no podemos quedarnos de brazos cruzados')
+- Invitaciones a la participación activa en causas
 
 ✅ GENERAL - SOLO para contenido neutro:
 - Conversación cotidiana, clima, comida, entretenimiento
@@ -274,6 +279,9 @@ class EnhancedPromptGenerator:
             "   • Llamadas explícitas a manifestaciones/protestas con lugar/hora",
             "   • Instrucciones específicas de acción colectiva ('todos a X')",
             "   • Urgencia para movilización inmediata",
+            "   • Llamadas a organizarse o 'hacer algo' sin especificar detalles",
+            "   • Lenguaje que incita a la acción colectiva ('no podemos quedarnos de brazos cruzados')",
+            "   • Invitaciones a la participación activa en causas",
             "",
             "6️⃣ GENERAL - Solo si:",
             "   • Contenido completamente neutral (clima, comida, entretenimiento)",
@@ -282,6 +290,8 @@ class EnhancedPromptGenerator:
             "",
             "DECISIÓN: Evalúa en orden 1→6. Si encuentras elementos de una categoría, esa es la respuesta.",
             "Si hay múltiples categorías aplicables, elige la MÁS ESPECÍFICA y PROBLEMÁTICA.",
+            "IMPORTANTE: Contenido político con llamadas a acción → call_to_action (NO political_general)",
+            "IMPORTANTE: Lenguaje que urge organización colectiva → call_to_action",
             "",
             "RESPUESTA FINAL (una sola palabra):"
         ]

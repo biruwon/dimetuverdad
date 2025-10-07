@@ -172,13 +172,16 @@ class PatternAnalyzer:
             Categories.CALL_TO_ACTION: {
                 'patterns': [
                     # Direct mobilization calls
-                    r'\b(?:movilizaos|organizaos|retirad|sacad|actuad\s+ya)\b',
+                    r'\b(?:movilizaos|organizaos|organicen|retirad|sacad|actuad\s+ya)\b',
                     r'\b(?:todos\s+a|mañana|convocatoria|difunde)\b',
                     r'\b(?:concentración|manifestación|protesta|marcha)\s+(?:el\s+)?\w+',
                     r'\b(?:boicot|boicotear|boicoteemos)\b',
                     # Action language
                     r'\b(?:revolución|rebelión|alzamiento|resistencia)\b',
                     r'\b(?:a\s+las\s+calles|hay\s+que\s+actuar|salir\s+a\s+protestar)\b',
+                    # Subtle calls to action
+                    r'\b(?:hagan\s+algo|hay\s+que\s+hacer\s+algo)\b',
+                    r'\b(?:no\s+(?:podemos|podéis)\s+quedarnos?\s+(?:de\s+)?brazos\s+cruzados)\b',
                     # Additional patterns from former secondary
                     r'\b(?:activismo|militancia|compromiso)\b',
                     r'\b(?:organización|coordinación|planificación)\b',
@@ -191,8 +194,9 @@ class PatternAnalyzer:
             Categories.NATIONALISM: {
                 'patterns': [
                     # Spanish nationalism
-                    r'\b(?:España|Europa)\s+para\s+(?:los\s+)?españoles?\b',
-                    r'\b(?:patria|patriot(?:a|ismo)|nación|nacional)\b',
+                    r'\b(?:españa|europa)\s+primero\b',
+                    r'\b(?:españa|europa)\s+para\s+(?:los\s+)?españoles?\b',
+                    r'\b(?:patria|patriotas?|patriot(?:a|ismo)|nación|nacional)\b',
                     r'\b(?:identidad|esencia)\s+(?:española|nacional)\s+(?:amenazada|en\s+peligro)\b',
                     r'\b(?:pureza|autenticidad)\s+(?:española|nacional|racial)\b',
                     # Nationalist language
@@ -219,26 +223,40 @@ class PatternAnalyzer:
                     # Additional patterns from former secondary
                     r'\b(?:oposición|resistencia|contestación)\b',
                     r'\b(?:democracia|libertad|derechos)\s+(?:amenazad[ao]|en\s+peligro)\b',
+                    # Subtle anti-government patterns
+                    r'\b(?:sistema|instituciones?)\s+(?:podrid[ao]|corrupt[ao]|ilegítim[ao])\b',
+                    r'\b(?:los\s+que\s+mandan|élites?|casta\s+política)\s+(?:no\s+)?(?:representan?|son)\b',
+                    r'\b(?:desde\s+dentro|por\s+dentro)\s+(?:está|están)\s+(?:podrid[ao]|corrupt[ao])\b',
+                    r'\b(?:no\s+representan?\s+al\s+pueblo|pueblo\s+real)\b',
+                    r'\b(?:deslegitimación|ilegítim[ao]|ilegítim[ao])\b',
                 ],
-                'keywords': ['régimen', 'dictadura', 'gobierno', 'traición'],
+                'keywords': ['régimen', 'dictadura', 'gobierno', 'traición', 'sistema', 'podrido'],
                 'description': 'Anti-government rhetoric and delegitimization'
             },
             
             Categories.HISTORICAL_REVISIONISM: {
                 'patterns': [
                     # Franco rehabilitation
-                    r'\b(?:franco|franquismo)\s+(?:fue\s+)?(?:necesario|salvador|héroe|gran\s+líder|mejor)\b',
+                    r'\b(?:franco|franquismo)\s+(?:fue\s+)?(?:necesario|salvador|salvó|héroe|gran\s+líder|mejor)\b',
                     r'\b(?:dictadura|régimen)\s+(?:franquista|de\s+franco)\s+(?:fue\s+)?(?:mejor|próspera|gloriosa)\b',
                     r'\b(?:valle\s+de\s+los\s+caídos|fundación\s+franco)\b',
                     r'\b(?:con\s+)?franco\s+(?:se\s+)?(?:vivía|estaba|iba)\s+mejor\b',
                     # Historical denial
                     r'\b(?:república|guerra\s+civil)\s+(?:fue\s+)?(?:criminal|marxista|comunista)\b',
                     r'\b(?:víctimas\s+(?:del\s+)?franquismo)\s+(?:son\s+)?(?:mentira|exageradas?)\b',
+                    # Historical manipulation and hidden truth
+                    r'\b(?:historia\s+oficial|historia\s+manipulada)\s+(?:nos\s+)?(?:oculta|esconde|manipula)\b',
+                    r'\b(?:contar\s+los\s+hechos\s+reales|verdad\s+histórica)\b',
                     # Additional patterns from former secondary
                     r'\b(?:memoria\s+histórica)\s+(?:es\s+)?(?:sectaria|revanchista)\b',
                     r'\b(?:leyenda\s+negra|historia\s+manipulada)\b',
+                    # Subtle revisionist patterns
+                    r'\b(?:historia\s+incompleta|historia\s+que\s+nos\s+enseñaron)\b',
+                    r'\b(?:hechos\s+que\s+nos\s+ocultaron|verdad\s+oculta)\b',
+                    r'\b(?:manipulación\s+histórica|reescritura\s+de\s+la\s+historia)\b',
+                    r'\b(?:versión\s+oficial|historia\s+establecida)\s+(?:es\s+)?(?:falsa|mentirosa)\b',
                 ],
-                'keywords': ['franco', 'franquismo', 'dictadura', 'memoria'],
+                'keywords': ['franco', 'franquismo', 'dictadura', 'memoria', 'historia', 'manipulada'],
                 'description': 'Historical revisionism and dictatorship rehabilitation'
             },
             

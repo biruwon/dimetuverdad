@@ -43,5 +43,40 @@
   // ===== TERMINAL COMMAND APPROVAL =====
   "terminal.integrated.commandsToSkipShell": [
     "cd /Users/antonio/projects/bulos/dimetuverdad && python -c *"
-  ]
+  ],
+
+  "chat.tools.terminal.autoApprove": {
+        "rm": false,
+        "rmdir": false,
+        "del": false,
+        "kill": false,
+        "curl": true,
+        "wget": false,
+        "eval": false,
+        "chmod": false,
+        "chown": false,
+        "/^Remove-Item\\b/i": false,
+        "python": true,
+        "source": true,
+        "./run_in_venv.sh": true,
+        "sqlite3 *": true,
+        "\"": true,
+        "pkill": true,
+        "/Users/antonio/projects/bulos/dimetuverdad/venv/bin/python": true,
+        "cd": true,
+        "ls": true,
+        "cat": true,
+        "grep": true,
+        "find": true,
+        "pip": true,
+        "git": true,
+        "echo": true,
+        "pwd": true,
+        "which": true,
+        "/^python -c/ *": true,
+        "/^cd .* && python/": true,
+        "/.*python.*-c.*/": true,
+        "source venv/bin/activate && python -c *": true,
+        "cd /Users/antonio/projects/bulos/dimetuverdad && source venv/bin/activate && python -c *": true
+    }
 }

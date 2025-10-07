@@ -142,6 +142,9 @@
         .tweet-content {
             line-height: 1.6;
             margin: 1rem 0;
+            /* Remove any height restrictions to allow full post display */
+            max-height: none !important;
+            overflow: visible !important;
         }
         
         .hashtag {
@@ -164,8 +167,9 @@
         
         .media-preview {
             max-width: 100%;
-            max-height: 300px;
-            object-fit: cover;
+            /* Remove max-height to allow full image display */
+            max-height: none !important;
+            object-fit: contain;
             border-radius: 8px;
             margin: 0.5rem;
         }
@@ -566,7 +570,7 @@
                             <div class="embedded-tweet" data-tweet-url="{{ tweet.tweet_url }}">
                                 <iframe 
                                     src="https://platform.twitter.com/embed/Tweet.html?dnt=true&embedId=twitter-widget-0&features=eyJ0ZndfdGltZWxpbmVfbGlzdCI6eyJidWNrZXQiOlsibGlua3RyLmVlIiwidHIuZWUiLCJ0ZXJyYS5jb20uYnIiLCJ3d3cubGlua3RyLmVlIiwid3d3LnRyLmVlIiwid3d3LnRlcnJhLmNvbS5iciJdLCJ2ZXJzaW9uIjpudWxsfSwidGZ3X2hvcml6b25fdGltZWxpbmVfMTIwMzQiOnsiYnVja2V0IjoidHJlYXRtZW50IiwidmVyc2lvbiI6bnVsbH0sInRmd190d2VldF9lZGl0X2JhY2tlbmQiOnsiYnVja2V0Ijoib24iLCJ2ZXJzaW9uIjpudWxsfSwidGZ3X3JlZnNyY19zZXNzaW9uIjp7ImJ1Y2tldCI6Im9uIiwidmVyc2lvbiI6bnVsbH0sInRmd19jaGluX3BpbGxzXzE0NzQxIjp7ImJ1Y2tldCI6ImNvbnRyb2wiLCJ2ZXJzaW9uIjpudWxsfSwidGZ3X21peGVkX21lZGlhXzE1ODk3Ijp7ImJ1Y2tldCI6InRyZWF0bWVudCIsInZlcnNpb24iOm51bGx9LCJ0Zndfc3BhY2VfY2FyZCI6eyJidWNrZXQiOiJvZmYiLCJ2ZXJzaW9uIjpudWxsfX0%3D&frame=false&hideCard=false&hideThread=false&id={{ tweet.tweet_url.split('/')[-1] }}&lang=es&origin={{ request.url_root|urlencode }}&sessionId=a47c7ee76b8ad407be2a6a4b659a78a6e82a7749&theme=light&widgetsVersion=1&width=550px"
-                                    style="position: static; visibility: visible; width: 100%; height: 500px; display: block; flex-grow: 1;"
+                                    style="position: static; visibility: visible; width: 100%; height: auto; min-height: 300px; display: block; flex-grow: 1;"
                                     title="X Post"
                                     frameborder="0"
                                     scrolling="no"
