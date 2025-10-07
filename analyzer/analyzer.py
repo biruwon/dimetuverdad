@@ -48,12 +48,23 @@ class ContentAnalysis:
     
     # Analysis results
     llm_explanation: str = ""
-    analysis_method: str = "pattern"  # "pattern" or "llm"
+    analysis_method: str = "pattern"  # "pattern", "llm", or "gemini"
+    
+    # Media analysis fields
+    media_urls: List[str] = None  # List of media URLs
+    media_analysis: str = ""      # Gemini multimodal analysis result
+    media_type: str = ""          # "image", "video", or ""
+    multimodal_analysis: bool = False  # Whether media was analyzed
     
     # Technical data
     pattern_matches: List[Dict] = None
     topic_classification: Dict = None
     analysis_json: str = ""
+    
+    # Performance metrics
+    analysis_time_seconds: float = 0.0  # Total analysis time
+    model_used: str = ""                # Which model was used (gpt-oss:20b, gemini-2.5-flash, etc.)
+    tokens_used: int = 0                # Approximate tokens used (if available)
     
     def __post_init__(self):
         # Initialize lists to avoid None values
@@ -61,6 +72,8 @@ class ContentAnalysis:
             self.categories_detected = []
         if self.pattern_matches is None:
             self.pattern_matches = []
+        if self.media_urls is None:
+            self.media_urls = []
     
     @property
     def has_multiple_categories(self) -> bool:
@@ -84,6 +97,18 @@ class Analyzer:
         self.model_priority = model_priority
         self.verbose = verbose  # Control debug output
         self.llm_pipeline = None
+        
+        # Metrics tracking (always enabled)
+        self.metrics = {
+            'total_analyses': 0,
+            'method_counts': {'pattern': 0, 'llm': 0},
+            'multimodal_count': 0,
+            'category_counts': {},
+            'total_time': 0.0,
+            'avg_time_per_analysis': 0.0,
+            'model_usage': {},
+            'start_time': time.time()
+        }
         
         if self.verbose:
             print("🚀 Iniciando Analyzer...")
@@ -124,20 +149,126 @@ class Analyzer:
                              tweet_id: str,
                              tweet_url: str, 
                              username: str,
+                             content: str,
+                             media_urls: List[str] = None) -> ContentAnalysis:
+        """
+        Main content analysis pipeline with conditional multimodal analysis.
+        
+        Routes to Gemini multimodal analysis if media is present, otherwise uses
+        the traditional pattern + LLM pipeline.
+        """
+        analysis_start_time = time.time()
+        
+        # Conditional routing: Use Gemini for media, traditional pipeline for text-only
+        if media_urls and len(media_urls) > 0:
+            result = self.analyze_multi_modal(tweet_id, tweet_url, username, content, media_urls)
+        else:
+            result = self._analyze_text_only(tweet_id, tweet_url, username, content)
+        
+        # Track metrics (always enabled)
+        analysis_time = time.time() - analysis_start_time
+        self._update_metrics(result, analysis_time)
+        
+        # Add metrics to result
+        result.analysis_time_seconds = analysis_time
+        result.model_used = self._get_model_name(result.analysis_method, result.multimodal_analysis)
+        
+        return result
+    
+    def _update_metrics(self, result: ContentAnalysis, analysis_time: float):
+        """Update internal metrics with analysis results."""
+        self.metrics['total_analyses'] += 1
+        self.metrics['method_counts'][result.analysis_method] += 1
+        
+        # Track multimodal usage separately
+        if result.multimodal_analysis:
+            self.metrics['multimodal_count'] += 1
+        
+        self.metrics['total_time'] += analysis_time
+        
+        # Update category counts
+        if result.category not in self.metrics['category_counts']:
+            self.metrics['category_counts'][result.category] = 0
+        self.metrics['category_counts'][result.category] += 1
+        
+        # Update model usage
+        model_name = self._get_model_name(result.analysis_method, result.multimodal_analysis)
+        if model_name not in self.metrics['model_usage']:
+            self.metrics['model_usage'][model_name] = 0
+        self.metrics['model_usage'][model_name] += 1
+        
+        # Update average time
+        self.metrics['avg_time_per_analysis'] = self.metrics['total_time'] / self.metrics['total_analyses']
+    
+    def _get_model_name(self, analysis_method: str, is_multimodal: bool = False) -> str:
+        """Get the model name based on analysis method and multimodal flag."""
+        if is_multimodal:
+            return "gemini-2.5-flash"
+        elif analysis_method == "llm":
+            return f"ollama-{self.model_priority}"
+        else:
+            return "pattern-matching"
+    
+    def get_metrics_report(self) -> str:
+        """Generate a comprehensive metrics report."""
+        total_time = time.time() - self.metrics['start_time']
+        
+        report = []
+        report.append("📊 ANALYSIS METRICS REPORT")
+        report.append("=" * 50)
+        report.append(f"⏱️  Total runtime: {total_time:.2f}s")
+        report.append(f"📈 Total analyses: {self.metrics['total_analyses']}")
+        report.append(f"⚡ Average time per analysis: {self.metrics['avg_time_per_analysis']:.2f}s")
+        report.append(f"💰 Total analysis time: {self.metrics['total_time']:.2f}s")
+        report.append("")
+        
+        # Method breakdown
+        report.append("🔧 Analysis Methods Used:")
+        for method, count in self.metrics['method_counts'].items():
+            if count > 0:
+                percentage = (count / self.metrics['total_analyses']) * 100
+                report.append(f"  {method.upper()}: {count} ({percentage:.1f}%)")
+        
+        # Multimodal breakdown
+        if self.metrics['multimodal_count'] > 0:
+            multimodal_percentage = (self.metrics['multimodal_count'] / self.metrics['total_analyses']) * 100
+            report.append(f"  🎥 Multimodal: {self.metrics['multimodal_count']} ({multimodal_percentage:.1f}%)")
+        report.append("")
+        
+        # Model usage
+        report.append("🤖 Models Used:")
+        for model, count in self.metrics['model_usage'].items():
+            percentage = (count / self.metrics['total_analyses']) * 100
+            report.append(f"  {model}: {count} ({percentage:.1f}%)")
+        report.append("")
+        
+        # Category breakdown
+        report.append("🏷️  Categories Detected:")
+        sorted_categories = sorted(self.metrics['category_counts'].items(), key=lambda x: x[1], reverse=True)
+        for category, count in sorted_categories:
+            percentage = (count / self.metrics['total_analyses']) * 100
+            report.append(f"  {category}: {count} ({percentage:.1f}%)")
+        report.append("")
+        
+        # Performance insights
+        if self.metrics['total_analyses'] > 0:
+            report.append("⚡ Performance Insights:")
+            if self.metrics['multimodal_count'] > 0:
+                avg_multimodal_time = self.metrics['total_time'] / self.metrics['multimodal_count']
+                report.append(f"  🎥 Average Multimodal analysis time: {avg_multimodal_time:.2f}s")
+            if self.metrics['method_counts']['llm'] > 0:
+                avg_llm_time = self.metrics['total_time'] / self.metrics['method_counts']['llm']
+                report.append(f"  🧠 Average LLM analysis time: {avg_llm_time:.2f}s")
+            if self.metrics['method_counts']['pattern'] > 0:
+                avg_pattern_time = self.metrics['total_time'] / self.metrics['method_counts']['pattern']
+                report.append(f"  🔍 Average Pattern analysis time: {avg_pattern_time:.2f}s")
+        
+        return "\n".join(report)
+    def _analyze_text_only(self, 
+                             tweet_id: str,
+                             tweet_url: str, 
+                             username: str,
                              content: str) -> ContentAnalysis:
-        """
-        Main content analysis pipeline with consolidated pattern analysis.
-        """
-        if not content or len(content.strip()) < 5:
-            return ContentAnalysis(
-                tweet_id=tweet_id,
-                tweet_url=tweet_url,
-                username=username,
-                tweet_content=content,
-                analysis_timestamp=datetime.now().isoformat(),
-                category=Categories.GENERAL,
-                llm_explanation="Content too short for analysis"
-            )
         
         if self.verbose:
             print(f"\n🔍 Content analysis: @{username}")
@@ -186,6 +317,93 @@ class Analyzer:
             topic_classification=analysis_data['topic_classification'],
             analysis_json=json.dumps(analysis_data, ensure_ascii=False, default=str)
         )
+    
+    def analyze_multi_modal(self,
+                           tweet_id: str,
+                           tweet_url: str,
+                           username: str,
+                           content: str,
+                           media_urls: List[str]) -> ContentAnalysis:
+        """
+        Analyze multimodal content (text + media) using Gemini 2.5 Flash.
+        
+        This method handles tweets with images/videos by using Gemini's multimodal
+        capabilities instead of the traditional pattern + LLM pipeline.
+        """
+        if self.verbose:
+            print(f"\n🎥 Multimodal analysis: @{username}")
+            print(f"📝 Content: {content[:80]}...")
+            print(f"🖼️ Media URLs: {len(media_urls)} found")
+        
+        # Import the multimodal analyzer
+        from .gemini_multimodal import analyze_multimodal_content, extract_media_type
+        
+        # Perform multimodal analysis
+        media_analysis, analysis_time = analyze_multimodal_content(media_urls, content)
+        
+        if media_analysis:
+            # Extract category from Gemini analysis (simplified approach)
+            # For now, we'll use a basic heuristic - in production, you might want to parse the Gemini response
+            category = self._extract_category_from_gemini(media_analysis)
+            media_type = extract_media_type(media_urls)
+            
+            if self.verbose:
+                print(f"✅ Gemini analysis completed in {analysis_time:.2f}s")
+                print(f"🏷️ Category: {category}")
+                print(f"📊 Media type: {media_type}")
+            
+            return ContentAnalysis(
+                tweet_id=tweet_id,
+                tweet_url=tweet_url,
+                username=username,
+                tweet_content=content,
+                analysis_timestamp=datetime.now().isoformat(),
+                category=category,
+                categories_detected=[category],  # Single category for now
+                llm_explanation="",  # Gemini analysis is in media_analysis field
+                analysis_method="llm",  # Use "llm" method for multimodal analysis
+                media_urls=media_urls,
+                media_analysis=media_analysis,
+                media_type=media_type,
+                multimodal_analysis=True,
+                pattern_matches=[],  # No pattern analysis for multimodal
+                topic_classification={},
+                analysis_json=json.dumps({
+                    'multimodal_analysis': True,
+                    'media_type': media_type,
+                    'analysis_time': analysis_time
+                }, ensure_ascii=False)
+            )
+        else:
+            # Fallback to text-only analysis if multimodal fails
+            if self.verbose:
+                print("❌ Multimodal analysis failed, falling back to text-only")
+            return self._analyze_text_only(tweet_id, tweet_url, username, content)
+    
+    def _extract_category_from_gemini(self, gemini_analysis: str) -> str:
+        """
+        Extract category from Gemini multimodal analysis.
+        
+        This is a simplified implementation. In production, you might want to:
+        - Parse the structured Gemini response
+        - Use more sophisticated category extraction
+        - Map Gemini categories to your existing category system
+        """
+        analysis_lower = gemini_analysis.lower()
+        
+        # Map Gemini analysis to our categories (check for Spanish keywords)
+        if any(keyword in analysis_lower for keyword in ['hate_speech', 'odio', 'racismo', 'discriminación']):
+            return Categories.HATE_SPEECH
+        elif any(keyword in analysis_lower for keyword in ['disinformation', 'desinformación', 'fake news', 'mentira']):
+            return Categories.DISINFORMATION
+        elif any(keyword in analysis_lower for keyword in ['conspiracy', 'conspiración', 'teoría conspirativa']):
+            return Categories.CONSPIRACY_THEORY
+        elif any(keyword in analysis_lower for keyword in ['far_right', 'extrema derecha', 'ultraderecha']):
+            return Categories.FAR_RIGHT_BIAS
+        elif any(keyword in analysis_lower for keyword in ['call_to_action', 'llamado a la acción', 'llamados a la acción']):
+            return Categories.CALL_TO_ACTION
+        else:
+            return Categories.GENERAL  # Default fallback
     
     def _run_pattern_analysis(self, content: str) -> Dict:
         """
@@ -358,80 +576,6 @@ class Analyzer:
             print(f"❌ Database: Error - {e}")
 
 
-# Database functions for content analysis workflow
-def migrate_database_schema():
-    """Migrate existing database to add missing columns and handle unified analysis."""
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    c = conn.cursor()
-    
-    # Check if content_analyses table exists
-    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='content_analyses'")
-    if not c.fetchone():
-        print("📋 Creating content_analyses table...")
-        init_content_analysis_table()
-        conn.close()
-        return
-    
-    # Get current columns
-    c.execute("PRAGMA table_info(content_analyses)")
-    columns = [col[1] for col in c.fetchall()]
-    
-    # Add missing columns for unified analysis and multi-category support
-    missing_columns = []
-    expected_columns = {
-        'analysis_method': 'TEXT DEFAULT "pattern"',  # "pattern" or "llm"
-        'evidence_sources': 'TEXT',
-        'verification_status': 'TEXT DEFAULT "pending"',
-        'misinformation_risk': 'TEXT',
-        'categories_detected': 'TEXT'  # JSON array of all detected categories
-    }
-    
-    for col_name, col_type in expected_columns.items():
-        if col_name not in columns:
-            missing_columns.append((col_name, col_type))
-    
-    if missing_columns:
-        print(f"🔧 Adding {len(missing_columns)} missing columns to database...")
-        for col_name, col_type in missing_columns:
-            try:
-                c.execute(f"ALTER TABLE content_analyses ADD COLUMN {col_name} {col_type}")
-                print(f"  ✓ Added column: {col_name}")
-            except sqlite3.OperationalError as e:
-                if "duplicate column name" not in str(e):
-                    print(f"  ⚠️ Error adding {col_name}: {e}")
-    else:
-        print("✅ Database schema is up to date")
-    
-    conn.commit()
-    conn.close()
-
-def init_content_analysis_table():
-    """Initialize content analyses table with proper schema including multi-category support."""
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    c = conn.cursor()
-    c.execute('''
-    CREATE TABLE IF NOT EXISTS content_analyses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tweet_id TEXT UNIQUE,
-        tweet_url TEXT,
-        username TEXT,
-        tweet_content TEXT,
-        category TEXT,                -- Primary category (backward compatibility)
-        subcategory TEXT,
-        llm_explanation TEXT,
-        calls_to_action BOOLEAN,
-        analysis_json TEXT,
-        analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        evidence_sources TEXT,
-        verification_status TEXT DEFAULT "pending",
-        misinformation_risk TEXT,
-        analysis_method TEXT DEFAULT "pattern",
-        categories_detected TEXT     -- JSON array of all detected categories  
-    )
-    ''')
-    conn.commit()
-    conn.close()
-
 def save_content_analysis(analysis: ContentAnalysis):
     """Save content analysis to database with retry logic."""
     max_retries = 3
@@ -446,13 +590,15 @@ def save_content_analysis(analysis: ContentAnalysis):
             INSERT OR REPLACE INTO content_analyses 
             (tweet_id, tweet_url, username, tweet_content, category, 
              llm_explanation, analysis_method, analysis_json, analysis_timestamp,
-             categories_detected) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             categories_detected, media_urls, media_analysis, media_type, multimodal_analysis) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 analysis.tweet_id, analysis.tweet_url, analysis.username, analysis.tweet_content,
                 analysis.category, analysis.llm_explanation, analysis.analysis_method,
                 analysis.analysis_json, analysis.analysis_timestamp,
-                json.dumps(analysis.categories_detected, ensure_ascii=False)
+                json.dumps(analysis.categories_detected, ensure_ascii=False),
+                json.dumps(analysis.media_urls, ensure_ascii=False),
+                analysis.media_analysis, analysis.media_type, analysis.multimodal_analysis
             ))
             
             conn.commit()
@@ -502,7 +648,8 @@ def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) -> Optio
         tweet_id=tweet_data['tweet_id'],
         tweet_url=f"https://twitter.com/placeholder/status/{tweet_data['tweet_id']}",
         username=tweet_data['username'],
-        content=tweet_data['content']
+        content=tweet_data['content'],
+        media_urls=tweet_data.get('media_urls', [])
     )
 
     # Save result

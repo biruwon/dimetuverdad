@@ -46,15 +46,6 @@ def extract_media_data(article) -> Tuple[List[str], int, List[str]]:
                 media_links.append(src)
                 media_types.append('video')
 
-    for elem in article.query_selector_all('[data-src*="twimg.com"], [data-url*="twimg.com"]'):
-        data_src = elem.get_attribute('data-src') or elem.get_attribute('data-url')
-        if data_src and data_src not in media_links:
-            media_links.append(data_src)
-            if 'mp4' in data_src or 'video' in data_src:
-                media_types.append('video')
-            else:
-                media_types.append('image')
-
     for elem in article.query_selector_all('[style*="background-image"]'):
         style = elem.get_attribute('style')
         if style and 'twimg.com' in style:
@@ -65,7 +56,22 @@ def extract_media_data(article) -> Tuple[List[str], int, List[str]]:
                     media_links.append(bg_url)
                     media_types.append('image')
 
-    return media_links, len(media_links), media_types
+    # Filter out unwanted media types: profile images and card previews
+    filtered_media_links = []
+    filtered_media_types = []
+    
+    for url, media_type in zip(media_links, media_types):
+        # Skip profile images (user avatars)
+        if 'profile_images' in url:
+            continue
+        # Skip card images (link previews, thumbnails)
+        if 'card_img' in url:
+            continue
+        # Keep only actual content media
+        filtered_media_links.append(url)
+        filtered_media_types.append(media_type)
+
+    return filtered_media_links, len(filtered_media_links), filtered_media_types
 
 
 def extract_engagement_metrics(article) -> Dict[str, int]:

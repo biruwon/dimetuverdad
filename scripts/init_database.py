@@ -100,12 +100,26 @@ def create_fresh_database():
             CREATE TABLE content_analyses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 tweet_id TEXT NOT NULL,
-                category TEXT NOT NULL,
+                tweet_url TEXT,
+                username TEXT,
+                tweet_content TEXT,
+                category TEXT,                -- Primary category (backward compatibility)
+                categories_detected TEXT,     -- JSON array of all detected categories
                 llm_explanation TEXT,
-                analysis_method TEXT DEFAULT 'pattern', -- 'pattern' or 'llm'
+                analysis_method TEXT DEFAULT "pattern", -- "pattern", "llm", or "gemini"
                 confidence REAL DEFAULT 1.0,
-                username TEXT NOT NULL,
                 analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                analysis_json TEXT,
+                
+                -- Multi-category support
+                pattern_matches TEXT,         -- JSON array of pattern matches
+                topic_classification TEXT,    -- JSON topic classification data
+                
+                -- Media analysis (multimodal support)
+                media_urls TEXT,              -- JSON array of media URLs
+                media_analysis TEXT,          -- Gemini multimodal analysis result
+                media_type TEXT,              -- "image", "video", or ""
+                multimodal_analysis BOOLEAN DEFAULT FALSE, -- Whether media was analyzed
                 
                 FOREIGN KEY (tweet_id) REFERENCES tweets (tweet_id),
                 FOREIGN KEY (username) REFERENCES accounts (username),
@@ -141,6 +155,8 @@ def create_fresh_database():
             ('idx_analyses_category', 'content_analyses', 'category'),
             ('idx_analyses_username', 'content_analyses', 'username'),
             ('idx_content_analyses_timestamp', 'content_analyses', 'analysis_timestamp'),
+            ('idx_content_analyses_method', 'content_analyses', 'analysis_method'),
+            ('idx_content_analyses_multimodal', 'content_analyses', 'multimodal_analysis'),
             ('idx_edit_history_tweet', 'edit_history', 'tweet_id')
         ]
         
@@ -154,7 +170,7 @@ def create_fresh_database():
         
         # Show summary
         c.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = [row[0] for row in c.fetchall()]
+        tables = [row['name'] for row in c.fetchall()]
         print(f"📊 Created {len(tables)} tables: {', '.join(tables)}")
         
     except Exception as e:
@@ -174,7 +190,7 @@ def verify_schema():
     try:
         # Check tables exist
         c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-        tables = [row[0] for row in c.fetchall()]
+        tables = [row['name'] for row in c.fetchall()]
         expected_tables = ['accounts', 'tweets', 'content_analyses', 'edit_history']
         
         print(f"  📋 Tables found: {tables}")
@@ -185,14 +201,17 @@ def verify_schema():
                 print(f"    ❌ {table} MISSING!")
                 return False
         
-        # Check key fields exist in tweets table
-        c.execute("PRAGMA table_info(tweets)")
-        columns = [row[1] for row in c.fetchall()]
-        essential_fields = ['tweet_id', 'username', 'content', 'post_type', 'is_deleted', 'is_edited']
+        # Check key fields exist in content_analyses table
+        c.execute("PRAGMA table_info(content_analyses)")
+        ca_columns = [row['name'] for row in c.fetchall()]
+        essential_ca_fields = [
+            'tweet_id', 'username', 'category', 'analysis_method', 'analysis_timestamp',
+            'categories_detected', 'media_urls', 'media_analysis', 'media_type', 'multimodal_analysis'
+        ]
         
-        print(f"  📋 Tweet table columns: {len(columns)} total")
-        for field in essential_fields:
-            if field in columns:
+        print(f"  📋 Content analyses table columns: {len(ca_columns)} total")
+        for field in essential_ca_fields:
+            if field in ca_columns:
                 print(f"    ✅ {field}")
             else:
                 print(f"    ❌ {field} MISSING!")

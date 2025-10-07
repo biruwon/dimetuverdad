@@ -110,8 +110,8 @@ X_EMAIL_OR_PHONE=your_email
 ### 4. Database Initialization
 
 ```bash
-# Initialize the database schema
-python -c "from analyzer import migrate_database_schema; migrate_database_schema()"
+# Initialize the database schema (use the init script)
+python scripts/init_database.py --force
 ```
 
 ## � Docker Deployment

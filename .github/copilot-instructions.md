@@ -104,7 +104,7 @@ analyzer = Analyzer(model_priority="quality")
 ```
 
 ### Database Operations
-- **Always** use `migrate_database_schema()` before analysis
+- **Always** use `scripts/init_database.py --force` to set up fresh database schema
 - Database locked errors: restart Python process and check for hanging connections
 - Use timeout=30.0 for all SQLite connections due to concurrent access
 
@@ -187,9 +187,9 @@ ollama pull gpt-oss:20b  # Re-download model if corrupted
 ```
 
 ### Database Locked
-```python
-from analyzer import migrate_database_schema
-migrate_database_schema()  # Reset schema and connections
+```bash
+# Restart Python process and check for hanging connections
+# Use scripts/init_database.py --force to recreate if needed
 ```
 
 ### Memory Issues
@@ -236,10 +236,11 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 
 **WEB APPLICATION MANAGEMENT**:
 - **CHECK BEFORE STARTING**: Always use `lsof -i :5000` to check if web app is already running
-- **DO NOT STOP EXISTING INSTANCES**: If port 5000 is in use, assume web app is running elsewhere and DO NOT attempt to kill processes
+- **NEVER STOP RUNNING INSTANCES**: If port 5000 is in use, the web app is already running - DO NOT attempt to kill, stop, or restart it
 - **USE EXISTING WEB APP**: If web app is already running, simply use the existing instance at localhost:5000
 - **ONLY START IF NOT RUNNING**: Only run `./run_in_venv.sh web` if port check shows port 5000 is free
 - **BACKGROUND PROCESSES**: Web app should run as background process with `isBackground=true`
+- **MULTIPLE TERMINALS**: If user mentions web app is running in another terminal, assume it's the correct running instance and proceed with testing
 
 **IF VIRTUAL ENV ISSUES OCCUR**: The `run_in_venv.sh` script automatically handles virtual environment activation. Never manually activate with `source venv/bin/activate` - always use the runner script.
 
@@ -339,3 +340,39 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 - Test files in wrong directories (e.g., db tests in project root instead of `fetcher/tests/`)
 
 **VIOLATION CONSEQUENCES**: Fragmented test files will be consolidated and removed. Always use the single test file per module pattern.
+
+## Database Schema Management
+
+**MANDATORY REQUIREMENT**: Whenever database schema changes are made, the `scripts/init_database.py` script MUST be updated to reflect the new schema.
+
+### Database Schema Update Rules:
+1. **SCHEMA CHANGES REQUIRE INIT SCRIPT UPDATE**: Any modification to database table structures, new columns, or schema alterations must be reflected in `scripts/init_database.py`
+   - Adding new columns to existing tables
+   - Creating new tables
+   - Modifying column types or constraints
+   - Adding indexes or foreign keys
+
+2. **SCHEMA MANAGEMENT**: Use `scripts/init_database.py --force` to recreate databases with updated schema
+   - `scripts/init_database.py` creates fresh databases with complete schema
+   - Use `--force` flag to recreate existing databases
+
+3. **VERIFICATION REQUIREMENTS**: Update the schema verification logic in `scripts/init_database.py` to check for new fields
+   - Essential fields lists must include all new columns
+   - Verification functions must validate new schema elements
+
+4. **BACKWARD COMPATIBILITY**: Ensure migration functions can handle databases with missing columns
+   - Use `ALTER TABLE ADD COLUMN` for safe incremental updates
+   - Handle cases where columns may already exist
+
+5. **COLUMN ACCESS BY NAME**: Always use column names instead of row indices when accessing database query results
+   - The database connection uses `sqlite3.Row` factory for named column access
+   - Use `row['column_name']` instead of `row[index]` to prevent indexing errors
+   - This makes code robust against SQL query changes and schema modifications
+
+### Database Update Workflow:
+1. **Make Schema Changes**: Update table structures in source code
+2. **Update Init Script**: Reflect changes in `scripts/init_database.py` table creation
+3. **Update Verification**: Add new fields to schema verification checks
+4. **Test Fresh Creation**: Verify init script creates correct schema with `scripts/init_database.py --force`
+
+**VIOLATION CONSEQUENCES**: Databases created with outdated init scripts will be missing critical columns. Always update `scripts/init_database.py` immediately after any schema changes. Never use row indices for database column access - always use column names.

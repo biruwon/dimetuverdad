@@ -43,23 +43,49 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
             if not needs_update:
                 return False
             # perform update (minimal fields)
-            c.execute("UPDATE tweets SET content = ?, post_type = ?, original_author = ?, original_tweet_id = ? WHERE tweet_id = ?", (
+            c.execute("""UPDATE tweets SET content = ?, post_type = ?, original_author = ?, original_tweet_id = ?,
+                        media_links = ?, media_count = ?, media_types = ?,
+                        engagement_likes = ?, engagement_retweets = ?, engagement_replies = ?,
+                        external_links = ?, original_content = ?, is_pinned = ?
+                        WHERE tweet_id = ?""", (
                 tweet_data.get('content'),
                 new_post_type,
                 tweet_data.get('original_author'),
                 tweet_data.get('original_tweet_id'),
+                tweet_data.get('media_links'),
+                tweet_data.get('media_count', 0),
+                tweet_data.get('media_types'),
+                tweet_data.get('engagement_likes', 0),
+                tweet_data.get('engagement_retweets', 0),
+                tweet_data.get('engagement_replies', 0),
+                tweet_data.get('external_links'),
+                tweet_data.get('original_content'),
+                tweet_data.get('is_pinned', 0),
                 tweet_data['tweet_id']
             ))
             conn.commit()
             return True
         # insert
-        c.execute("INSERT INTO tweets (tweet_id, content, username, tweet_url, tweet_timestamp, post_type) VALUES (?, ?, ?, ?, ?, ?)", (
+        c.execute("""INSERT INTO tweets (tweet_id, content, username, tweet_url, tweet_timestamp, post_type,
+                        media_links, media_count, media_types,
+                        engagement_likes, engagement_retweets, engagement_replies,
+                        external_links, original_content, is_pinned)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
             tweet_data['tweet_id'],
             tweet_data.get('content'),
             tweet_data.get('username'),
             tweet_data.get('tweet_url'),
             tweet_data.get('tweet_timestamp'),
-            tweet_data.get('post_type', 'original')
+            tweet_data.get('post_type', 'original'),
+            tweet_data.get('media_links'),
+            tweet_data.get('media_count', 0),
+            tweet_data.get('media_types'),
+            tweet_data.get('engagement_likes', 0),
+            tweet_data.get('engagement_retweets', 0),
+            tweet_data.get('engagement_replies', 0),
+            tweet_data.get('external_links'),
+            tweet_data.get('original_content'),
+            tweet_data.get('is_pinned', 0)
         ))
         conn.commit()
         return True

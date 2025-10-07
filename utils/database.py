@@ -22,10 +22,19 @@ def get_tweet_data(tweet_id: str, timeout: float = 30.0) -> Optional[dict]:
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT tweet_id, content, username FROM tweets WHERE tweet_id = ?
+            SELECT tweet_id, content, username, media_links FROM tweets WHERE tweet_id = ?
         """, (tweet_id,))
         result = cursor.fetchone()
-        return dict(result) if result else None
+        if result:
+            data = dict(result)
+            # Parse media_links into a list
+            media_links = data.get('media_links', '')
+            if media_links:
+                data['media_urls'] = [url.strip() for url in media_links.split(',') if url.strip()]
+            else:
+                data['media_urls'] = []
+            return data
+        return None
     finally:
         conn.close()
 

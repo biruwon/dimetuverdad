@@ -543,18 +543,52 @@ def admin_edit_analysis(tweet_id):
         try:
             if action == 'reanalyze':
                 # Trigger full reanalysis using the analysis pipeline
+                print(f"🔄 Reanalyze action triggered for tweet_id: {tweet_id}")
+                
                 tweet_data = get_tweet_data(tweet_id)
                 
                 if not tweet_data:
+                    print(f"❌ Tweet data not found for tweet_id: {tweet_id}")
                     flash('Tweet no encontrado', 'error')
                     return redirect(referrer or url_for('admin_dashboard'))
                 
-                print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data[2]}")
+                print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data.get('username', 'unknown')}")
+                
+                # Debug: Check if tweet data was retrieved
+                print(f"🔍 Tweet data retrieved: {tweet_data is not None}")
+                if tweet_data:
+                    print(f"🔍 Tweet content length: {len(tweet_data.get('content', ''))}")
+                    print(f"🔍 Tweet media_urls: {tweet_data.get('media_urls', [])}")
                 
                 # Reanalyze the content
-                analysis_result = reanalyze_tweet(tweet_id)
+                try:
+                    analysis_result = reanalyze_tweet(tweet_id)
+                    print(f"🔍 Reanalyze result type: {type(analysis_result)}")
+                    print(f"🔍 Reanalyze result: {analysis_result is not None}")
+                except Exception as reanalyze_e:
+                    print(f"❌ Error in reanalyze_tweet: {reanalyze_e}")
+                    app.logger.error(f"Error in reanalyze_tweet for {tweet_id}: {str(reanalyze_e)}")
+                    flash('Error interno durante el reanálisis. Inténtalo de nuevo.', 'error')
+                    conn.close()
+                    return redirect(referrer or url_for('admin_dashboard'))
                 
-                flash(f'Tweet reanálizado correctamente. Nueva categoría: {analysis_result.category}', 'success')
+                if analysis_result:
+                    try:
+                        # More defensive access to category
+                        if hasattr(analysis_result, 'category') and analysis_result.category:
+                            category = analysis_result.category
+                            print(f"🔍 Analysis category: {category}")
+                            flash(f'Tweet reanálizado correctamente. Nueva categoría: {category}', 'success')
+                        else:
+                            print(f"❌ Analysis result has no valid category: {analysis_result}")
+                            flash('Tweet reanálizado pero no se pudo determinar la categoría.', 'warning')
+                    except Exception as cat_e:
+                        print(f"❌ Error accessing category: {cat_e}")
+                        print(f"❌ Analysis result attributes: {dir(analysis_result) if analysis_result else 'None'}")
+                        flash('Tweet reanálizado pero error al acceder a la categoría.', 'warning')
+                else:
+                    print(f"❌ Reanalyze returned None")
+                    flash('Error: No se pudo reanalizar el tweet. Verifica que existe y tiene contenido.', 'error')
                 
             else:
                 # Manual update
@@ -590,6 +624,9 @@ def admin_edit_analysis(tweet_id):
                 
         except Exception as e:
             app.logger.error(f"Error in admin_edit_analysis: {str(e)}")
+            app.logger.error(f"Exception type: {type(e).__name__}")
+            import traceback
+            app.logger.error(f"Traceback: {traceback.format_exc()}")
             flash('Ocurrió un error al procesar la solicitud. Inténtalo de nuevo.', 'error')
             conn.close()
             return redirect(referrer or url_for('admin_dashboard'))
@@ -647,15 +684,19 @@ def admin_reanalyze_single(tweet_id):
             flash('Tweet no encontrado', 'error')
             return redirect(request.referrer or url_for('index'))
         
-        print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data[2]}")
+        print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data.get('username', 'unknown')}")
         
         # Reanalyze the content
         analysis_result = reanalyze_tweet(tweet_id)
         
-        flash(f'Tweet reanálizado correctamente. Nueva categoría: {analysis_result.category}', 'success')
+        if analysis_result and hasattr(analysis_result, 'category') and analysis_result.category:
+            flash(f'Tweet reanálizado correctamente. Nueva categoría: {analysis_result.category}', 'success')
+        else:
+            flash('Tweet reanálizado pero no se pudo determinar la categoría.', 'warning')
         
     except Exception as e:
         print(f"Error durante reanálisis: {e}")
+        app.logger.error(f"Error in admin_reanalyze_single for {tweet_id}: {str(e)}")
         flash('El reanálisis falló. Inténtalo de nuevo más tarde.', 'error')
     
     return redirect(request.referrer or url_for('index'))
@@ -765,18 +806,18 @@ def admin_view_category(category_name):
             for row in tweets:
                 if len(row) >= 12:  # Ensure row has enough columns
                     tweet = {
-                        'tweet_url': row[0] or '',
-                        'content': row[1] or '',
-                        'username': row[2] or '',
-                        'tweet_timestamp': row[3] or '',
-                        'tweet_id': row[4] or '',
-                        'category': row[5] or category_name,
-                        'llm_explanation': row[6] or '',
-                        'analysis_method': row[7] or 'unknown',
-                        'analysis_timestamp': row[8] or '',
-                        'is_deleted': bool(row[9]) if row[9] is not None else False,
-                        'is_edited': bool(row[10]) if row[10] is not None else False,
-                        'post_type': row[11] or 'original'
+                        'tweet_url': row['tweet_url'] or '',
+                        'content': row['content'] or '',
+                        'username': row['username'] or '',
+                        'tweet_timestamp': row['tweet_timestamp'] or '',
+                        'tweet_id': row['tweet_id'] or '',
+                        'category': row['category'] or category_name,
+                        'llm_explanation': row['llm_explanation'] or '',
+                        'analysis_method': row['analysis_method'] or 'unknown',
+                        'analysis_timestamp': row['analysis_timestamp'] or '',
+                        'is_deleted': bool(row['is_deleted']) if row['is_deleted'] is not None else False,
+                        'is_edited': bool(row['is_edited']) if row['is_edited'] is not None else False,
+                        'post_type': row['post_type'] or 'original'
                     }
                     processed_tweets.append(tweet)
         
@@ -927,7 +968,7 @@ def user_page(username):
             t.tweet_url, t.content, t.media_links, t.hashtags, t.mentions,
             t.tweet_timestamp, t.post_type, t.tweet_id,
             ca.category as analysis_category, ca.llm_explanation, ca.analysis_method, ca.analysis_timestamp,
-            ca.categories_detected,
+            ca.categories_detected, ca.multimodal_analysis, ca.media_analysis,
             t.is_deleted, t.is_edited, t.rt_original_analyzed,
             t.original_author, t.original_tweet_id, t.reply_to_username
         FROM tweets t
@@ -975,35 +1016,37 @@ def user_page(username):
             # Parse multi-category data
             categories_detected = []
             try:
-                if row[12]:  # categories_detected
-                    categories_detected = json.loads(row[12])
+                if row['categories_detected']:  # categories_detected
+                    categories_detected = json.loads(row['categories_detected'])
             except (json.JSONDecodeError, TypeError):
                 # Fallback to single category for backward compatibility
-                if row[8]:  # analysis_category
-                    categories_detected = [row[8]]
+                if row['analysis_category']:  # analysis_category
+                    categories_detected = [row['analysis_category']]
             
             tweet = {
-                'tweet_url': row[0],
-                'content': row[1],
-                'media_links': row[2],
-                'hashtags_parsed': json.loads(row[3]) if row[3] else [],
-                'mentions_parsed': json.loads(row[4]) if row[4] else [],
-                'tweet_timestamp': row[5],
-                'post_type': row[6],
-                'tweet_id': row[7],
-                'analysis_category': row[8],
-                'llm_explanation': row[9],
-                'analysis_method': row[10],
-                'analysis_timestamp': row[11],
+                'tweet_url': row['tweet_url'],
+                'content': row['content'],
+                'media_links': row['media_links'],
+                'hashtags_parsed': json.loads(row['hashtags']) if row['hashtags'] else [],
+                'mentions_parsed': json.loads(row['mentions']) if row['mentions'] else [],
+                'tweet_timestamp': row['tweet_timestamp'],
+                'post_type': row['post_type'],
+                'tweet_id': row['tweet_id'],
+                'analysis_category': row['analysis_category'],
+                'llm_explanation': row['llm_explanation'],
+                'analysis_method': row['analysis_method'],
+                'analysis_timestamp': row['analysis_timestamp'],
                 'categories_detected': categories_detected,
+                'multimodal_analysis': bool(row['multimodal_analysis']) if row['multimodal_analysis'] is not None else False,
+                'media_analysis': row['media_analysis'],
                 'profile_pic_url': user_profile_pic,  # Use profile from accounts table
-                # Post status fields from simplified schema (corrected indexes)
-                'is_deleted': row[13],  # Fixed: was row[12], now row[13]
-                'is_edited': row[14],   # Fixed: was row[13], now row[14] 
-                'rt_original_analyzed': row[15],  # Fixed: was row[14], now row[15]
-                'original_author': row[16],       # Fixed: was row[15], now row[16]
-                'original_tweet_id': row[17],     # Fixed: was row[16], now row[17]
-                'reply_to_username': row[18]      # Fixed: was row[17], now row[18]
+                # Post status fields from simplified schema
+                'is_deleted': row['is_deleted'],
+                'is_edited': row['is_edited'],
+                'rt_original_analyzed': row['rt_original_analyzed'],
+                'original_author': row['original_author'],
+                'original_tweet_id': row['original_tweet_id'],
+                'reply_to_username': row['reply_to_username']
             }
             
             # Post status warnings (simplified schema)
@@ -1031,8 +1074,11 @@ def user_page(username):
                 tweet['is_rt'] = False
                 tweet['rt_type'] = None
             
-            # Use the llm_explanation directly - it contains the best analysis available
-            tweet['analysis_display'] = tweet['llm_explanation'] or "Sin análisis disponible"
+            # Use the appropriate analysis field based on analysis type
+            if tweet['multimodal_analysis'] and tweet['media_analysis']:
+                tweet['analysis_display'] = tweet['media_analysis']
+            else:
+                tweet['analysis_display'] = tweet['llm_explanation'] or "Sin análisis disponible"
             tweet['category'] = tweet['analysis_category'] or 'general'
             tweet['has_multiple_categories'] = len(categories_detected) > 1
             
@@ -1202,14 +1248,7 @@ def export_json():
                 t.content as tweet_content,
                 t.tweet_url,
                 t.tweet_timestamp,
-                ca.subcategory,
-                ca.targeted_groups,
-                ca.calls_to_action,
-                ca.evidence_sources,
-                ca.verification_status,
-                ca.misinformation_risk,
-                ca.categories_detected,
-                ca.category_scores
+                ca.categories_detected
             FROM content_analyses ca
             JOIN tweets t ON ca.tweet_id = t.tweet_id
             ORDER BY ca.analysis_timestamp DESC
@@ -1235,26 +1274,9 @@ def export_json():
                 'analysis_timestamp': row['analysis_timestamp'],
                 'tweet_content': row['tweet_content'],
                 'tweet_url': row['tweet_url'],
-                'tweet_timestamp': row['tweet_timestamp']
+                'tweet_timestamp': row['tweet_timestamp'],
+                'categories_detected': row['categories_detected']
             }
-            
-            # Add optional fields if they exist
-            if row['subcategory']:
-                record['subcategory'] = row['subcategory']
-            if row['targeted_groups']:
-                record['targeted_groups'] = row['targeted_groups']
-            if row['calls_to_action'] is not None:
-                record['calls_to_action'] = bool(row['calls_to_action'])
-            if row['evidence_sources']:
-                record['evidence_sources'] = row['evidence_sources']
-            if row['verification_status']:
-                record['verification_status'] = row['verification_status']
-            if row['misinformation_risk']:
-                record['misinformation_risk'] = row['misinformation_risk']
-            if row['categories_detected']:
-                record['categories_detected'] = row['categories_detected']
-            if row['category_scores']:
-                record['category_scores'] = row['category_scores']
                 
             export_data['data'].append(record)
         

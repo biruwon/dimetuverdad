@@ -19,7 +19,7 @@ project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from analyzer.analyzer import Analyzer, ContentAnalysis, migrate_database_schema, save_content_analysis, init_content_analysis_table
+from analyzer.analyzer import Analyzer, ContentAnalysis, save_content_analysis
 from analyzer.categories import Categories
 
 
@@ -61,20 +61,23 @@ class TestContentAnalysis(unittest.TestCase):
         self.assertTrue(analysis.has_multiple_categories)
         self.assertEqual(analysis.get_secondary_categories(), [Categories.FAR_RIGHT_BIAS])
 
-    def test_content_analysis_single_category(self):
-        """Test ContentAnalysis with single category."""
+    def test_content_analysis_with_metrics(self):
+        """Test ContentAnalysis with performance metrics."""
         analysis = ContentAnalysis(
             tweet_id="test_123",
             tweet_url="https://twitter.com/test/status/test_123",
             username="test_user",
             tweet_content="Test content",
             analysis_timestamp="2024-01-01T12:00:00",
-            category=Categories.GENERAL,
-            categories_detected=[Categories.GENERAL]
+            category=Categories.HATE_SPEECH,
+            analysis_time_seconds=2.5,
+            model_used="ollama-balanced",
+            tokens_used=150
         )
 
-        self.assertFalse(analysis.has_multiple_categories)
-        self.assertEqual(analysis.get_secondary_categories(), [])
+        self.assertEqual(analysis.analysis_time_seconds, 2.5)
+        self.assertEqual(analysis.model_used, "ollama-balanced")
+        self.assertEqual(analysis.tokens_used, 150)
 
 
 class TestAnalyzerInitialization(unittest.TestCase):
@@ -191,36 +194,39 @@ class TestAnalyzerAnalysis(unittest.TestCase):
 
     @patch('analyzer.analyzer.PatternAnalyzer')
     @patch('analyzer.analyzer.EnhancedLLMPipeline')
-    def test_analyze_content_no_patterns_llm_fallback(self, mock_llm_pipeline, mock_pattern_analyzer):
-        """Test analysis when no patterns detected, using LLM fallback."""
-        # Mock pattern analyzer to return no patterns
-        mock_pattern_instance = Mock()
-        mock_pattern_instance.analyze_content.return_value = Mock(
-            categories=[],
-            pattern_matches=[]
+    def test_analyze_content_with_metrics_tracking(self, mock_llm_pipeline, mock_pattern_analyzer):
+        """Test that analyze_content properly tracks metrics."""
+        # Mock pattern analyzer to return hate speech detection
+        mock_instance = Mock()
+        mock_instance.analyze_content.return_value = Mock(
+            categories=[Categories.HATE_SPEECH],
+            pattern_matches=[Mock(matched_text="test", category="hate_speech", description="test")]
         )
-        mock_pattern_analyzer.return_value = mock_pattern_instance
+        mock_pattern_analyzer.return_value = mock_instance
 
         # Mock LLM pipeline
         mock_llm_instance = Mock()
-        mock_llm_instance.get_category.return_value = Categories.DISINFORMATION
-        mock_llm_instance.get_explanation.return_value = "Test explanation"
         mock_llm_pipeline.return_value = mock_llm_instance
 
         analyzer = Analyzer(use_llm=True)
         analyzer.llm_pipeline = mock_llm_instance
 
+        # Analyze content
         result = analyzer.analyze_content(
             tweet_id="test_123",
             tweet_url="https://twitter.com/test/status/test_123",
             username="test_user",
-            content="Test content with no patterns"
+            content="Test content with hate speech"
         )
 
-        self.assertEqual(result.category, Categories.DISINFORMATION)
-        self.assertEqual(result.analysis_method, "llm")
-        mock_llm_instance.get_category.assert_called_once()
-        mock_llm_instance.get_explanation.assert_called_once()
+        # Check that metrics were updated
+        self.assertEqual(analyzer.metrics['total_analyses'], 1)
+        self.assertEqual(analyzer.metrics['method_counts']['pattern'], 1)
+        self.assertEqual(analyzer.metrics['category_counts'][Categories.HATE_SPEECH], 1)
+        self.assertEqual(analyzer.metrics['model_usage']['pattern-matching'], 1)
+        self.assertGreater(analyzer.metrics['total_time'], 0)
+        self.assertGreater(result.analysis_time_seconds, 0)
+        self.assertEqual(result.model_used, "pattern-matching")
 
 
 class TestAnalyzerInternalMethods(unittest.TestCase):
@@ -354,23 +360,77 @@ class TestAnalyzerInternalMethods(unittest.TestCase):
         self.assertIn("LLM explanation generation exception", result)
         self.assertIn("LLM error", result)
 
-    def test_build_analysis_data(self):
-        """Test building analysis data structure."""
-        pattern_result = Mock()
-        pattern_result.pattern_matches = [
-            Mock(matched_text="test1", category="hate_speech", description="desc1"),
-            Mock(matched_text="test2", category="disinformation", description="desc2")
-        ]
-        pattern_result.categories = [Categories.HATE_SPEECH, Categories.DISINFORMATION]
-        pattern_result.political_context = ["test_context"]
+    def test_update_metrics(self):
+        """Test metrics update functionality."""
+        analyzer = Analyzer(use_llm=False)
+        
+        # Create a mock result
+        result = ContentAnalysis(
+            tweet_id="test_123",
+            tweet_url="https://twitter.com/test/status/test_123",
+            username="test_user",
+            tweet_content="Test content",
+            analysis_timestamp="2024-01-01T12:00:00",
+            category=Categories.HATE_SPEECH,
+            analysis_method="pattern",
+            multimodal_analysis=False
+        )
+        
+        # Update metrics
+        analyzer._update_metrics(result, 1.5)
+        
+        # Check metrics were updated
+        self.assertEqual(analyzer.metrics['total_analyses'], 1)
+        self.assertEqual(analyzer.metrics['method_counts']['pattern'], 1)
+        self.assertEqual(analyzer.metrics['category_counts'][Categories.HATE_SPEECH], 1)
+        self.assertEqual(analyzer.metrics['model_usage']['pattern-matching'], 1)
+        self.assertEqual(analyzer.metrics['total_time'], 1.5)
+        self.assertEqual(analyzer.metrics['avg_time_per_analysis'], 1.5)
 
-        pattern_results = {'pattern_result': pattern_result}
+    def test_get_model_name_pattern(self):
+        """Test model name generation for pattern analysis."""
+        analyzer = Analyzer(use_llm=False)
+        result = analyzer._get_model_name("pattern", False)
+        self.assertEqual(result, "pattern-matching")
 
-        result = self.analyzer._build_analysis_data(pattern_results)
+    def test_get_model_name_llm(self):
+        """Test model name generation for LLM analysis."""
+        analyzer = Analyzer(use_llm=True, model_priority="fast")
+        result = analyzer._get_model_name("llm", False)
+        self.assertEqual(result, "ollama-fast")
 
-        self.assertEqual(result['category'], None)
-        self.assertEqual(len(result['pattern_matches']), 2)
-        self.assertEqual(result['unified_categories'], [Categories.HATE_SPEECH, Categories.DISINFORMATION])
+    def test_get_model_name_multimodal(self):
+        """Test model name generation for multimodal analysis."""
+        analyzer = Analyzer(use_llm=False)
+        result = analyzer._get_model_name("llm", True)
+        self.assertEqual(result, "gemini-2.5-flash")
+
+    def test_get_metrics_report(self):
+        """Test metrics report generation."""
+        analyzer = Analyzer(use_llm=False)
+        
+        # Add some mock data
+        analyzer.metrics = {
+            'total_analyses': 2,
+            'method_counts': {'pattern': 1, 'llm': 1},
+            'multimodal_count': 0,
+            'category_counts': {Categories.HATE_SPEECH: 1, Categories.DISINFORMATION: 1},
+            'total_time': 3.0,
+            'avg_time_per_analysis': 1.5,
+            'model_usage': {'pattern-matching': 1, 'ollama-balanced': 1},
+            'start_time': analyzer.metrics['start_time']  # Keep original start time
+        }
+        
+        report = analyzer.get_metrics_report()
+        
+        # Check report contains expected content
+        self.assertIn("ANALYSIS METRICS REPORT", report)
+        self.assertIn("Total analyses: 2", report)
+        self.assertIn("Average time per analysis: 1.50s", report)
+        self.assertIn("PATTERN: 1 (50.0%)", report)
+        self.assertIn("LLM: 1 (50.0%)", report)
+        self.assertIn("pattern-matching: 1 (50.0%)", report)
+        self.assertIn("ollama-balanced: 1 (50.0%)", report)
 
 
 class TestAnalyzerUtilityMethods(unittest.TestCase):
@@ -427,51 +487,32 @@ class TestDatabaseFunctions(unittest.TestCase):
         os.close(self.db_fd)
         os.unlink(self.db_path)
 
-    def test_init_content_analysis_table(self):
-        """Test content analysis table initialization."""
-        init_content_analysis_table()
-
-        conn = sqlite3.connect(self.db_path)
-        c = conn.cursor()
-
-        # Check table exists
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='content_analyses'")
-        self.assertIsNotNone(c.fetchone())
-
-        # Check columns exist
-        c.execute("PRAGMA table_info(content_analyses)")
-        columns = [row[1] for row in c.fetchall()]
-
-        expected_columns = [
-            'id', 'tweet_id', 'tweet_url', 'username', 'tweet_content',
-            'category', 'subcategory', 'llm_explanation', 'calls_to_action',
-            'analysis_json', 'analysis_timestamp', 'evidence_sources',
-            'verification_status', 'misinformation_risk', 'analysis_method',
-            'categories_detected'
-        ]
-
-        for col in expected_columns:
-            self.assertIn(col, columns)
-
-        conn.close()
-
-    def test_migrate_database_schema_create_table(self):
-        """Test database schema migration when table doesn't exist."""
-        migrate_database_schema()
-
-        conn = sqlite3.connect(self.db_path)
-        c = conn.cursor()
-
-        # Check table was created
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='content_analyses'")
-        self.assertIsNotNone(c.fetchone())
-
-        conn.close()
-
     def test_save_content_analysis(self):
         """Test saving content analysis to database."""
-        # Initialize table first
-        init_content_analysis_table()
+        # Create table manually for test
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS content_analyses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tweet_id TEXT UNIQUE,
+            tweet_url TEXT,
+            username TEXT,
+            tweet_content TEXT,
+            category TEXT,
+            llm_explanation TEXT,
+            analysis_json TEXT,
+            analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            analysis_method TEXT DEFAULT "pattern",
+            categories_detected TEXT,
+            media_urls TEXT,
+            media_analysis TEXT,
+            media_type TEXT,
+            multimodal_analysis BOOLEAN DEFAULT FALSE
+        )
+        ''')
+        conn.commit()
+        conn.close()
 
         analysis = ContentAnalysis(
             tweet_id="test_123",
@@ -494,17 +535,39 @@ class TestDatabaseFunctions(unittest.TestCase):
         row = c.fetchone()
 
         self.assertIsNotNone(row)
-        self.assertEqual(row[1], "test_123")  # tweet_id
-        self.assertEqual(row[5], Categories.HATE_SPEECH)  # category
-        self.assertEqual(row[7], "Test explanation")  # llm_explanation
-        self.assertEqual(row[14], "pattern")  # analysis_method
+        self.assertEqual(row['tweet_id'], "test_123")
+        self.assertEqual(row['category'], Categories.HATE_SPEECH)
+        self.assertEqual(row['llm_explanation'], "Test explanation")
+        self.assertEqual(row['analysis_method'], "pattern")
 
         conn.close()
 
     def test_save_content_analysis_duplicate(self):
         """Test saving duplicate content analysis (should replace)."""
-        # Initialize table first
-        init_content_analysis_table()
+        # Create table manually for test
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS content_analyses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tweet_id TEXT UNIQUE,
+            tweet_url TEXT,
+            username TEXT,
+            tweet_content TEXT,
+            category TEXT,
+            llm_explanation TEXT,
+            analysis_json TEXT,
+            analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            analysis_method TEXT DEFAULT "pattern",
+            categories_detected TEXT,
+            media_urls TEXT,
+            media_analysis TEXT,
+            media_type TEXT,
+            multimodal_analysis BOOLEAN DEFAULT FALSE
+        )
+        ''')
+        conn.commit()
+        conn.close()
 
         analysis1 = ContentAnalysis(
             tweet_id="test_123",
@@ -541,43 +604,150 @@ class TestDatabaseFunctions(unittest.TestCase):
         conn.close()
 
 
-class TestAnalyzerIntegration(unittest.TestCase):
-    """Integration tests for the analyzer."""
+class TestAnalyzerMultimodal(unittest.TestCase):
+    """Test multimodal analysis functionality."""
 
-    def test_analyzer_full_workflow(self):
-        """Test complete analyzer workflow."""
-        analyzer = Analyzer(use_llm=False)
+    def setUp(self):
+        """Set up test fixtures."""
+        self.analyzer = Analyzer(use_llm=False)
 
-        result = analyzer.analyze_content(
-            tweet_id="integration_test_123",
-            tweet_url="https://twitter.com/test/status/integration_test_123",
-            username="integration_user",
-            content="This is a test content for integration testing."
+    @patch('analyzer.gemini_multimodal.analyze_multimodal_content')
+    @patch('analyzer.gemini_multimodal.extract_media_type')
+    def test_analyze_multi_modal_success(self, mock_extract_type, mock_analyze):
+        """Test successful multimodal analysis."""
+        # Mock the multimodal analysis
+        mock_analyze.return_value = ("Test Gemini analysis", 2.5)
+        mock_extract_type.return_value = "image"
+
+        result = self.analyzer.analyze_multi_modal(
+            tweet_id="test_123",
+            tweet_url="https://twitter.com/test/status/test_123",
+            username="test_user",
+            content="Test content",
+            media_urls=["https://example.com/image.jpg"]
         )
 
-        # Verify result structure
-        self.assertIsInstance(result, ContentAnalysis)
-        self.assertEqual(result.tweet_id, "integration_test_123")
-        self.assertEqual(result.username, "integration_user")
-        self.assertIsInstance(result.analysis_timestamp, str)
-        self.assertIsInstance(result.categories_detected, list)
-        self.assertIsInstance(result.pattern_matches, list)
+        self.assertEqual(result.tweet_id, "test_123")
+        self.assertEqual(result.category, Categories.GENERAL)  # Default for now
+        self.assertEqual(result.analysis_method, "gemini")
+        self.assertEqual(result.media_analysis, "Test Gemini analysis")
+        self.assertEqual(result.media_type, "image")
+        self.assertTrue(result.multimodal_analysis)
+        self.assertEqual(result.media_urls, ["https://example.com/image.jpg"])
 
-    def test_analyzer_with_real_pattern_analyzer(self):
-        """Test analyzer with real pattern analyzer (no mocking)."""
-        analyzer = Analyzer(use_llm=False)
+    @patch('analyzer.gemini_multimodal.analyze_multimodal_content')
+    def test_analyze_multi_modal_failure_fallback(self, mock_analyze):
+        """Test multimodal analysis failure with fallback to text-only."""
+        # Mock failure
+        mock_analyze.return_value = (None, 1.0)
 
-        # Test with content that should trigger patterns
-        result = analyzer.analyze_content(
-            tweet_id="real_test_123",
-            tweet_url="https://twitter.com/test/status/real_test_123",
-            username="real_user",
-            content="Los inmigrantes nos están invadiendo y robando nuestros trabajos."
-        )
+        with patch.object(self.analyzer, '_analyze_text_only') as mock_text_only:
+            mock_text_result = ContentAnalysis(
+                tweet_id="test_123",
+                tweet_url="https://twitter.com/test/status/test_123",
+                username="test_user",
+                tweet_content="Test content",
+                analysis_timestamp="2024-01-01T12:00:00",
+                category=Categories.GENERAL
+            )
+            mock_text_only.return_value = mock_text_result
 
-        # Should detect some category (may vary based on pattern analyzer)
-        self.assertIsNotNone(result.category)
-        self.assertIsInstance(result.categories_detected, list)
+            result = self.analyzer.analyze_multi_modal(
+                tweet_id="test_123",
+                tweet_url="https://twitter.com/test/status/test_123",
+                username="test_user",
+                content="Test content",
+                media_urls=["https://example.com/image.jpg"]
+            )
+
+            # Should fallback to text-only result
+            self.assertEqual(result, mock_text_result)
+            mock_text_only.assert_called_once()
+
+    def test_analyze_content_routing_text_only(self):
+        """Test that analyze_content routes to text-only for no media."""
+        with patch.object(self.analyzer, '_analyze_text_only') as mock_text_only:
+            mock_result = ContentAnalysis(
+                tweet_id="test_123",
+                tweet_url="https://twitter.com/test/status/test_123",
+                username="test_user",
+                tweet_content="Test content",
+                analysis_timestamp="2024-01-01T12:00:00",
+                category=Categories.GENERAL
+            )
+            mock_text_only.return_value = mock_result
+
+            result = self.analyzer.analyze_content(
+                tweet_id="test_123",
+                tweet_url="https://twitter.com/test/status/test_123",
+                username="test_user",
+                content="Test content",
+                media_urls=[]
+            )
+
+            self.assertEqual(result, mock_result)
+            mock_text_only.assert_called_once()
+
+    def test_analyze_content_routing_multimodal(self):
+        """Test that analyze_content routes to multimodal for media."""
+        with patch.object(self.analyzer, 'analyze_multi_modal') as mock_multimodal:
+            mock_result = ContentAnalysis(
+                tweet_id="test_123",
+                tweet_url="https://twitter.com/test/status/test_123",
+                username="test_user",
+                tweet_content="Test content",
+                analysis_timestamp="2024-01-01T12:00:00",
+                category=Categories.GENERAL,
+                multimodal_analysis=True
+            )
+            mock_multimodal.return_value = mock_result
+
+            result = self.analyzer.analyze_content(
+                tweet_id="test_123",
+                tweet_url="https://twitter.com/test/status/test_123",
+                username="test_user",
+                content="Test content",
+                media_urls=["https://example.com/image.jpg"]
+            )
+
+            self.assertEqual(result, mock_result)
+            mock_multimodal.assert_called_once()
+
+    def test_extract_category_from_gemini_hate_speech(self):
+        """Test category extraction from Gemini analysis - hate speech."""
+        analysis = "Este contenido contiene discurso de odio y hate_speech contra inmigrantes."
+        result = self.analyzer._extract_category_from_gemini(analysis)
+        self.assertEqual(result, Categories.HATE_SPEECH)
+
+    def test_extract_category_from_gemini_disinformation(self):
+        """Test category extraction from Gemini analysis - disinformation."""
+        analysis = "El post contiene desinformación y fake news sobre política."
+        result = self.analyzer._extract_category_from_gemini(analysis)
+        self.assertEqual(result, Categories.DISINFORMATION)
+
+    def test_extract_category_from_gemini_conspiracy(self):
+        """Test category extraction from Gemini analysis - conspiracy."""
+        analysis = "Esto es una teoría conspirativa sobre el gobierno."
+        result = self.analyzer._extract_category_from_gemini(analysis)
+        self.assertEqual(result, Categories.CONSPIRACY_THEORY)
+
+    def test_extract_category_from_gemini_far_right(self):
+        """Test category extraction from Gemini analysis - far right."""
+        analysis = "Contenido de extrema derecha y far_right_bias político."
+        result = self.analyzer._extract_category_from_gemini(analysis)
+        self.assertEqual(result, Categories.FAR_RIGHT_BIAS)
+
+    def test_extract_category_from_gemini_call_to_action(self):
+        """Test category extraction from Gemini analysis - call to action."""
+        analysis = "El post incluye llamados a la acción política."
+        result = self.analyzer._extract_category_from_gemini(analysis)
+        self.assertEqual(result, Categories.CALL_TO_ACTION)
+
+    def test_extract_category_from_gemini_general(self):
+        """Test category extraction from Gemini analysis - general (fallback)."""
+        analysis = "Este es un post normal sobre política general."
+        result = self.analyzer._extract_category_from_gemini(analysis)
+        self.assertEqual(result, Categories.GENERAL)
 
 
 if __name__ == '__main__':

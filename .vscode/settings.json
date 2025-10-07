@@ -13,5 +13,35 @@
   "html.validate.scripts": false,
 
   // Enable .env file loading in Python terminals
-  "python.terminal.useEnvFile": true
+  "python.terminal.useEnvFile": true,
+
+  // ===== COPILOT TERMINAL AUTO-APPROVAL =====
+  "github.copilot.terminal.enabled": true,
+  "github.copilot.terminal.autoApprove": true,
+  "github.copilot.terminal.verbosity": "off",
+
+  // ===== TERMINAL INTEGRATION =====
+  "terminal.integrated.shellIntegration.enabled": true,
+  "terminal.integrated.enablePersistentSessions": true,
+  "terminal.integrated.automationProfile.osx": {
+    "path": "/bin/zsh",
+    "args": [],
+    "env": {
+      "PYTHONPATH": "/Users/antonio/projects/bulos/dimetuverdad",
+      "PATH": "/Users/antonio/projects/bulos/dimetuverdad/venv/bin:$PATH"
+    }
+  },
+
+  // ===== TASK AUTO-APPROVAL =====
+  "task.allowAutomaticTasks": "on",
+
+  // ===== SECURITY SETTINGS =====
+  "security.workspace.trust.enabled": true,
+  "security.workspace.trust.startupPrompt": "never",
+  "security.workspace.trust.banner": "never",
+
+  // ===== TERMINAL COMMAND APPROVAL =====
+  "terminal.integrated.commandsToSkipShell": [
+    "cd /Users/antonio/projects/bulos/dimetuverdad && python -c *"
+  ]
 }

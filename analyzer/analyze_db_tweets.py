@@ -15,9 +15,9 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from analyzer.analyzer import Analyzer, save_content_analysis, ContentAnalysis, migrate_database_schema, create_analyzer
+from analyzer.analyzer import Analyzer, save_content_analysis, ContentAnalysis, create_analyzer
 from analyzer.categories import Categories
-from utils import database, analyzer, paths
+from utils import database, paths
 
 DB_PATH = paths.get_db_path()
 
@@ -34,9 +34,6 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     print("🔍 Enhanced Tweet Analysis Pipeline")
     print("=" * 50)
     
-    # Ensure database schema is ready
-    migrate_database_schema()
-    
     # Initialize analyzer
     print("🚀 Initializing Analyzer...")
     try:
@@ -50,20 +47,18 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     conn = database.get_db_connection()
     c = conn.cursor()
     
-    # Build query - exclude already analyzed tweets unless force_reanalyze is True
+        # Build query - exclude already analyzed tweets unless force_reanalyze is True
     # Also skip RT posts where the original content has already been analyzed
     if force_reanalyze:
         print("🔄 Force reanalyze mode: Will process ALL tweets (including already analyzed)")
         query = """
-            SELECT t.tweet_id, t.tweet_url, t.username, t.content 
-            FROM tweets t
+            SELECT t.tweet_id, t.tweet_url, t.username, t.content, t.media_links FROM tweets t
         """
         if username:
             query += " WHERE t.username = ?"
     else:
         query = """
-            SELECT t.tweet_id, t.tweet_url, t.username, t.content 
-            FROM tweets t 
+            SELECT t.tweet_id, t.tweet_url, t.username, t.content, t.media_links FROM tweets t 
             LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id 
             WHERE ca.tweet_id IS NULL
             AND NOT (
@@ -124,8 +119,16 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     results = []
     category_counts = {}
     
-    for i, (tweet_id, tweet_url, tweet_username, content) in enumerate(tweets, 1):
+    for i, (tweet_id, tweet_url, tweet_username, content, media_links) in enumerate(tweets, 1):
         print(f"📝 [{i:2d}/{len(tweets)}] Analyzing: {tweet_id}")
+        
+        # Parse media URLs
+        media_urls = []
+        if media_links:
+            media_urls = [url.strip() for url in media_links.split(',') if url.strip()]
+        
+        if media_urls:
+            print(f"    🖼️ Found {len(media_urls)} media files")
         
         try:
             # Run analysis (suppress verbose output)
@@ -133,14 +136,15 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
                 tweet_id=tweet_id,
                 tweet_url=tweet_url,
                 username=tweet_username,
-                content=content
+                content=content,
+                media_urls=media_urls
             )
             
             # Count categories
             category = result.category
             category_counts[category] = category_counts.get(category, 0) + 1
             
-            # Create ContentAnalysis object for saving
+            # Create ContentAnalysis object for saving (copy all fields from result)
             analysis = ContentAnalysis(
                 tweet_id=tweet_id,
                 tweet_url=tweet_url,
@@ -148,10 +152,16 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
                 tweet_content=content,
                 analysis_timestamp=datetime.now().isoformat(),
                 category=result.category,
+                categories_detected=getattr(result, 'categories_detected', []),
                 llm_explanation=result.llm_explanation,
                 analysis_method=result.analysis_method,
+                media_urls=getattr(result, 'media_urls', []),
+                media_analysis=getattr(result, 'media_analysis', ''),
+                media_type=getattr(result, 'media_type', ''),
+                multimodal_analysis=getattr(result, 'multimodal_analysis', False),
                 pattern_matches=getattr(result, 'pattern_matches', []),
-                topic_classification=getattr(result, 'topic_classification', {})
+                topic_classification=getattr(result, 'topic_classification', {}),
+                analysis_json=getattr(result, 'analysis_json', '')
             )
             
             # Save to database
