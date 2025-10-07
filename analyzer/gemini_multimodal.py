@@ -11,8 +11,7 @@ import tempfile
 import time
 import requests
 from typing import Optional, Tuple, List
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -156,26 +155,29 @@ def download_media_to_temp_file(media_url: str, is_video: bool = False, max_retr
     print(f"❌ Failed to download media after {max_retries} attempts: {media_url}")
     return None
 
-def _get_gemini_client() -> Optional[genai.Client]:
+def _get_gemini_client() -> Optional[genai.GenerativeModel]:
     """Get initialized Gemini client with API key."""
     # Try GEMINI_API_KEY first, then fall back to GOOGLE_API_KEY for compatibility
     api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+    
     if not api_key:
         print("Error: Neither GEMINI_API_KEY nor GOOGLE_API_KEY found in environment variables")
         return None
-
+    
     try:
-        return genai.Client(api_key=api_key)
+        genai.configure(api_key=api_key)
+        # Return a model instance instead of a client
+        return genai.GenerativeModel('gemini-1.5-flash')  # Use a stable model
     except Exception as e:
         print(f"Error initializing Gemini client: {e}")
         return None
 
-def _upload_media_to_gemini(client: genai.Client, media_path: str, media_url: str) -> Optional[types.File]:
+def _upload_media_to_gemini(client: genai.GenerativeModel, media_path: str, media_url: str) -> Optional[genai.types.File]:
     """
     Upload media file to Gemini.
 
     Args:
-        client: Initialized Gemini client
+        client: Initialized Gemini model
         media_path: Local path to media file
         media_url: Original URL (for logging only)
 
@@ -184,15 +186,22 @@ def _upload_media_to_gemini(client: genai.Client, media_path: str, media_url: st
     """
     try:
         print("Uploading media to Gemini...")
-        media_file = client.files.upload(file=media_path)
-
-        # Wait for processing to complete
+        # For google.generativeai, we upload the file
+        media_file = genai.upload_file(media_path)
+        
+        # Wait for processing to complete with timeout
         print("Waiting for media processing...")
-        while media_file.state.name == "PROCESSING":
+        max_wait_time = 60  # 60 second timeout for media processing
+        wait_start = time.time()
+        
+        while media_file.state.name == "PROCESSING" and (time.time() - wait_start) < max_wait_time:
             time.sleep(1)
-            media_file = client.files.get(name=media_file.name)
+            media_file = genai.get_file(media_file.name)
 
-        if media_file.state.name == "FAILED":
+        if media_file.state.name == "PROCESSING":
+            print(f"Media processing timed out after {max_wait_time} seconds")
+            return None
+        elif media_file.state.name == "FAILED":
             print(f"Media processing failed: {media_file.state.name}")
             return None
 
@@ -260,8 +269,8 @@ def analyze_multimodal_content(media_urls: List[str], text_content: str) -> Tupl
         return None, 0.0
 
     # Get Gemini client
-    client = _get_gemini_client()
-    if not client:
+    model = _get_gemini_client()
+    if not model:
         return None, time.time() - start_time
 
     # Process the first media URL (for now, we handle one media per analysis)
@@ -277,24 +286,43 @@ def analyze_multimodal_content(media_urls: List[str], text_content: str) -> Tupl
 
         try:
             # Upload to Gemini
-            media_file = _upload_media_to_gemini(client, media_path, media_url)
+            media_file = _upload_media_to_gemini(model, media_path, media_url)
             if not media_file:
                 return None, time.time() - start_time
 
             # Create analysis prompt
             prompt = _create_analysis_prompt(text_content, is_video)
 
-            # Generate analysis
+            # Generate analysis with timeout
             print("Analyzing with Gemini 2.5 Flash...")
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=[media_file, prompt]
-            )
+            
+            import signal
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Gemini API call timed out")
+            
+            # Set up timeout signal
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(30)  # 30 second timeout
+            
+            try:
+                response = model.generate_content([media_file, prompt])
+                
+                # Cancel the timeout
+                signal.alarm(0)
+                
+                analysis_time = time.time() - start_time
+                print(f"Gemini analysis completed in {analysis_time:.2f}s")
 
-            analysis_time = time.time() - start_time
-            print(f"Gemini analysis completed in {analysis_time:.2f}s")
-
-            return response.text, analysis_time
+                return response.text, analysis_time
+                
+            except TimeoutError:
+                print("Gemini analysis timed out after 30 seconds")
+                return None, time.time() - start_time
+            except Exception as api_error:
+                print(f"Gemini API error: {api_error}")
+                signal.alarm(0)  # Cancel timeout on other errors too
+                return None, time.time() - start_time
 
         finally:
             # Clean up temporary file after analysis

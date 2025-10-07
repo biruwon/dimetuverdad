@@ -61,7 +61,8 @@ fetch(){
 analyze_db(){
   ensure_venv
   echo "Starting database analysis..."
-  "$PY" "$ROOT_DIR/analyzer/analyze_db_tweets.py" "$@"
+  cd "$ROOT_DIR"
+  "$PY" -m analyzer.analyze_db_tweets "$@"
 }
 
 web(){

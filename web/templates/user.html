@@ -174,9 +174,26 @@
             margin: 0.5rem;
         }
         
-        .embedded-tweet {
-            max-width: 100%;
+        .tweet-content-container {
             margin: 1rem 0;
+        }
+        
+        .tweet-content-container {
+            margin: 1rem 0;
+        }
+        
+        .embedded-tweet-container {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        
+        .embedded-tweet-container {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 1rem;
+            background: #fafafa;
         }
         
         .fallback-content {
@@ -510,129 +527,21 @@
                             {% endif %}
                         </div>
 
-                        <!-- Content Display: Embedded Tweet or Fallback -->
-                        <div class="embedded-tweet-container">
-                            {% if tweet.is_deleted %}
-                            <!-- Always show fallback content for deleted tweets -->
-                            <div class="fallback-content">
-                                <div class="tweet-content">
-                                    <!-- RT Content Display -->
-                                    {% if tweet.is_rt and tweet.original_content %}
-                                    <div class="original-tweet-content mb-3 p-3 border-start border-3 border-primary bg-light">
-                                        <h6 class="text-primary mb-2">
-                                            <i class="fas fa-quote-left me-1"></i>
-                                            Contenido original{% if tweet.original_author %} de @{{ tweet.original_author }}{% endif %}:
-                                        </h6>
-                                        <p class="mb-0">{{ tweet.original_content }}</p>
-                                    </div>
-                                    {% endif %}
-                                    
-                                    <p>{{ tweet.content }}</p>
-                                    
-                                    <!-- Hashtags -->
-                                    {% if tweet.hashtags_parsed %}
-                                    <div class="mb-2">
-                                        {% for hashtag in tweet.hashtags_parsed %}
-                                        <span class="hashtag me-2">#{{ hashtag }}</span>
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                    
-                                    <!-- Mentions -->
-                                    {% if tweet.mentions_parsed %}
-                                    <div class="mb-2">
-                                        {% for mention in tweet.mentions_parsed %}
-                                        <span class="mention me-2">@{{ mention }}</span>
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                    
-                                    <!-- Media -->
-                                    {% if tweet.media_links %}
-                                    <div class="media-container mb-2">
-                                        {% for media_url in tweet.media_links.split(',') %}
-                                        {% if media_url.strip() %}
-                                            {% if media_url.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')) %}
-                                            <img src="{{ media_url.strip() }}" alt="Media" class="media-preview" loading="lazy">
-                                            {% else %}
-                                            <a href="{{ media_url.strip() }}" target="_blank" class="btn btn-outline-primary btn-sm me-2">
-                                                <i class="fas fa-external-link-alt me-1"></i>Ver Media
-                                            </a>
-                                            {% endif %}
-                                        {% endif %}
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            {% else %}
-                            <!-- Try to embed first, fallback if failed -->
-                            <div class="embedded-tweet" data-tweet-url="{{ tweet.tweet_url }}">
-                                <iframe 
-                                    src="https://platform.twitter.com/embed/Tweet.html?dnt=true&embedId=twitter-widget-0&features=eyJ0ZndfdGltZWxpbmVfbGlzdCI6eyJidWNrZXQiOlsibGlua3RyLmVlIiwidHIuZWUiLCJ0ZXJyYS5jb20uYnIiLCJ3d3cubGlua3RyLmVlIiwid3d3LnRyLmVlIiwid3d3LnRlcnJhLmNvbS5iciJdLCJ2ZXJzaW9uIjpudWxsfSwidGZ3X2hvcml6b25fdGltZWxpbmVfMTIwMzQiOnsiYnVja2V0IjoidHJlYXRtZW50IiwidmVyc2lvbiI6bnVsbH0sInRmd190d2VldF9lZGl0X2JhY2tlbmQiOnsiYnVja2V0Ijoib24iLCJ2ZXJzaW9uIjpudWxsfSwidGZ3X3JlZnNyY19zZXNzaW9uIjp7ImJ1Y2tldCI6Im9uIiwidmVyc2lvbiI6bnVsbH0sInRmd19jaGluX3BpbGxzXzE0NzQxIjp7ImJ1Y2tldCI6ImNvbnRyb2wiLCJ2ZXJzaW9uIjpudWxsfSwidGZ3X21peGVkX21lZGlhXzE1ODk3Ijp7ImJ1Y2tldCI6InRyZWF0bWVudCIsInZlcnNpb24iOm51bGx9LCJ0Zndfc3BhY2VfY2FyZCI6eyJidWNrZXQiOiJvZmYiLCJ2ZXJzaW9uIjpudWxsfX0%3D&frame=false&hideCard=false&hideThread=false&id={{ tweet.tweet_url.split('/')[-1] }}&lang=es&origin={{ request.url_root|urlencode }}&sessionId=a47c7ee76b8ad407be2a6a4b659a78a6e82a7749&theme=light&widgetsVersion=1&width=550px"
-                                    style="position: static; visibility: visible; width: 100%; height: auto; min-height: 300px; display: block; flex-grow: 1;"
-                                    title="X Post"
-                                    frameborder="0"
-                                    scrolling="no"
-                                    allowfullscreen>
-                                </iframe>
-                            </div>
-                            
-                            <!-- Fallback content (shown if tweet fails to load) -->
-                            <div class="fallback-content" style="display: none;">
-                                <div class="tweet-content">
-                                    <!-- RT Content Display -->
-                                    {% if tweet.is_rt and tweet.original_content %}
-                                    <div class="original-tweet-content mb-3 p-3 border-start border-3 border-primary bg-light">
-                                        <h6 class="text-primary mb-2">
-                                            <i class="fas fa-quote-left me-1"></i>
-                                            Contenido original{% if tweet.original_author %} de @{{ tweet.original_author }}{% endif %}:
-                                        </h6>
-                                        <p class="mb-0">{{ tweet.original_content }}</p>
-                                    </div>
-                                    {% endif %}
-                                    
-                                    <p>{{ tweet.content }}</p>
-                                    
-                                    <!-- Hashtags -->
-                                    {% if tweet.hashtags_parsed %}
-                                    <div class="mb-2">
-                                        {% for hashtag in tweet.hashtags_parsed %}
-                                        <span class="hashtag me-2">#{{ hashtag }}</span>
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                    
-                                    <!-- Mentions -->
-                                    {% if tweet.mentions_parsed %}
-                                    <div class="mb-2">
-                                        {% for mention in tweet.mentions_parsed %}
-                                        <span class="mention me-2">@{{ mention }}</span>
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                    
-                                    <!-- Media -->
-                                    {% if tweet.media_links %}
-                                    <div class="media-container mb-2">
-                                        {% for media_url in tweet.media_links.split(',') %}
-                                        {% if media_url.strip() %}
-                                            {% if media_url.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')) %}
-                                            <img src="{{ media_url.strip() }}" alt="Media" class="media-preview" loading="lazy">
-                                            {% else %}
-                                            <a href="{{ media_url.strip() }}" target="_blank" class="btn btn-outline-primary btn-sm me-2">
-                                                <i class="fas fa-external-link-alt me-1"></i>Ver Media
-                                            </a>
-                                            {% endif %}
-                                        {% endif %}
-                                        {% endfor %}
-                                    </div>
-                                    {% endif %}
-                                </div>
-                                
-                                <div class="alert alert-info mb-0">
-                                    <i class="fas fa-info-circle me-2"></i>
-                                    <strong>Embed no disponible:</strong> Mostrando contenido guardado en su lugar.
+                        <!-- Content Display: Show full content first, embedded tweet as secondary -->
+                                                <!-- Content Display -->
+                        <div class="tweet-content-container">
+                            <!-- Embedded tweet display -->
+                            {% if not tweet.is_deleted %}
+                            <div class="embedded-tweet-container">
+                                <div class="embedded-tweet" data-tweet-url="{{ tweet.tweet_url }}">
+                                    <iframe 
+                                        src="https://platform.twitter.com/embed/Tweet.html?id={{ tweet.tweet_url.split('/')[-1] }}&theme=light&lang=es"
+                                        style="position: static; visibility: visible; width: 100%; height: auto; min-height: 600px; display: block; flex-grow: 1;"
+                                        title="X Post"
+                                        frameborder="0"
+                                        scrolling="no"
+                                        allowfullscreen>
+                                    </iframe>
                                 </div>
                             </div>
                             {% endif %}
@@ -908,45 +817,37 @@
         }
 
         function checkEmbeddedTweets() {
-            const embeddedTweets = document.querySelectorAll('.embedded-tweet:not(.deleted .embedded-tweet)');
+            const embeddedTweets = document.querySelectorAll('.embedded-tweet-container .embedded-tweet');
             
             embeddedTweets.forEach(function(container) {
                 const tweetFrame = container.querySelector('iframe');
-                const fallback = container.parentNode.querySelector('.fallback-content');
                 
-                if (!tweetFrame || !fallback) return;
+                if (!tweetFrame) return;
                 
-                let hasShownFallback = false;
+                let hasHandled = false;
                 
                 // Listen for iframe load events
                 tweetFrame.onload = function() {
-                    // If iframe loaded, assume success (Twitter embeds handle their own error states)
+                    // If iframe loaded, assume success
                     console.log('Tweet iframe loaded successfully');
                 };
                 
                 tweetFrame.onerror = function() {
-                    // Only show fallback on explicit error
-                    if (!hasShownFallback) {
-                        console.log('Tweet iframe failed to load, showing fallback');
-                        container.style.display = 'none';
-                        fallback.style.display = 'block';
-                        hasShownFallback = true;
+                    // On error, we can optionally hide the embedded container
+                    if (!hasHandled) {
+                        console.log('Tweet iframe failed to load');
+                        // Keep the embedded container visible as it's now secondary
+                        hasHandled = true;
                     }
                 };
                 
-                // Much longer timeout, and only for obvious failures
+                // Check for obvious failures after timeout
                 setTimeout(function() {
-                    // Only check if iframe is completely missing or has clear failure indicators
-                    if (!tweetFrame.src || tweetFrame.src === '' || tweetFrame.src === 'about:blank') {
-                        if (!hasShownFallback) {
-                            console.log('Tweet iframe has no src or blank, showing fallback');
-                            container.style.display = 'none';
-                            fallback.style.display = 'block';
-                            hasShownFallback = true;
-                        }
+                    if (!hasHandled && (!tweetFrame.src || tweetFrame.src === '' || tweetFrame.src === 'about:blank')) {
+                        console.log('Tweet iframe has no src or blank');
+                        hasHandled = true;
                     }
-                    // Note: We removed the cross-origin checks that were causing false positives
-                }, 15000); // Longer timeout (15 seconds)
+                }, 10000);
             });
         }
     </script>

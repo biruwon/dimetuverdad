@@ -66,27 +66,27 @@ ollama pull gpt-oss:20b
 ### Data Collection
 ```bash
 # Collect from 11 default Spanish far-right accounts (vox_es, Santi_ABASCAL, etc.)
-python fetch_tweets.py --max 15
+./run_in_venv.sh fetch --max 15
 
 # Collect from specific users
-python fetch_tweets.py --users "username1,username2" --max 20
+./run_in_venv.sh fetch --user "username1,username2" --max 20
 ```
 
 ### Analysis Execution
 ```bash
 # Analyze all unanalyzed tweets (LLM always enabled)
-python analyze_db_tweets.py
+./run_in_venv.sh analyze-db
 
 # Force reanalyze when prompts change
-python analyze_db_tweets.py --force-reanalyze --limit 10
+./run_in_venv.sh analyze-db --force-reanalyze --limit 10
 
 # Analyze specific user
-python analyze_db_tweets.py --username Santi_ABASCAL
+./run_in_venv.sh analyze-db --username Santi_ABASCAL
 ```
 
 ### Web Interface
 ```bash
-cd web && python app.py  # Runs on localhost:5000
+./run_in_venv.sh web  # Runs on localhost:5000
 ```
 
 ## Critical Development Patterns
@@ -128,13 +128,13 @@ The system detects 6 categories with specific priority order:
 ### Comprehensive Test Suite
 ```bash
 # Quick test (2 cases per category, ~1 minute)
-python analyzer/tests/test_analyzer_integration.py --quick
+./run_in_venv.sh test-analyzer-integration --quick
 
 # Full validation (all cases, ~6 minutes)
-python analyzer/tests/test_analyzer_integration.py --full
+./run_in_venv.sh test-analyzer-integration --full
 
 # Pattern-only testing (fastest)
-python analyzer/tests/test_analyzer_integration.py --patterns-only
+./run_in_venv.sh test-analyzer-integration --patterns-only
 ```
 
 ### Individual Content Testing
@@ -189,7 +189,7 @@ ollama pull gpt-oss:20b  # Re-download model if corrupted
 ### Database Locked
 ```bash
 # Restart Python process and check for hanging connections
-# Use scripts/init_database.py --force to recreate if needed
+# Use ./run_in_venv.sh init-db --force to recreate if needed
 ```
 
 ### Memory Issues
@@ -352,7 +352,7 @@ When working on this codebase, prioritize understanding the multi-stage analysis
    - Modifying column types or constraints
    - Adding indexes or foreign keys
 
-2. **SCHEMA MANAGEMENT**: Use `scripts/init_database.py --force` to recreate databases with updated schema
+2. **SCHEMA MANAGEMENT**: Use `./run_in_venv.sh init-db --force` to recreate databases with updated schema
    - `scripts/init_database.py` creates fresh databases with complete schema
    - Use `--force` flag to recreate existing databases
 
@@ -373,6 +373,6 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 1. **Make Schema Changes**: Update table structures in source code
 2. **Update Init Script**: Reflect changes in `scripts/init_database.py` table creation
 3. **Update Verification**: Add new fields to schema verification checks
-4. **Test Fresh Creation**: Verify init script creates correct schema with `scripts/init_database.py --force`
+4. **Test Fresh Creation**: Verify init script creates correct schema with `./run_in_venv.sh init-db --force`
 
 **VIOLATION CONSEQUENCES**: Databases created with outdated init scripts will be missing critical columns. Always update `scripts/init_database.py` immediately after any schema changes. Never use row indices for database column access - always use column names.

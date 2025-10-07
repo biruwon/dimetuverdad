@@ -375,10 +375,10 @@ class Analyzer:
                 }, ensure_ascii=False)
             )
         else:
-            # Fallback to text-only analysis if multimodal fails
+            # Multimodal analysis failed - do not process this tweet
             if self.verbose:
-                print("❌ Multimodal analysis failed, falling back to text-only")
-            return self._analyze_text_only(tweet_id, tweet_url, username, content)
+                print("❌ Multimodal analysis failed - skipping tweet (media analysis required)")
+            raise Exception("Multimodal analysis failed for tweet with media - cannot process without proper media analysis")
     
     def _extract_category_from_gemini(self, gemini_analysis: str) -> str:
         """
