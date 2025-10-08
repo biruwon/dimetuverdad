@@ -80,12 +80,32 @@ class EnhancedPromptGenerator:
 
 GUÍAS DE DETECCIÓN MEJORADAS:
 
-HATE_SPEECH - Identifica:
-- Insultos directos/indirectos hacia grupos étnicos, religiosos, nacionales
-- Generalizaciones despectivas ('esa gente', 'ya sabéis cómo son', 'todos los X')
-- Deshumanización sutil (comparaciones con animales/objetos)
-- Lenguaje que incita hostilidad hacia grupos específicos
-- Ataques basados en características protegidas (raza, religión, origen)
+🚫 HATE_SPEECH - AMPLIA DEFINICIÓN (NO solo insultos explícitos):
+
+CRITERIOS CLAVE - Es hate_speech si:
+1. CULPABILIZA a grupos específicos de problemas sociales/económicos
+2. DESHUMANIZA mediante términos que niegan individualidad
+3. USA RETÓRICA DE AMENAZA que presenta grupos como peligro existencial
+4. PROMUEVE HOSTILIDAD implícita o explícita hacia grupos vulnerables
+
+EJEMPLOS ESPECÍFICOS - Detecta como hate_speech:
+- **SCAPEGOATING DE SERVICIOS**: Culpar a inmigrantes de "saturar", "colapsar", "destruir" servicios públicos (sanidad, vivienda, educación)
+  → Esto NO es crítica política, es CULPABILIZACIÓN de un grupo vulnerable
+- **RETÓRICA DE INVASIÓN**: Términos bélicos/militares aplicados a migración
+  → "invasión", "oleada", "avalancha", "promover una invasión"
+  → Presenta la inmigración como ATAQUE, no como fenómeno social
+- **NARRATIVAS DE ESCASEZ**: "Nos quitan [X]", "menos [X] por culpa de..."
+  → Enfrentar españoles vs inmigrantes en competencia de suma cero
+  → Presenta inmigrantes como LADRONES de recursos, no como personas
+- **DESHUMANIZACIÓN ECONÓMICA**: "Los traen", "hacen negocio con ellos", "importarlos"
+  → Mercantiliza personas, las presenta como OBJETOS/MERCANCÍA
+- **VÍCTIMAS VS INVASORES**: "Españoles condenados" vs "inmigrantes" que "destruyen todo"
+  → Marco de conflicto donde un grupo ATACA y otro SUFRE
+- **DESTRUCCIÓN APOCALÍPTICA**: "Lo destruye todo: seguridad, identidad, economía"
+  → Lenguaje catastrofista que presenta grupo como AMENAZA EXISTENCIAL
+
+⚠️  IMPORTANTE: Un texto puede ser hate_speech SIN usar insultos directos.
+La culpabilización sistemática de grupos por problemas sociales ES discurso de odio.
 
 ❌ DISINFORMATION - Identifica:
 - Afirmaciones médicas/científicas falsas sin evidencia
@@ -99,7 +119,7 @@ HATE_SPEECH - Identifica:
 - Afirmaciones sobre manipulación masiva por organizaciones
 - Referencias a "la agenda" sin especificar fuente verificable
 
-FAR_RIGHT_BIAS - Identifica:
+🗳️  FAR_RIGHT_BIAS - Identifica:
 - Ataques a ideologías políticas de izquierda ('progres', 'comunistas', 'izquierda')
 - Lenguaje alarmista sobre supuesta infiltración ideológica en instituciones
 - Narrativas de 'guerra cultural' contra valores tradicionales
@@ -120,7 +140,7 @@ FAR_RIGHT_BIAS - Identifica:
 - Opiniones políticas moderadas sin elementos extremistas
 - Información factual sin sesgo problemático
 
-IMPORTANTE: Si detectas CUALQUIER elemento problemático, elige la categoría específica más apropiada. Sé menos conservador - prefiere categorías específicas sobre 'general'."""
+REGLA DE ORO: Si el texto CULPA a un grupo étnico/nacional por problemas sociales usando lenguaje de AMENAZA, INVASIÓN, o DESTRUCCIÓN → Es HATE_SPEECH, no opinión política moderada."""
     
     @staticmethod
     def build_generation_system_prompt() -> str:
@@ -220,11 +240,28 @@ IMPORTANTE: Responde completamente en español y sé específico sobre el conten
             "",
             "PROCESO DE ANÁLISIS PASO A PASO:",
             "",
-            "1️⃣ HATE_SPEECH - ¿Contiene el texto...?",
-            "   • Insultos directos/indirectos hacia grupos étnicos, religiosos, nacionales",
-            "   • Generalizaciones despectivas ('esa gente', 'ya sabéis cómo son', 'todos los X')",
-            "   • Deshumanización sutil (comparaciones con animales/objetos)",
-            "   • Lenguaje que incita hostilidad hacia grupos específicos",
+            "1️⃣ HATE_SPEECH - DEFINICIÓN AMPLIA (NO solo insultos):",
+            "",
+            "   ¿El texto CULPABILIZA a un grupo específico (étnico/nacional/religioso) de problemas sociales?",
+            "   ¿USA RETÓRICA DE AMENAZA o INVASIÓN para describir grupos de personas?",
+            "   ¿DESHUMANIZA mediante términos que niegan individualidad (mercantilización)?",
+            "",
+            "   DETECTA como hate_speech:",
+            "   ✗ Culpar a inmigrantes de COLAPSAR/SATURAR servicios públicos (sanidad, vivienda)",
+            "     → NO es crítica de política migratoria, es SCAPEGOATING",
+            "   ✗ Términos bélicos: 'invasión', 'oleada', 'avalancha', 'promover invasión'",
+            "     → Presenta migración como ATAQUE militar, no fenómeno social",
+            "   ✗ Narrativas de escasez: 'nos quitan X', 'menos X por culpa de...'",
+            "     → Enfrenta españoles vs inmigrantes en competencia suma-cero",
+            "   ✗ Deshumanización económica: 'los traen', 'hacen negocio con ellos', 'importarlos'",
+            "     → Mercantiliza personas = OBJETOS, no seres humanos",
+            "   ✗ Marco víctimas vs invasores: 'españoles condenados' vs 'inmigrantes destruyen'",
+            "     → Un grupo ATACA, otro SUFRE = hostilidad",
+            "   ✗ Lenguaje apocalíptico: 'destruye todo: seguridad, identidad, economía'",
+            "     → Grupo presentado como AMENAZA EXISTENCIAL",
+            "",
+            "   ⚠️  CLAVE: Puede ser hate_speech SIN insultos directos.",
+            "   La culpabilización sistemática de grupos por problemas = discurso de odio.",
             "",
             "2️⃣ DISINFORMATION - ¿Presenta...?",
             "   • Afirmaciones médicas/científicas sin evidencia (vacunas-5G, COVID falso)",
@@ -238,17 +275,13 @@ IMPORTANTE: Responde completamente en español y sé específico sobre el conten
             "",
             "4️⃣ FAR_RIGHT_BIAS - ¿Muestra...?",
             "   • Retórica extrema contra izquierda ('rojos', 'comunistas')",
-            "   • Nacionalismo excluyente con lenguaje alarmista ('invasión')",
+            "   • Nacionalismo excluyente con lenguaje alarmista",
             "   • Marcos 'nosotros vs ellos' radicalizados",
-            "   • Anti-inmigración con deshumanización",
             "",
             "5️⃣ CALL_TO_ACTION - ¿Incluye...?",
             "   • Llamadas explícitas a manifestaciones/protestas con lugar/hora",
             "   • Instrucciones específicas de acción colectiva ('todos a X')",
             "   • Urgencia para movilización inmediata",
-            "   • Llamadas a organizarse o 'hacer algo' sin especificar detalles",
-            "   • Lenguaje que incita a la acción colectiva ('no podemos quedarnos de brazos cruzados')",
-            "   • Invitaciones a la participación activa en causas",
             "",
             "6️⃣ GENERAL - Solo si:",
             "   • Contenido completamente neutral (clima, comida, entretenimiento)",
@@ -257,8 +290,16 @@ IMPORTANTE: Responde completamente en español y sé específico sobre el conten
             "",
             "DECISIÓN: Evalúa en orden 1→6. Si encuentras elementos de una categoría, esa es la respuesta.",
             "Si hay múltiples categorías aplicables, elige la MÁS ESPECÍFICA y PROBLEMÁTICA.",
-            "IMPORTANTE: Contenido político con llamadas a acción → call_to_action (NO political_general)",
-            "IMPORTANTE: Lenguaje que urge organización colectiva → call_to_action",
+            "",
+            "⚠️  CASOS ESPECÍFICOS QUE SON HATE_SPEECH (NO 'crítica política'):",
+            "- Culpar a inmigrantes de saturar/colapsar sanidad → HATE_SPEECH",
+            "- Usar 'invasión' para describir inmigración → HATE_SPEECH",  
+            "- 'Nos quitan viviendas/recursos' → HATE_SPEECH",
+            "- 'Hacen negocio trayéndolos' (mercantilización) → HATE_SPEECH",
+            "- 'Destruye seguridad/identidad/economía' → HATE_SPEECH",
+            "",
+            "REGLA CRÍTICA: Estas NO son 'opiniones políticas moderadas' ni 'crítica convencional'.",
+            "Son SCAPEGOATING y DESHUMANIZACIÓN = HATE_SPEECH.",
             "",
             "RESPUESTA FINAL (una sola palabra):"
         ]
@@ -358,16 +399,22 @@ IMPORTANTE: Responde completamente en español y sé específico sobre el conten
             f'TEXTO ANALIZADO: "{text}"',
             f'CATEGORÍA DETECTADA: {category}',
             "",
-            f"ANÁLISIS DETALLADO - Enfócate en {context['focus']}:",
-            ""
+            f"Explica por qué este contenido pertenece a la categoría '{category}', enfocándote en {context['focus']}.",
+            "",
+            "Considera estas preguntas en tu análisis:"
         ]
         
-        for i, question in enumerate(context['questions'], 1):
-            prompt_parts.append(f"{i}. {question}")
+        for question in context['questions']:
+            prompt_parts.append(f"- {question}")
         
         prompt_parts.extend([
             "",
-            "EXPLICACIÓN (2-3 oraciones claras y específicas sobre los elementos detectados):"
+            "IMPORTANTE: Responde en español natural y conversacional, sin usar:",
+            "- Markdown (nada de **negritas**, ##títulos, o listas numeradas)",
+            "- Encabezados estructurados como 'ANÁLISIS DETALLADO' o '1. Tema...'",
+            "- Formato técnico o excesivamente estructurado",
+            "",
+            "Escribe 2-4 oraciones claras explicando los elementos problemáticos específicos del texto, como si le explicaras a un lector general. Sé directo y específico sobre lo que detectaste."
         ])
         
         return "\n".join(prompt_parts)

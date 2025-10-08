@@ -60,6 +60,17 @@ class PatternAnalyzer:
                     r'\b(?:moros?|musulmanes?|inmigrantes?)\s+(?:nos\s+)?(?:están\s+)?(?:invadiendo|invaden)\b',
                     r'\b(?:invasión|oleada|avalancha)\s+(?:de\s+)?(?:inmigrantes?|musulmanes?|moros?)\b',
                     r'\b(?:están\s+)?invadiendo\s+(?:España|Europa|nuestro\s+país)\b',
+                    # ANTI-IMMIGRANT SCAPEGOATING - Essential patterns (LLM alone insufficient)
+                    r'\b(?:inmigrantes?|extranjeros?|ilegales?|menas?)\b.*\b(?:saturan?|colapsan?|saturando|colapsando)\b.*\b(?:servicios?|sanidad|hospitales?|colegios?)\b',
+                    r'\b(?:servicios?|sanidad|hospitales?|colegios?)\b.*\b(?:saturad[oa]s?|colapsad[oa]s?)\b.*\b(?:inmigrantes?|extranjeros?|ilegales?)\b',
+                    r'\b(?:menos|sin)\s+(?:viviendas?|casas?|pisos?|médicos?|recursos?|ayudas?)\b.*\b(?:por\s+)?(?:culpa\s+de\s+|debido\s+a\s+)?(?:los?\s+)?(?:inmigrantes?|extranjeros?)\b',
+                    r'\b(?:inmigrantes?|extranjeros?)\b.*\b(?:nos\s+)?(?:quitan|roban|arrebatan)\b.*\b(?:viviendas?|trabajos?|empleos?|ayudas?|recursos?)\b',
+                    r'\b(?:españoles?)\b.*\b(?:condenados?|obligados?)\s+(?:a\s+)?(?:listas?\s+de\s+espera|esperar|sufrir)\b.*\b(?:inmigrantes?|extranjeros?)\b',
+                    r'\b(?:hacen|hacer)\s+negocio\s+(?:con\s+)?(?:trayéndolos?|importándolos?|ellos?)\b',
+                    r'\b(?:promover|promovido|promueven)\s+una\s+invasión\b',
+                    # Dehumanizing economic language
+                    r'\b(?:traer|importar|meter)\s+(?:inmigrantes?|extranjeros?)\b',
+                    r'\b(?:los?\s+)?(?:traen|importan|meten)\b.*\b(?:inmigrantes?|extranjeros?)\b',
                     # Derogatory language about specific groups
                     r'\b(?:estos?\s+)?menas?\b.*\b(?:robar|traficar|delinquir|criminal\w*)\b',
                     r'\b(?:harto|cansado)\s+(?:de\s+)?(?:estos?\s+)?(?:menas?|inmigrantes?|extranjeros?)\b',

@@ -45,6 +45,13 @@ def extract_media_data(article) -> Tuple[List[str], int, List[str]]:
             if src and src not in media_links:
                 media_links.append(src)
                 media_types.append('video')
+            # NEW: Check for <source> tags inside <video>
+            source_elems = video.query_selector_all('source')
+            for source in source_elems:
+                source_src = source.get_attribute('src')
+                if source_src and source_src not in media_links:
+                    media_links.append(source_src)
+                    media_types.append('video')
 
     for elem in article.query_selector_all('[style*="background-image"]'):
         style = elem.get_attribute('style')
@@ -232,7 +239,11 @@ def analyze_post_type(article, target_username: str) -> Dict[str, any]:
             try:
                 quoted_text_elem = quoted_content.query_selector('[data-testid="tweetText"]')
                 if quoted_text_elem:
-                    post_analysis['reply_to_content'] = quoted_text_elem.inner_text().strip()
+                    # Store quoted tweet content in original_content for analysis
+                    quoted_text = quoted_text_elem.inner_text().strip()
+                    post_analysis['original_content'] = quoted_text
+                    # Keep reply_to_content for backward compatibility
+                    post_analysis['reply_to_content'] = quoted_text
             except Exception:
                 pass
 

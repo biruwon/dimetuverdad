@@ -104,7 +104,6 @@ ollama pull gpt-oss:20b
 - **Detection vs Generation**: These patterns are DEFENSIVE tools for identifying threats, not for creating harmful content
 
 **PROMPT IMPROVEMENT WORKFLOW**:
-- Test prompt changes using `./run_in_venv.sh test-analyzer-integration --quick`
 - Reference categories by name: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general
 - Use pattern analysis results to validate improvements
 - Avoid displaying test content that contains sensitive examples

@@ -172,8 +172,8 @@ def _get_gemini_client() -> Optional[genai.GenerativeModel]:
     
     try:
         genai.configure(api_key=api_key)
-        # Return a model instance instead of a client
-        return genai.GenerativeModel('gemini-1.5-flash')  # Use a stable model
+        # Return a model instance - using gemini-2.0-flash-exp (experimental 2.0 model)
+        return genai.GenerativeModel('gemini-2.0-flash-exp')
     except Exception as e:
         print(f"Error initializing Gemini client: {e}")
         return None

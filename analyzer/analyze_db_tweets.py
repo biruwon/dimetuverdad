@@ -21,7 +21,7 @@ from utils import database, paths
 
 DB_PATH = paths.get_db_path()
 
-def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False):
+def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False, tweet_id=None):
     """
     Analyze tweets from the database using the analyzer with LLM enabled.
     
@@ -29,12 +29,39 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
         username: Specific username to analyze (None for all)
         max_tweets: Maximum number of tweets to analyze (None for all)
         force_reanalyze: If True, reanalyze already processed tweets (useful when prompts change)
+        tweet_id: Specific tweet ID to analyze/reanalyze (overrides other filters)
     """
     
     print("🔍 Enhanced Tweet Analysis Pipeline")
     print("=" * 50)
     
-    # Initialize analyzer
+    # Special case: specific tweet ID requested - use reanalyze_tweet utility
+    if tweet_id:
+        print(f"🎯 Reanalyzing specific tweet: {tweet_id}")
+        print("🚀 Initializing Analyzer...")
+        try:
+            from .analyzer import reanalyze_tweet
+            analyzer_instance = create_analyzer(use_llm=True, verbose=False)
+            print("✅ Analyzer ready!")
+            
+            result = reanalyze_tweet(tweet_id, analyzer=analyzer_instance)
+            if result:
+                print(f"\n📝 Tweet: {tweet_id}")
+                print(f"    🏷️ Category: {result.category}")
+                print(f"    💭 {result.llm_explanation[:100]}...")
+                print(f"    🔍 Method: {result.analysis_method}")
+                if result.multimodal_analysis:
+                    print(f"    🎥 Multimodal analysis: Yes ({result.media_type})")
+                print("\n✅ Analysis complete and saved to database")
+            else:
+                print(f"❌ Tweet {tweet_id} not found in database")
+        except Exception as e:
+            print(f"❌ Error reanalyzing tweet: {e}")
+            import traceback
+            traceback.print_exc()
+        return
+    
+    # Initialize analyzer for bulk processing
     print("🚀 Initializing Analyzer...")
     try:
         analyzer_instance = create_analyzer(use_llm=True, verbose=False)  # Always use LLM for better explanations
@@ -47,18 +74,20 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     conn = database.get_db_connection()
     c = conn.cursor()
     
-        # Build query - exclude already analyzed tweets unless force_reanalyze is True
+    # Build query - exclude already analyzed tweets unless force_reanalyze is True
     # Also skip RT posts where the original content has already been analyzed
     if force_reanalyze:
         print("🔄 Force reanalyze mode: Will process ALL tweets (including already analyzed)")
         query = """
-            SELECT t.tweet_id, t.tweet_url, t.username, t.content, t.media_links FROM tweets t
+            SELECT t.tweet_id, t.tweet_url, t.username, t.content, t.media_links, t.original_content FROM tweets t
         """
+        params = []
         if username:
             query += " WHERE t.username = ?"
+            params.append(username)
     else:
         query = """
-            SELECT t.tweet_id, t.tweet_url, t.username, t.content, t.media_links FROM tweets t 
+            SELECT t.tweet_id, t.tweet_url, t.username, t.content, t.media_links, t.original_content FROM tweets t 
             LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id 
             WHERE ca.tweet_id IS NULL
             AND NOT (
@@ -66,12 +95,10 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
                 AND t.rt_original_analyzed = 1
             )
         """
+        params = []
         if username:
             query += " AND t.username = ?"
-    
-    params = []
-    if username:
-        params.append(username)
+            params.append(username)
     
     query += " ORDER BY t.tweet_id DESC"
     
@@ -119,8 +146,14 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     results = []
     category_counts = {}
     
-    for i, (tweet_id, tweet_url, tweet_username, content, media_links) in enumerate(tweets, 1):
+    for i, (tweet_id, tweet_url, tweet_username, content, media_links, original_content) in enumerate(tweets, 1):
         print(f"📝 [{i:2d}/{len(tweets)}] Analyzing: {tweet_id}")
+        
+        # Combine main content with quoted content if available
+        analysis_content = content
+        if original_content and original_content.strip():
+            analysis_content = f"{content}\n\n[Contenido citado]: {original_content}"
+            print(f"    📎 Including quoted tweet content")
         
         # Parse media URLs
         media_urls = []
@@ -136,7 +169,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
                 tweet_id=tweet_id,
                 tweet_url=tweet_url,
                 username=tweet_username,
-                content=content,
+                content=analysis_content,
                 media_urls=media_urls
             )
             
@@ -234,6 +267,7 @@ Examples:
   python analyze_db_tweets.py --limit 5                         # Analyze 5 unanalyzed tweets with LLM
   python analyze_db_tweets.py --force-reanalyze --limit 10      # Reanalyze 10 tweets (including already analyzed)
   python analyze_db_tweets.py --username Santi_ABASCAL -f       # Reanalyze all tweets from specific user
+  python analyze_db_tweets.py --tweet-id 1234567890123456789    # Analyze/reanalyze specific tweet by ID
         """
     )
     
@@ -241,13 +275,15 @@ Examples:
     parser.add_argument('--limit', '-l', type=int, help='Maximum number of tweets to process')
     parser.add_argument('--force-reanalyze', '-f', action='store_true', 
                        help='Reanalyze already processed tweets (useful when prompts change)')
+    parser.add_argument('--tweet-id', '-t', help='Analyze/reanalyze a specific tweet by ID')
     
     args = parser.parse_args()
     
     analyze_tweets_from_db(
         username=args.username,
         max_tweets=args.limit,
-        force_reanalyze=args.force_reanalyze
+        force_reanalyze=args.force_reanalyze,
+        tweet_id=args.tweet_id
     )
 
 if __name__ == '__main__':
