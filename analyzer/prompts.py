@@ -230,6 +230,11 @@ IMPORTANTE: Responde completamente en español y sé específico sobre el conten
             "   • Afirmaciones médicas/científicas sin evidencia (vacunas-5G, COVID falso)",
             "   • Estadísticas inventadas o datos manipulados",
             "   • Claims sobre tratamientos no probados científicamente",
+            "   • ASOCIACIONES FALSAS: Conecta eventos/países/políticas sin relación real",
+            "   • MARCOS DICTATORIALES: Califica democracias como 'dictaduras' sin evidencia",
+            "   • MANIPULACIÓN INTERNACIONAL: Usa noticias de otros países para ataques locales",
+            "   • EQUIVALENCIAS FALSAS: Presenta situaciones diferentes como idénticas",
+            "   • DESCONTEXTUALIZACIÓN: Información real usada en contexto engañoso",
             "",
             "3️⃣ CONSPIRACY_THEORY - ¿Menciona...?",
             "   • Teorías sobre control secreto por élites (Soros, Davos, 'la agenda')",
@@ -279,11 +284,15 @@ IMPORTANTE: Responde completamente en español y sé específico sobre el conten
                 ]
             },
             Categories.DISINFORMATION: {
-                "focus": "afirmaciones falsas, datos manipulados o información médica/científica incorrecta",
+                "focus": "afirmaciones falsas, datos manipulados, información médica/científica incorrecta, asociaciones falsas entre países/políticas, marcos dictatoriales aplicados a democracias, y manipulación emocional a través de equivalencias erróneas",
                 "questions": [
-                    "¿Qué claims específicos son médica/científicamente incorrectos?",
-                    "¿Qué evidencia contradice estas afirmaciones?",
-                    "¿Cómo podría este contenido desinformar a la audiencia?"
+                    "¿Qué afirmaciones específicas son médica/científicamente incorrectas o factuales falsas?",
+                    "¿Se están creando asociaciones falsas entre políticas de diferentes países o contextos políticos no relacionados?",
+                    "¿Se está enmarcando un sistema democrático como dictatorial sin evidencia factual?",
+                    "¿Se están utilizando noticias de un país para atacar falsamente políticos o sistemas de otro país?",
+                    "¿Qué equivalencias erróneas se establecen entre situaciones políticas completamente diferentes?",
+                    "¿Cómo se manipula emocionalmente al lector a través de términos como 'dictadura' aplicados incorrectamente?",
+                    "¿Qué evidencia contradice estas afirmaciones o asociaciones?"
                 ]
             },
             Categories.CONSPIRACY_THEORY: {

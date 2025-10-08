@@ -21,6 +21,24 @@
             border-radius: 15px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+        
+        /* Tweet display styles (same as user view) */
+        .tweet-content-container {
+            margin-bottom: 1rem;
+        }
+        
+        .embedded-tweet-container {
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e9ecef;
+        }
+        
+        .fallback-content {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 1rem;
+            background: #f8f9fa;
+        }
     </style>
 </head>
 <body>
@@ -82,8 +100,49 @@
                         
                         <div class="mb-3">
                             <label class="form-label"><strong>Contenido:</strong></label>
-                            <div class="tweet-content">
-                                {{ tweet.content }}
+                            
+                            <!-- Embedded Tweet Display (same as user view) -->
+                            <div class="tweet-content-container mb-3">
+                                <div class="embedded-tweet-container">
+                                    <div class="embedded-tweet" data-tweet-url="{{ tweet.tweet_url }}">
+                                        <iframe 
+                                            src="https://platform.twitter.com/embed/Tweet.html?id={{ tweet.tweet_url.split('/')[-1] }}&theme=light&lang=es"
+                                            style="position: static; visibility: visible; width: 100%; height: auto; min-height: 600px; display: block; flex-grow: 1;"
+                                            title="X Post"
+                                            frameborder="0"
+                                            scrolling="no"
+                                            allowfullscreen>
+                                        </iframe>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Fallback Content Display (if iframe fails) -->
+                            <div class="tweet-content fallback-content" style="display: none;">
+                                {% if tweet.original_content and tweet.original_content != tweet.content %}
+                                    <!-- Quoted Tweet: Show both original context and user's text -->
+                                    <div class="mb-3">
+                                        <div class="text-muted mb-2">
+                                            <i class="fas fa-quote-left me-1"></i>
+                                            <strong>Tweet citado:</strong>
+                                        </div>
+                                        <div class="p-3 border-start border-3 border-secondary bg-light rounded">
+                                            {{ tweet.original_content }}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="text-muted mb-2">
+                                            <i class="fas fa-user me-1"></i>
+                                            <strong>Comentario de @{{ tweet.username }}:</strong>
+                                        </div>
+                                        <div class="p-3 border-start border-3 border-primary bg-primary bg-opacity-10 rounded">
+                                            {{ tweet.content }}
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <!-- Regular Tweet -->
+                                    {{ tweet.content }}
+                                {% endif %}
                             </div>
                         </div>
                         
@@ -184,5 +243,33 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle iframe loading and fallback (same logic as user view)
+            const iframe = document.querySelector('.embedded-tweet iframe');
+            const fallbackContent = document.querySelector('.fallback-content');
+            
+            if (iframe && fallbackContent) {
+                // Set a timeout to show fallback if iframe fails to load
+                const fallbackTimeout = setTimeout(function() {
+                    iframe.parentNode.style.display = 'none';
+                    fallbackContent.style.display = 'block';
+                }, 10000); // 10 second timeout
+                
+                // If iframe loads successfully, clear the timeout
+                iframe.addEventListener('load', function() {
+                    clearTimeout(fallbackTimeout);
+                });
+                
+                // If iframe fails to load, show fallback immediately
+                iframe.addEventListener('error', function() {
+                    clearTimeout(fallbackTimeout);
+                    iframe.parentNode.style.display = 'none';
+                    fallbackContent.style.display = 'block';
+                });
+            }
+        });
+    </script>
 </body>
 </html>

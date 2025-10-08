@@ -82,7 +82,7 @@ class TestGeminiMultimodal(unittest.TestCase):
         self.assertEqual(result, mock_model)
         # Don't assert exact API key - just verify configure was called
         mock_configure.assert_called_once()
-        mock_model_class.assert_called_once_with('gemini-1.5-flash')
+        mock_model_class.assert_called_once_with('gemini-2.0-flash-exp')
 
     @patch.dict(os.environ, {}, clear=True)
     def test_get_gemini_client_no_key(self):

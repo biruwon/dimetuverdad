@@ -638,7 +638,7 @@ def admin_edit_analysis(tweet_id):
         tweet_data = conn.execute("""
             SELECT 
                 t.content, t.username, t.tweet_timestamp,
-                ca.category, ca.llm_explanation, t.tweet_url
+                ca.category, ca.llm_explanation, t.tweet_url, t.original_content
             FROM tweets t
             LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
             WHERE t.tweet_id = ?
@@ -657,7 +657,8 @@ def admin_edit_analysis(tweet_id):
             'tweet_timestamp': tweet_data[2] or '',
             'category': tweet_data[3] or 'general',
             'llm_explanation': tweet_data[4] or '',
-            'tweet_url': tweet_data[5] or ''
+            'tweet_url': tweet_data[5] or '',
+            'original_content': tweet_data[6] or ''
         }
         
         categories = ['general', 'hate_speech', 'disinformation', 'conspiracy_theory', 

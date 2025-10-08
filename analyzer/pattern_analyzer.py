@@ -42,14 +42,14 @@ class PatternAnalyzer:
                 'patterns': [
                     # Racial/ethnic hate speech
                     r'\b(?:raza\s+inferior|sangre\s+pura|superioridad\s+racial)\b',
-                    r'\b(?:eliminar|deportar|expulsar)\s+.*\b(?:musulmanes?|gitanos?|moros?|negros?)\b',
-                    r'\b(?:musulmanes?|gitanos?|moros?|negros?)\b.*\b(?:eliminar|deportar|expulsar)\b',
+                    r'\b(?:hay\s+que\s+|debemos\s+|vamos\s+a\s+|queremos\s+)?(?:eliminar|deportar|expulsar)\s+(?:a\s+)?(?:los?\s+|todas?\s+|todos\s+los?\s+)?(?:musulmanes?|gitanos?|moros?|negros?)\b',
+                    r'\b(?:musulmanes?|gitanos?|moros?|negros?)\b.*\b(?:hay\s+que\s+|debemos\s+|queremos\s+)?(?:eliminar|deportar|expulsar)(?:los)?(?:\s+a\s+todos?)?\b',
                     # Dehumanizing language
                     r'\b(?:alimañas?|parásitos?|escoria|basura)\s+(?:musulman|gitana|mora|negra)',
                     r'\b(?:invasión|plaga|epidemia)\s+(?:de\s+)?(?:musulmanes|moros|gitanos)',
-                    # Direct hate speech
-                    r'\b(?:odio|rencor|resentimiento)\b.*\b(?:musulmanes|inmigrantes|gitanos)',
-                    r'\b(?:discriminación|segregación|apartheid)\b',
+                    # Direct hate speech with context
+                    r'\b(?:siento\s+|tengo\s+|profeso\s+)?(?:odio|rencor|resentimiento)\s+(?:hacia\s+|contra\s+)?(?:los?\s+)?(?:musulmanes|inmigrantes|gitanos)\b',
+                    r'\b(?:apoyo\s+la\s+|defiendo\s+la\s+)?(?:discriminación|segregación)\s+(?:de\s+|hacia\s+|contra\s+)(?:los?\s+)?(?:musulmanes|inmigrantes|gitanos)\b',
                     # Homophobic and sexist slurs
                     r'\b(?:maricas?|maricones?)\b',
                     r'\b(?:feminazis?)\b',
@@ -59,7 +59,7 @@ class PatternAnalyzer:
                     r'\b(?:expuls\w+|deport\w+)\s+(?:a\s+)?(?:los?\s+)?(?:moros?|extranjeros?|ilegales?)\b',
                     r'\b(?:moros?|musulmanes?|inmigrantes?)\s+(?:nos\s+)?(?:están\s+)?(?:invadiendo|invaden)\b',
                     r'\b(?:invasión|oleada|avalancha)\s+(?:de\s+)?(?:inmigrantes?|musulmanes?|moros?)\b',
-                    r'\b(?:están\s+)?invadiendo\s+(?:España|Europa|nuestro\s+país)\b',
+                    r'\b(?:nos\s+)?(?:están\s+)?(?:invadiendo|invaden)\s+(?:España|Europa|nuestro\s+país|nuestra\s+patria)\b',
                     # ANTI-IMMIGRANT SCAPEGOATING - Essential patterns (LLM alone insufficient)
                     r'\b(?:inmigrantes?|extranjeros?|ilegales?|menas?)\b.*\b(?:saturan?|colapsan?|saturando|colapsando)\b.*\b(?:servicios?|sanidad|hospitales?|colegios?)\b',
                     r'\b(?:servicios?|sanidad|hospitales?|colegios?)\b.*\b(?:saturad[oa]s?|colapsad[oa]s?)\b.*\b(?:inmigrantes?|extranjeros?|ilegales?)\b',
@@ -97,41 +97,35 @@ class PatternAnalyzer:
             
             Categories.DISINFORMATION: {
                 'patterns': [
-                    # General disinformation
-                    r'\b(?:desinformación|fake\s+news|noticias?\s+falsas?)\b',
-                    r'\b(?:bulo|rumor|mentira|falsedad)\b',
-                    r'\b(?:manipulación|tergiversación|distorsión)\b',
+                    # General disinformation - more specific patterns to avoid flagging anti-misinformation content
+                    r'\b(?:esto\s+es\s+|es\s+pura\s+|típica\s+)?(?:desinformación|fake\s+news|noticias?\s+falsas?)\b(?!\s+(?:es\s+mala|debe\s+combatirse|hay\s+que\s+evitar))',
+                    r'\b(?:difunden|propagan|extienden)\s+(?:bulos?|rumores?|mentiras?)\b',
+                    r'\b(?:esto\s+es\s+un\s+|puro\s+|típico\s+)?(?:bulo|rumor)\b(?!\s+(?:es\s+falso|está\s+desmentido))',
+                    r'\b(?:es\s+)?(?:mentira|falsedad)\s+(?:que\s+)?(?:digan|afirmen|crean)\b',
+                    r'\b(?:campaña\s+de\s+|operación\s+de\s+)?(?:manipulación|tergiversación|distorsión)\b',
                     # MERGED: Health disinformation patterns (formerly separate category)
                     r'\b(?:vacunas?|vacunación)\s+(?:con\s+)?(?:microchips?|chips?|5g|bill\s+gates|control\s+mental)',
                     r'\b(?:vacunas?)\s+(?:tienen|contienen|llevan)\s+(?:microchips?|chips?|nanobots?)',
                     r'\b(?:bill\s+gates)\s+(?:y\s+las\s+)?(?:vacunas?|control)',
                     r'\b(?:covid|coronavirus)\s+(?:es\s+)?(?:mentira|falso|inexistente|inventado)',
-                    r'\b(?:plandemia|dictadura\s+sanitaria|farmafia)\b',
+                    r'\b(?:plandemia|dictadura\s+(?:sanitaria|digital)|farmafia)\b',
                     # Specific patterns found in failing tests
                     r'\b(?:grafeno)\b.*\b(?:controlarnos|control)\b',
                     r'\b(?:5g)\b.*\b(?:controlarnos|control)\b',
                     r'\b(?:vacunas?).*\b(?:grafeno|5g)\b',
                     r'\b(?:\d+\s+de\s+cada\s+\d+)\s+(?:casos?)\s+(?:de\s+covid|son\s+inventados?)\b',
-                    # INTEGRATED CLAIM PATTERNS - Statistical claims that might be false
-                    r'\b(\d+(?:[.,]\d+)*)\s*%\s+(?:de\s+)?(?:los\s+)?(\w+)',
-                    r'\b(?:según|conforme\s+a|de\s+acuerdo\s+con)\s+(?:el\s+)?(\w+),?\s+(\d+(?:[.,]\d+)*)',
-                    r'\b(\d+(?:[.,]\d+)*)\s+(?:millones?|miles?|euros?|personas?|casos?)\s+(?:de\s+)?(\w+)',
-                    r'\b(?:aumentó|disminuyó|creció|bajó)\s+(?:un\s+)?(\d+(?:[.,]\d+)*)\s*%',
+                    # SPECIFIC CLAIM PATTERNS - Only very specific false statistical claims
+                    r'\b(?:el\s+)?(?:100|90|80)\s*%\s+(?:de\s+)?(?:los\s+)?(?:médicos|científicos)\s+(?:están\s+)?(?:comprados?|sobornados?|pagados?)\b',
+                    r'\b(?:cero|0)\s+(?:muertes?|fallecidos?)\s+(?:por\s+)?(?:covid|coronavirus)\s+(?:real(?:es|mente)?|verdad)\b',
                     # Medical claims that could be false
                     r'\b(?:vacunas?|medicamentos?|tratamientos?)\s+(?:causan?|provocan?|generan?)\s+(\w+)',
                     r'\b(?:covid|coronavirus|pandemia)\s+(?:es|fue|será)\s+(\w+)',
-                    r'\b(?:estudios?|investigación|ciencia)\s+(?:demuestra|prueba|confirma)\s+que\s+(.+)',
-                    r'\b(?:efectos?\s+(?:secundarios?|adversos?))\s+(?:de\s+)?(.+)',
-                    # Economic disinformation
-                    r'\b(?:pib|inflación|desempleo|paro)\s+(?:es|está|alcanza)\s+(?:del?\s+)?(\d+(?:[.,]\d+)*)\s*%',
-                    r'\b(?:salario|sueldo|pensión)\s+(?:medio|promedio)\s+(?:es|está|alcanza)\s+(\d+(?:[.,]\d+)*)\s*euros?',
-                    # Scientific claims that could be false
-                    r'\b(?:la\s+ciencia|científicos?|investigadores?)\s+(?:dice|afirma|demuestra)\s+que\s+(.+)',
-                    r'\b(?:está\s+(?:científicamente\s+)?(?:probado|demostrado))\s+que\s+(.+)',
-                    r'\b(?:cambio\s+climático|calentamiento\s+global)\s+(?:es|no\s+es)\s+(.+)',
-                    # Demographic claims that might be inflated or false
-                    r'\b(?:inmigrantes?|extranjeros?)\s+(?:representan|son)\s+(?:el\s+)?(\d+(?:[.,]\d+)*)\s*%',
-                    r'\b(?:población|habitantes)\s+(?:de\s+)?(\w+)\s+(?:es|son|alcanza)\s+(\d+(?:[.,]\d+)*)',
+                    r'\b(?:efectos?\s+(?:secundarios?|adversos?))\s+(?:de\s+)?(?:vacunas?)\s+(?:son\s+)?(?:ocultados?|negados?|minimizados?)\b',
+                    # Economic disinformation - more specific patterns
+                    r'\b(?:inflación|desempleo|paro)\s+(?:real\s+)?(?:es\s+del?\s+|alcanza\s+el\s+)(?:50|60|70|80|90)\s*%',
+                    r'\b(?:cambio\s+climático|calentamiento\s+global)\s+(?:es\s+)?(?:mentira|falso|inexistente|inventado|hoax)\b',
+                    # Demographic disinformation - more specific claims
+                    r'\b(?:inmigrantes?|extranjeros?)\s+(?:ya\s+)?(?:representan|son)\s+(?:más\s+del\s+|el\s+)?(?:50|60|70|80|90)\s*%\s+(?:de\s+la\s+población|de\s+los\s+habitantes)\b',
                     # Additional patterns from former secondary
                     r'\b(?:propaganda|adoctrinamiento|lavado\s+de\s+cerebro)\b',
                     r'\b(?:censura|silenciamiento|ocultación)\b',
@@ -408,29 +402,3 @@ def classify_political_topic(text: str) -> Dict:
         'political_context': result.political_context,
         'keywords': result.keywords
     }
-
-
-# Test the unified analyzer
-if __name__ == "__main__":
-    test_texts = [
-        "Los musulmanes son una raza inferior que viene a destruir nuestra cultura",
-        "España para los españoles, fuera los moros invasores",
-        "Soros financia la inmigración para reemplazar a los europeos según el plan Kalergi",
-        "¡Movilizaos patriotas! Es hora de la reconquista nacional",
-        "El régimen de Sánchez es una dictadura comunista que hay que derrocar",
-        "Las vacunas tienen microchips de Bill Gates para controlarnos",
-        "Hoy hace sol en Madrid, perfecto para pasear",
-        "Manifestación mañana contra la dictadura sanitaria"
-    ]
-    
-    analyzer = PatternAnalyzer()
-    
-    for text in test_texts:
-        print(f"\n--- Texto: {text}")
-        result = analyzer.analyze_content(text)
-        print(f"Categoría principal: {result.primary_category}")
-        print(f"Todas las categorías: {result.categories}")
-        if result.pattern_matches:
-            print("Patrones detectados:")
-            for match in result.pattern_matches[:2]:
-                print(f"  - {match.category}: {match.matched_text}")

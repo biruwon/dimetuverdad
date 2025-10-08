@@ -295,5 +295,100 @@ class TestPromptContext(unittest.TestCase):
         self.assertEqual(len(context.uncertainty_areas), 2)
 
 
+class TestEnhancedDisinformationPrompts(unittest.TestCase):
+    """Test cases for enhanced disinformation detection prompts."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.generator = EnhancedPromptGenerator()
+    
+    def test_disinformation_explanation_includes_cross_country_manipulation(self):
+        """Test that disinformation explanations include cross-country manipulation detection."""
+        explanation = self.generator.generate_explanation_prompt(
+            "Los aliados de Sánchez quieren dictadura digital como en México",
+            "disinformation"
+        )
+        
+        # Should include questions about false associations between countries
+        self.assertIn("asociaciones falsas entre políticas de diferentes países", explanation)
+        self.assertIn("utilizando noticias de un país para atacar falsamente políticos", explanation)
+        
+    def test_disinformation_explanation_includes_dictatorial_framing(self):
+        """Test that disinformation explanations include dictatorial framing detection."""
+        explanation = self.generator.generate_explanation_prompt(
+            "El gobierno impone dictadura digital",
+            "disinformation"
+        )
+        
+        # Should include questions about dictatorial framing
+        self.assertIn("enmarcando un sistema democrático como dictatorial", explanation)
+        self.assertIn("términos como 'dictadura' aplicados incorrectamente", explanation)
+        
+    def test_disinformation_explanation_includes_emotional_manipulation(self):
+        """Test that disinformation explanations include emotional manipulation detection."""
+        explanation = self.generator.generate_explanation_prompt(
+            "Dictadura digital nos controla",
+            "disinformation"
+        )
+        
+        # Should include questions about emotional manipulation
+        self.assertIn("manipula emocionalmente al lector", explanation)
+        self.assertIn("equivalencias erróneas", explanation)
+        
+    def test_disinformation_focus_updated(self):
+        """Test that disinformation focus includes new manipulation techniques."""
+        explanation = self.generator.generate_explanation_prompt(
+            "Test content",
+            "disinformation"
+        )
+        
+        # Should include expanded focus areas
+        self.assertIn("asociaciones falsas entre países", explanation)
+        self.assertIn("marcos dictatoriales aplicados a democracias", explanation)
+        self.assertIn("manipulación emocional", explanation)
+
+
+class TestCrossCategoryPromptGeneration(unittest.TestCase):
+    """Test cases for cross-category prompt generation scenarios."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.generator = EnhancedPromptGenerator()
+    
+    def test_sophisticated_disinformation_case(self):
+        """Test prompt generation for sophisticated disinformation like the Mexico-Spain case."""
+        content = "Los aliados de Sánchez quieren dictadura digital igual que en México con la Ley Anti-Stickers"
+        
+        classification_prompt = self.generator.generate_classification_prompt(content)
+        explanation_prompt = self.generator.generate_explanation_prompt(content, "disinformation")
+        
+        # Classification should include the content
+        self.assertIn(content, classification_prompt)
+        
+        # Explanation should have sophisticated detection questions
+        self.assertIn("asociaciones falsas entre políticas de diferentes países", explanation_prompt)
+        self.assertIn("marcos dictatoriales", explanation_prompt)
+        
+    def test_hate_speech_with_scapegoating(self):
+        """Test prompt generation for hate speech with scapegoating elements."""
+        content = "Los inmigrantes saturan la sanidad por culpa del gobierno"
+        
+        explanation_prompt = self.generator.generate_explanation_prompt(content, "hate_speech")
+        
+        # Should include scapegoating detection
+        self.assertIn("grupo(s) se dirige el contenido problemático", explanation_prompt)
+        self.assertIn("narrativas de exclusión", explanation_prompt)
+        
+    def test_far_right_political_rhetoric(self):
+        """Test prompt generation for far-right political rhetoric."""
+        content = "El régimen socialista ha destruido España"
+        
+        explanation_prompt = self.generator.generate_explanation_prompt(content, "far_right_bias")
+        
+        # Should include far-right detection elements
+        self.assertIn("sesgo de extrema derecha", explanation_prompt)
+        self.assertIn("marcos 'nosotros vs ellos'", explanation_prompt)
+
+
 if __name__ == '__main__':
     unittest.main()
