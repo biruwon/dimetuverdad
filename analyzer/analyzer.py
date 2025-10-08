@@ -480,12 +480,15 @@ class Analyzer:
             return Categories.GENERAL
     
     def _generate_llm_explanation(self, content: str, category: str, pattern_results: Dict) -> str:
-        """Generate explanation using LLM - surface actual errors instead of hiding them."""
+        """Generate explanation using LLM with category-specific prompts."""
         if not self.llm_pipeline:
             # Surface the actual issue instead of hiding it
             return "ERROR: LLM pipeline not available - explanation generation impossible"
         
         try:
+            # Import the prompt generator here to avoid circular imports
+            from .prompts import EnhancedPromptGenerator
+            
             # Extract pattern result for context
             pattern_result = pattern_results.get('pattern_result', None)
             
@@ -498,12 +501,37 @@ class Analyzer:
             }
             
             if self.verbose:
-                print(f"🔍 Calling get_explanation with context: {analysis_context}")
+                print(f"🔍 Generating category-specific explanation for: {category}")
             
-            # Get LLM explanation using the category directly
-            llm_explanation = self.llm_pipeline.get_explanation(content, category, analysis_context)
+            # Use the new category-specific prompt generation
+            prompt_generator = EnhancedPromptGenerator()
+            custom_explanation_prompt = prompt_generator.generate_explanation_prompt(content, category)
+            
+            if self.verbose:
+                print(f"🔍 Using category-specific prompt for {category}")
+            
+            # Use the existing get_explanation method but temporarily replace the prompt generator
+            # Store original prompt generator
+            original_prompt_generator = self.llm_pipeline.prompt_generator
+            
+            # Create a temporary prompt generator that returns our custom prompt
+            class CustomPromptGenerator:
+                def generate_explanation_prompt(self, text, category, model_type="ollama"):
+                    return custom_explanation_prompt
+            
+            # Temporarily replace the prompt generator
+            self.llm_pipeline.prompt_generator = CustomPromptGenerator()
+            
+            try:
+                # Get LLM explanation using the custom prompt
+                llm_explanation = self.llm_pipeline.get_explanation(content, category, analysis_context)
+            finally:
+                # Always restore the original prompt generator
+                self.llm_pipeline.prompt_generator = original_prompt_generator
             
             if llm_explanation and len(llm_explanation.strip()) > 10:
+                if self.verbose:
+                    print(f"✅ Generated explanation: {llm_explanation[:100]}...")
                 return llm_explanation
             else:
                 # Surface the actual issue: LLM returned empty/insufficient response
