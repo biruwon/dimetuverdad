@@ -11,10 +11,10 @@ from analyzer.gemini_multimodal import (
     download_media_to_temp_file,
     _get_gemini_client,
     _upload_media_to_gemini,
-    _create_analysis_prompt,
     analyze_multimodal_content,
     extract_media_type
 )
+from analyzer.prompts import EnhancedPromptGenerator
 
 
 class TestGeminiMultimodal(unittest.TestCase):
@@ -58,14 +58,14 @@ class TestGeminiMultimodal(unittest.TestCase):
 
     def test_create_analysis_prompt_image(self):
         """Test analysis prompt creation for images."""
-        prompt = _create_analysis_prompt(self.test_text, is_video=False)
+        prompt = EnhancedPromptGenerator.build_gemini_analysis_prompt(self.test_text, is_video=False)
         self.assertIn("imagen", prompt)
         self.assertIn("Descripción detallada del contenido visual de la imagen", prompt)
         self.assertIn(self.test_text, prompt)
 
     def test_create_analysis_prompt_video(self):
         """Test analysis prompt creation for videos."""
-        prompt = _create_analysis_prompt(self.test_text, is_video=True)
+        prompt = EnhancedPromptGenerator.build_gemini_analysis_prompt(self.test_text, is_video=True)
         self.assertIn("video", prompt)
         self.assertIn("Resumen del contenido visual del video", prompt)
         self.assertIn(self.test_text, prompt)

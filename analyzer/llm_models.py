@@ -15,13 +15,7 @@ from transformers import (
 from openai import OpenAI
 from .categories import Categories
 
-from .prompts import (
-    EnhancedPromptGenerator, 
-    create_context_from_analysis, 
-    build_spanish_classification_prompt,
-    build_ollama_system_prompt,
-    build_generation_system_prompt
-)
+from .prompts import EnhancedPromptGenerator
 from utils.text_utils import normalize_text
 
 # Suppress warnings including the parameter conflict warnings
@@ -1025,7 +1019,7 @@ class EnhancedLLMPipeline:
             response = self.ollama_client.chat.completions.create(
                 model=self.ollama_model_name,
                 messages=[
-                    {"role": "system", "content": build_ollama_system_prompt()},
+                    {"role": "system", "content": EnhancedPromptGenerator.build_ollama_system_prompt()},
                     {"role": "user", "content": classification_prompt}
                 ],
                 temperature=0.1  # Lower temperature for more consistent results
@@ -1074,7 +1068,7 @@ class EnhancedLLMPipeline:
             print(f"🔍 Using generation model for classification")
             
             # PERFORMANCE OPTIMIZATION: Use much shorter, simpler classification prompt
-            simple_classification_prompt = build_spanish_classification_prompt(text)
+            simple_classification_prompt = EnhancedPromptGenerator.build_spanish_classification_prompt(text)
             
             print(f"🔍 Classification prompt length: {len(simple_classification_prompt)} characters")
             
@@ -1100,7 +1094,7 @@ class EnhancedLLMPipeline:
                 response = self.ollama_client.chat.completions.create(
                     model=self.ollama_model_name,
                     messages=[
-                        {"role": "system", "content": build_generation_system_prompt()},
+                        {"role": "system", "content": EnhancedPromptGenerator.build_generation_system_prompt()},
                         {"role": "user", "content": f"Text: {text}\nCategory:"}
                     ],
                     **ollama_params

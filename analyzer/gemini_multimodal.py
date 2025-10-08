@@ -14,6 +14,12 @@ from typing import Optional, Tuple, List
 import google.generativeai as genai
 from dotenv import load_dotenv
 
+# Import prompt generation
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from analyzer.prompts import EnhancedPromptGenerator
+
 # Load environment variables
 load_dotenv()
 
@@ -212,44 +218,6 @@ def _upload_media_to_gemini(client: genai.GenerativeModel, media_path: str, medi
         print(f"Error uploading media to Gemini: {e}")
         return None
 
-def _create_analysis_prompt(text_content: str, is_video: bool = False) -> str:
-    """
-    Create the analysis prompt for Gemini based on media type.
-
-    Args:
-        text_content: The text content accompanying the media
-        is_video: Whether the media is a video
-
-    Returns:
-        Formatted analysis prompt
-    """
-    media_type = "video" if is_video else "imagen"
-
-    return f"""Analiza esta {media_type} y el texto adjunto que pertenecen al MISMO POST en una cuenta de Twitter/X para detectar contenido político de extrema derecha o desinformación.
-
-TEXTO DEL POST: "{text_content}"
-
-El contenido está en español y proviene de redes sociales. Evalúa si el post promueve o contiene:
-
-CONTEXTO DEL POST:
-- El texto y {media_type} son parte del mismo tweet/publicación en Twitter
-- El texto proporciona contexto adicional al contenido visual de la {media_type}
-
-ANÁLISIS REQUERIDO:
-1. {"Resumen del contenido visual del video" if is_video else "Descripción detallada del contenido visual de la imagen (¿Quiénes aparecen? ¿Qué están haciendo?)"}
-2. Análisis del texto adjunto para detectar:
-   - Discurso político de extrema derecha
-   - Teorías conspirativas
-   - Llamados a la acción política
-   - Ataques a instituciones democráticas
-   - Desinformación o fake news
-   - Retórica nacionalista o anti-inmigración
-3. Evaluación de la relación entre texto y {media_type}
-4. Clasificación por categorías: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general
-5. Nivel de credibilidad y sesgo político detectado
-
-IMPORTANTE: Responde completamente en español y sé específico sobre el contenido político español. Si reconoces personas públicas, identifícalas claramente."""
-
 def analyze_multimodal_content(media_urls: List[str], text_content: str) -> Tuple[Optional[str], float]:
     """
     Analyze multimodal content (images/videos + text) using Gemini 2.5 Flash.
@@ -290,8 +258,8 @@ def analyze_multimodal_content(media_urls: List[str], text_content: str) -> Tupl
             if not media_file:
                 return None, time.time() - start_time
 
-            # Create analysis prompt
-            prompt = _create_analysis_prompt(text_content, is_video)
+            # Create analysis prompt using centralized prompt generator
+            prompt = EnhancedPromptGenerator.build_gemini_analysis_prompt(text_content, is_video)
 
             # Generate analysis with timeout
             print("Analyzing with Gemini 2.5 Flash...")

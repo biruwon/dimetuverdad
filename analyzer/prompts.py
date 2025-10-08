@@ -25,17 +25,58 @@ from dataclasses import dataclass
 from .categories import Categories, CATEGORY_INFO, get_category_info, CLASSIFICATION_PROMPT_MAPPINGS
 
 # ============================================================================
-# DYNAMIC PROMPT BUILDERS
+# ENHANCED PROMPT GENERATOR CLASS
 # ============================================================================
 
-def build_category_list_prompt() -> str:
-    """Build dynamic category list for LLM prompts."""
-    return ", ".join(Categories.get_all_categories())
+@dataclass
+class PromptContext:
+    """Context information for generating targeted prompts."""
+    detected_categories: List[str]
+    political_topic: str
+    uncertainty_areas: List[str]
 
-def build_ollama_system_prompt() -> str:
-    """Build enhanced Ollama system prompt with dynamic categories and improved detection guidelines."""
-    categories = build_category_list_prompt()
-    return f"""Eres un clasificador experto en contenido problemático en español. Analiza el texto con precisión y responde ÚNICAMENTE con una de estas categorías: {categories}
+class EnhancedPromptGenerator:
+    """
+    Generates sophisticated prompts for LLM analysis based on pattern analysis results.
+    Centralized prompt management for all analysis scenarios.
+    """
+    
+    def __init__(self):
+        self.base_context = self._initialize_spanish_context()
+        self.prompt_templates = self._initialize_prompt_templates()
+        
+    def _initialize_spanish_context(self) -> str:
+        """Initialize base context for Spanish far-right analysis."""
+        return """Eres un experto analista especializado en detectar contenido problemático en español, especialmente discurso de odio, desinformación y retórica de extrema derecha en el contexto político español."""
+    
+    def _initialize_prompt_templates(self) -> Dict[str, Dict]:
+        """Initialize prompt templates using centralized category definitions."""
+        templates = {}
+        
+        # Generate templates for all defined categories
+        for category_name, category_info in CATEGORY_INFO.items():
+            templates[category_name] = {
+                "system": category_info.system_prompt,
+                "focus": category_info.focus_area,
+                "questions": category_info.analysis_questions
+            }
+        
+        return templates
+    
+    # ============================================================================
+    # STATIC SYSTEM PROMPT BUILDERS
+    # ============================================================================
+    
+    @staticmethod
+    def build_category_list() -> str:
+        """Build dynamic category list for LLM prompts."""
+        return ", ".join(Categories.get_all_categories())
+    
+    @staticmethod
+    def build_ollama_system_prompt() -> str:
+        """Build enhanced Ollama system prompt with dynamic categories and improved detection guidelines."""
+        categories = EnhancedPromptGenerator.build_category_list()
+        return f"""Eres un clasificador experto en contenido problemático en español. Analiza el texto con precisión y responde ÚNICAMENTE con una de estas categorías: {categories}
 
 GUÍAS DE DETECCIÓN MEJORADAS:
 
@@ -80,11 +121,12 @@ FAR_RIGHT_BIAS - Identifica:
 - Información factual sin sesgo problemático
 
 IMPORTANTE: Si detectas CUALQUIER elemento problemático, elige la categoría específica más apropiada. Sé menos conservador - prefiere categorías específicas sobre 'general'."""
-
-def build_generation_system_prompt() -> str:
-    """Build enhanced generation model system prompt with improved detection guidelines."""
-    categories = build_category_list_prompt()
-    return f"""You are an expert content classifier specializing in detecting problematic Spanish content. Classify text as one of: {categories}
+    
+    @staticmethod
+    def build_generation_system_prompt() -> str:
+        """Build enhanced generation model system prompt with improved detection guidelines."""
+        categories = EnhancedPromptGenerator.build_category_list()
+        return f"""You are an expert content classifier specializing in detecting problematic Spanish content. Classify text as one of: {categories}
 
 ENHANCED DETECTION RULES:
 
@@ -115,125 +157,60 @@ CALL_TO_ACTION: Explicit mobilization calls
 GENERAL: Truly neutral content only (weather, food, entertainment, moderate opinions)
 
 CRITICAL: If ANY problematic element is detected, choose the most specific category rather than 'general'. Be less conservative in classification."""
-
-def build_spanish_classification_prompt(text: str) -> str:
-    """Build simple Spanish classification prompt for generation models."""
-    categories = build_category_list_prompt()
-    return f"""Clasifica el siguiente texto en una de estas categorías: {categories}
+    
+    @staticmethod
+    def build_spanish_classification_prompt(text: str) -> str:
+        """Build simple Spanish classification prompt for generation models."""
+        categories = EnhancedPromptGenerator.build_category_list()
+        return f"""Clasifica el siguiente texto en una de estas categorías: {categories}
 
 Texto: "{text}"
 
 Responde SOLO con el nombre de la categoría más apropiada:"""
-
-@dataclass
-class PromptContext:
-    """Context information for generating targeted prompts."""
-    detected_categories: List[str]
-    political_topic: str
-    uncertainty_areas: List[str]
-
-class EnhancedPromptGenerator:
-    """
-    Generates sophisticated prompts for LLM analysis based on pattern analysis results.
-    Focuses on areas where pattern matching shows uncertainty.
-    """
     
-    def __init__(self):
-        self.base_context = self._initialize_spanish_context()
-        self.prompt_templates = self._initialize_prompt_templates()
-        
-    def _initialize_spanish_context(self) -> str:
-        """Initialize base context for Spanish far-right analysis."""
-        return """Eres un experto analista especializado en detectar contenido problemático en español, especialmente discurso de odio, desinformación y retórica de extrema derecha en el contexto político español."""
-    
-    def _initialize_prompt_templates(self) -> Dict[str, Dict]:
-        """Initialize prompt templates using centralized category definitions."""
-        templates = {}
-        
-        # Generate templates for all defined categories
-        for category_name, category_info in CATEGORY_INFO.items():
-            templates[category_name] = {
-                "system": category_info.system_prompt,
-                "focus": category_info.focus_area,
-                "questions": category_info.analysis_questions
-            }
-        
-        return templates
-        
-    def generate_prompt(self, 
-                       text: str, 
-                       category: str = Categories.GENERAL,
-                       context: PromptContext = None,
-                       complexity_level: str = "medium",
-                       model_type: str = "transformers") -> str:
+    @staticmethod
+    def build_gemini_analysis_prompt(text_content: str, is_video: bool = False) -> str:
         """
-        Generate a sophisticated prompt based on content category and context.
+        Create the analysis prompt for Gemini multimodal analysis based on media type.
         
         Args:
-            text: Content to analyze
-            category: Content category from Categories class
-            context: Analysis context with detected patterns
-            complexity_level: Prompt complexity (simple/medium/complex)
-            model_type: Target model type (transformers/ollama)
+            text_content: The text content accompanying the media
+            is_video: Whether the media is a video
+            
+        Returns:
+            Formatted analysis prompt for Gemini
         """
-        # Use general template if category not found
-        template = self.prompt_templates.get(category, self.prompt_templates[Categories.GENERAL])
+        media_type = "video" if is_video else "imagen"
         
-        # Build context-aware prompt
-        prompt_parts = [
-            template["system"],
-            "",
-            f"CONTENIDO A ANALIZAR:",
-            f'"{text}"',
-            ""
-        ]
-        
-        # Add context information to guide analysis
-        if context and context.detected_categories:
-            prompt_parts.extend([
-                f"PATRONES DETECTADOS: {', '.join(context.detected_categories)}",
-                ""
-            ])
-        
-        if context and context.political_topic and context.political_topic != "no_político":
-            prompt_parts.extend([
-                f"CONTEXTO POLÍTICO: {context.political_topic}",
-                ""
-            ])
-        
-        # Add uncertainty-focused questions for areas needing LLM insight
-        if context and context.uncertainty_areas:
-            prompt_parts.extend([
-                "ÁREAS DE INCERTIDUMBRE A CLARIFICAR:",
-                *[f"- {area}" for area in context.uncertainty_areas],
-                ""
-            ])
-        
-        # Add analysis instructions based on complexity
-        if complexity_level == "simple":
-            prompt_parts.extend([
-                f"Proporciona un {template['focus']} breve y directo.",
-                "Responde en 2-3 frases concisas."
-            ])
-        elif complexity_level == "complex":
-            prompt_parts.extend([
-                f"Realiza un {template['focus']} detallado respondiendo:",
-                *[f"- {q}" for q in template.get("questions", [])],
-                "",
-                "Proporciona un análisis extenso con ejemplos específicos del texto."
-            ])
-        else:  # medium
-            prompt_parts.extend([
-                f"Analiza el contenido enfocándote en {template['focus']}.",
-                "Responde de forma clara y estructurada en 4-6 frases."
-            ])
-        
-                # Add model-specific formatting
-        if model_type == "ollama":
-            prompt_parts.append("\nRespuesta:")
-        
-        return "\n".join(prompt_parts)
+        return f"""Analiza esta {media_type} y el texto adjunto que pertenecen al MISMO POST en una cuenta de Twitter/X para detectar contenido político de extrema derecha o desinformación.
+
+TEXTO DEL POST: "{text_content}"
+
+El contenido está en español y proviene de redes sociales. Evalúa si el post promueve o contiene:
+
+CONTEXTO DEL POST:
+- El texto y {media_type} son parte del mismo tweet/publicación en Twitter
+- El texto proporciona contexto adicional al contenido visual de la {media_type}
+
+ANÁLISIS REQUERIDO:
+1. {"Resumen del contenido visual del video" if is_video else "Descripción detallada del contenido visual de la imagen (¿Quiénes aparecen? ¿Qué están haciendo?)"}
+2. Análisis del texto adjunto para detectar:
+   - Discurso político de extrema derecha
+   - Teorías conspirativas
+   - Llamados a la acción política
+   - Ataques a instituciones democráticas
+   - Desinformación o fake news
+   - Retórica nacionalista o anti-inmigración
+3. Evaluación de la relación entre texto y {media_type}
+4. Clasificación por categorías: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general
+5. Nivel de credibilidad y sesgo político detectado
+
+IMPORTANTE: Responde completamente en español y sé específico sobre el contenido político español. Si reconoces personas públicas, identifícalas claramente."""
     
+    # ============================================================================
+    # INSTANCE METHODS FOR SOPHISTICATED PROMPTS
+    # ============================================================================
+
     def generate_classification_prompt(self, text: str, model_type: str = "ollama") -> str:
         """
         Generate enhanced step-by-step classification prompt for improved accuracy.
@@ -395,54 +372,3 @@ class EnhancedPromptGenerator:
         
         return "\n".join(prompt_parts)
 
-
-def create_context_from_analysis(analysis_results: Dict) -> PromptContext:
-    """
-    Create prompt context from analysis results.
-    Used by LLM pipeline for backwards compatibility.
-    """
-    # Handle different context formats
-    detected_categories = []
-    
-    # Check for detected_categories from enhanced analyzer
-    if 'detected_categories' in analysis_results:
-        detected_categories = analysis_results['detected_categories']
-    # Check for categories from pattern analysis
-    elif 'categories' in analysis_results:
-        detected_categories = analysis_results['categories']
-    # Fall back to single category
-    elif 'detected_category' in analysis_results:
-        detected_categories = [analysis_results['detected_category']]
-    
-    # Get political topic
-    political_topic = analysis_results.get('category', analysis_results.get('detected_category', 'general'))
-    
-    # Get uncertainty areas
-    uncertainty_areas = analysis_results.get('uncertainty_areas', [])
-    
-    return PromptContext(
-        detected_categories=detected_categories,
-        political_topic=political_topic,
-        uncertainty_areas=uncertainty_areas
-    )
-
-# Test function
-if __name__ == "__main__":
-    generator = EnhancedPromptGenerator()
-    
-    # Test context using centralized categories
-    test_context = PromptContext(
-        detected_categories=[Categories.HATE_SPEECH, Categories.FAR_RIGHT_BIAS],
-        political_topic='inmigración',
-        uncertainty_areas=['Nivel de amenaza real', 'Intención del autor']
-    )
-    
-    test_text = "Los musulmanes están invadiendo España y hay que pararlos ya"
-    
-    # Test all content categories using centralized definitions
-    test_categories = Categories.get_all_categories()
-    
-    for category in test_categories:
-        print(f"\n=== {category.upper()} ===")
-        prompt = generator.generate_prompt(test_text, category, test_context)
-        print(prompt[:200] + "..." if len(prompt) > 200 else prompt)

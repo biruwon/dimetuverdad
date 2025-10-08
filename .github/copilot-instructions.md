@@ -177,12 +177,18 @@ python quick_test.py --llm "Complex content requiring deep analysis"
    - If tests fail: **STOP and fix them before continuing**
    - Never proceed with additional changes while tests are failing
 
-2. **Test Identification by Module**:
-   - `analyzer/*.py` changes → Run `analyzer/tests/test_analyzer.py` and `analyzer/tests/test_analyzer_integration.py`
-   - `fetcher/*.py` changes → Run `fetcher/tests/test_*.py`
-   - `analyzer/prompts.py` or `analyzer/llm_models.py` → Run full analyzer tests + integration tests
-   - Database schema changes → Run all database tests (`fetcher/tests/test_db.py`)
+2. **Test Identification by Module** (Run Targeted Tests First):
+   - `analyzer/analyzer.py` changes → Run `pytest analyzer/tests/test_analyzer.py -v`
+   - `analyzer/gemini_multimodal.py` changes → Run `pytest analyzer/tests/test_gemini_multimodal.py -v`
+   - `analyzer/prompts.py` changes → Run `pytest analyzer/tests/test_prompts.py -v`
+   - `analyzer/llm_models.py` changes → Run `pytest analyzer/tests/test_analyzer.py -v` (uses LLM pipeline)
+   - `fetcher/db.py` changes → Run `pytest fetcher/tests/test_db.py -v`
+   - `fetcher/parsers.py` changes → Run `pytest fetcher/tests/test_parsers.py -v`
+   - `fetch_tweets.py` changes → Run `pytest fetcher/tests/test_fetch_tweets.py -v`
+   - Database schema changes → Run all database tests (`pytest fetcher/tests/test_db.py fetcher/tests/test_fetch_tweets.py -v`)
    - Cross-module changes → Run `./run_in_venv.sh test-all`
+   
+   **IMPORTANT**: Always run targeted tests first (faster feedback), then full test suite before commit
 
 3. **Test Failure Resolution**:
    - Read error messages carefully - they often indicate the exact issue
@@ -193,11 +199,14 @@ python quick_test.py --llm "Complex content requiring deep analysis"
    - Fix tests in the SAME work session as the code change
    - Never leave failing tests for "later" - they compound and become harder to fix
 
-4. **When to Run Full Test Suite**:
-   - Before any git commit
-   - After refactoring that touches multiple files
-   - When changing core interfaces or data structures
-   - After fixing test failures (to ensure no regressions)
+4. **When to Run Full Test Suite vs Targeted Tests**:
+   - **Targeted tests first**: Run module-specific tests immediately after changes for fast feedback
+   - **Full test suite required**:
+     - Before any git commit (mandatory)
+     - After refactoring that touches multiple files
+     - When changing core interfaces or data structures
+     - After fixing test failures (to ensure no regressions)
+   - **Example workflow**: Change `gemini_multimodal.py` → Run `pytest analyzer/tests/test_gemini_multimodal.py -v` (30s) → If passes, run full suite before commit
 
 5. **Test Success Criteria**:
    - All relevant tests must pass (100% pass rate for affected modules)
