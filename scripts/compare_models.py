@@ -27,16 +27,23 @@ if str(project_root) not in sys.path:
 from utils import paths
 
 from analyzer.llm_models import LLMModelConfig, EnhancedLLMPipeline
+from analyzer.analyzer import Analyzer
 from analyzer.categories import Categories
 
 @dataclass
 class TestExample:
     """Test example for model comparison."""
+    id: str
     text: str
-    expected_category: str
     category: str
     description: str
     far_right_score: float = 0.5
+    expected_category: str = None
+    
+    def __post_init__(self):
+        # Use category as expected_category if not provided
+        if self.expected_category is None:
+            self.expected_category = self.category
 
 @dataclass 
 class ModelResult:
@@ -218,14 +225,16 @@ class ModelComparator:
         start_time = time.time()
         
         try:
-            # Create analysis context
-            analysis_context = {
-                'far_right_score': example.far_right_score,
-                'category': example.category
-            }
+            # Create Analyzer instance with the specific LLM pipeline
+            analyzer = Analyzer(llm_pipeline=pipeline)
             
-            # Run analysis
-            result = pipeline.analyze_content(example.text, analysis_context)
+            # Run analysis using Analyzer.analyze_content with fake tweet data
+            result = analyzer.analyze_content(
+                tweet_id=f"test_{example.id}",
+                tweet_url=f"https://x.com/test/status/{example.id}",
+                username="test_user",
+                content=example.text
+            )
             processing_time = time.time() - start_time
             
             return ModelResult(
@@ -234,8 +243,8 @@ class ModelComparator:
                 example_id=example.id,
                 processing_time=processing_time,
                 success=True,
-                llm_explanation=result.get('llm_explanation', ''),
-                llm_categories=result.get('llm_categories', [])
+                llm_explanation=result.llm_explanation,
+                llm_categories=[result.category] if result.category else []
             )
         except Exception as e:
             processing_time = time.time() - start_time

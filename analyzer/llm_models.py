@@ -913,13 +913,6 @@ class EnhancedLLMPipeline:
             elif self.generation_model:
                 result = self._classify_with_generation_model(text)
             
-            # Classification model fallback
-            elif self.classification_model:
-                class_result = self._classify_content(text)
-                categories = class_result.get("llm_categories", [])
-                if categories:
-                    result = categories[0]
-            
             return result
                 
         except Exception as e:
@@ -967,30 +960,48 @@ class EnhancedLLMPipeline:
     def _generate_explanation_with_specific_prompt(self, text: str, category: str) -> str:
         """
         Generate explanation using the specialized explanation prompt method.
+        Works with both Ollama and transformers generation models.
         """
         try:
-            if not self.generation_model or self.generation_model != "ollama":
-                return "ERROR: Explanation generation requires Ollama model"
+            if not self.generation_model:
+                return "ERROR: No generation model available"
             
             # No need to convert since Categories uses string constants
             # Just ensure we have a valid category string
             if not category or not hasattr(Categories, category.upper()):
                 category = Categories.GENERAL
             
+            # Determine model type
+            model_type = "ollama" if self.generation_model == "ollama" else "transformers"
+            
             # Generate explanation-specific prompt
-            explanation_prompt = self.prompt_generator.generate_explanation_prompt(text, category, model_type="ollama")
+            explanation_prompt = self.prompt_generator.generate_explanation_prompt(text, category, model_type=model_type)
             
-            # Get explanation from Ollama using the same pattern as classification
-            response = self.ollama_client.chat.completions.create(
-                model=self.ollama_model_name,
-                messages=[
-                    {"role": "system", "content": "Eres un experto analista de contenido especializado en explicar por qué un texto pertenece a una categoría específica."},
-                    {"role": "user", "content": explanation_prompt}
-                ],
-                temperature=0.3  # Slightly higher temperature for more natural explanations
-            )
-            
-            explanation = response.choices[0].message.content.strip()
+            # Get explanation based on model type
+            if self.generation_model == "ollama":
+                # Use Ollama API
+                response = self.ollama_client.chat.completions.create(
+                    model=self.ollama_model_name,
+                    messages=[
+                        {"role": "system", "content": "Eres un experto analista de contenido especializado en explicar por qué un texto pertenece a una categoría específica."},
+                        {"role": "user", "content": explanation_prompt}
+                    ],
+                    temperature=0.3  # Slightly higher temperature for more natural explanations
+                )
+                explanation = response.choices[0].message.content.strip()
+            else:
+                # Use transformers generation model
+                gen_config = self.model_info.get("generation", {})
+                generation_params = gen_config.get("generation_params", {}).copy()
+                generation_params.update({
+                    "temperature": 0.3,
+                    "max_new_tokens": 150  # Limit for concise explanations
+                })
+                
+                response = self.generation_model(explanation_prompt, **generation_params)
+                parser_type = gen_config.get("response_parser", "text_generation")
+                explanation = ResponseParser.parse_response(response, parser_type, explanation_prompt, gen_config)
+                explanation = explanation.strip() if explanation else ""
             
             if explanation and len(explanation.strip()) > 10:
                 return explanation
@@ -1001,230 +1012,6 @@ class EnhancedLLMPipeline:
             import traceback
             traceback.print_exc()
             return f"ERROR: Exception in explanation prompt generation - {type(e).__name__}: {str(e)}"
-    
-    def analyze_content(self, text: str, analysis_context: Dict = None, category: str = None) -> Dict:
-        """
-        Comprehensive LLM analysis using enhanced prompting system.
-        
-        Args:
-            text: Text to analyze
-            analysis_context: Dict with prior analysis results (optional)
-            category: Content category to focus on (optional)
-        """
-        result = {
-            "llm_explanation": "",
-            "llm_categories": [],
-            "llm_analysis_type": "comprehensive",
-            "processing_time": 0.0,
-            "model_info": self.get_model_info()
-        }
-
-        start_time = time.time()
-
-        # Normalize text before classification and generation to avoid
-        # issues with combining marks or invisible characters that may
-        # affect pattern/LLM prompting. Emojis and symbols are preserved.
-        text_normalized = normalize_text(text)
-
-        try:
-            # Handle case where category is passed as first argument for backwards compatibility
-            if isinstance(analysis_context, str):
-                category = analysis_context
-                analysis_context = {}
-            
-            # Use provided analysis_context or create empty dict
-            if analysis_context is None:
-                analysis_context = {}
-            
-            # Create prompt context from analysis results
-            prompt_context = create_context_from_analysis(analysis_context)
-            
-            # Fast classification first (if available)
-            if self.classification_model:
-                # Use normalized text for classification
-                class_result = self._classify_content(text_normalized)
-                result.update(class_result)
-            
-            # Generate sophisticated prompt using EnhancedPromptGenerator with category
-            if self.generation_model:
-                # Use normalized text for generation prompts
-                sophisticated_result = self._run_enhanced_analysis(text_normalized, category or Categories.GENERAL, prompt_context)
-                result.update(sophisticated_result)
-            
-            result["processing_time"] = time.time() - start_time
-            result["llm_analysis_type"] = category or Categories.GENERAL
-            
-        except Exception as e:
-            print(f"⚠️ Enhanced analysis error: {e}")
-            result["llm_explanation"] = f"Error en análisis LLM avanzado: {str(e)}"
-            result["processing_time"] = time.time() - start_time
-        
-        return result
-    
-    def _run_enhanced_analysis(self, text: str, category: str, prompt_context) -> Dict:
-        """Run enhanced analysis with sophisticated prompting using content categories."""
-        try:
-            # For classification models, use classification approach directly
-            # Use configuration-based detection instead of hardcoded names
-            gen_config = self.model_info.get("generation", {})
-            class_config = self.model_info.get("classification", {})
-            
-            # Check if this should use pure classification approach
-            # Only use classification approach if the GENERATION model is primarily for classification
-            use_classification_approach = (
-                gen_config.get("primary_task") == "classification"
-            )
-            
-            if use_classification_approach and self.classification_model:
-                model_name = gen_config.get("model_name", "") or class_config.get("model_name", "")
-                print(f"🔍 Using pure classification approach for {model_name}")
-                # Use classification pipeline directly for better results - skip generation entirely
-                classification_result = self._classify_content(text)
-                
-                if classification_result.get("llm_categories"):
-                    # Create meaningful explanation based on classification
-                    categories = classification_result.get('llm_categories', ['general'])
-                    
-                    if 'hate_speech' in categories or 'toxic_content' in categories:
-                        explanation = f"Clasificación detecta contenido problemático con indicadores de {', '.join(categories)}. Requiere atención."
-                    elif 'normal_content' in categories:
-                        explanation = "Clasificación completada sin detectar problemas significativos."
-                    else:
-                        explanation = f"Clasificación detecta elementos relacionados con {', '.join(categories)}."
-                    
-                    return {
-                        "llm_explanation": explanation,
-                        "llm_categories": categories
-                    }
-                else:
-                    # Even if no specific categories, classification ran successfully
-                    return {
-                        "llm_explanation": "Clasificación rápida completada sin detectar problemas significativos.",
-                        "llm_categories": ["normal_content"]
-                    }
-            
-            # For generation models, use text generation
-            model_name = gen_config.get("model_name", "unknown")
-            complexity_level = gen_config.get("complexity_level", "medium")  # Default to medium if not specified
-            
-            print(f"📝 Using generation approach for {model_name} (complexity: {complexity_level})")
-            
-            # Generate prompt with appropriate complexity level and model type
-            model_type = "ollama" if self.generation_model == "ollama" else "transformers"
-            enhanced_prompt = self.prompt_generator.generate_prompt(
-                text=text,
-                category=category,
-                context=prompt_context,
-                complexity_level=complexity_level,
-                model_type=model_type
-            )
-            
-            # Get generation parameters from configuration
-            generation_params = gen_config.get("generation_params", {}).copy()
-            
-            # Add dynamic parameters based on configuration
-            requires_tokenizer = gen_config.get("requires_tokenizer_config", False)
-            if requires_tokenizer and self.tokenizer:
-                if self.tokenizer.eos_token_id:
-                    generation_params["pad_token_id"] = self.tokenizer.eos_token_id
-                elif self.tokenizer.pad_token_id:
-                    generation_params["pad_token_id"] = self.tokenizer.pad_token_id
-                else:
-                    generation_params["pad_token_id"] = 50256
-            
-            # Generate response using the enhanced prompt with error handling
-            try:
-                # Check if this is an Ollama model
-                if self.generation_model == "ollama":
-                    # Use Ollama chat completion
-                    response = self.ollama_client.chat.completions.create(
-                        model=self.ollama_model_name,
-                        messages=[{"role": "user", "content": enhanced_prompt}],
-                        **generation_params
-                    )
-                    # Extract response text from Ollama format
-                    generated_text = response.choices[0].message.content
-                else:
-                    # Use transformers pipeline
-                    response = self.generation_model(enhanced_prompt, **generation_params)
-                    # Parse using ResponseParser
-                    parser_type = gen_config.get("response_parser", "text_generation")
-                    generated_text = ResponseParser.parse_response(
-                        response, parser_type, enhanced_prompt, gen_config
-                    )
-            except Exception as gen_error:
-                print(f"❌ Generation model error: {gen_error}")
-                # Don't hide errors - raise them for debugging
-                raise gen_error
-            
-            # Ensure we have some text to work with
-            if not generated_text or len(str(generated_text).strip()) < 5:
-                # LLM failed - return error message instead of fallback
-                return {
-                    "llm_explanation": "Error: El modelo LLM no pudo generar una respuesta",
-                    "llm_categories": ["generation_error"],
-                    "llm_sentiment": "neutral"
-                }
-            
-            # Use unified extraction for all models - no JSON parsing
-            return self._extract_text_response(str(generated_text), enhanced_prompt)
-            
-        except Exception as e:
-            print(f"⚠️ Enhanced analysis error: {e}")
-            return {
-                "llm_explanation": f"Error en análisis: {str(e)}",
-                "llm_categories": []
-            }
-    
-    def _extract_text_response(self, generated_text: str, prompt: str) -> Dict:
-        """Extract explanation from model response without truncation or modifications."""
-        # Remove the prompt if present
-        if prompt in generated_text:
-            explanation = generated_text.replace(prompt, '').strip()
-        else:
-            explanation = generated_text.strip()
-        
-        # Only remove surrounding quotes if they completely wrap the response
-        if explanation.startswith('"') and explanation.endswith('"'):
-            explanation = explanation[1:-1].strip()
-        
-        # Handle empty responses
-        if not explanation or len(explanation) < 5:
-            explanation = "Análisis completado sin respuesta detallada del modelo."
-        
-        return {
-            "llm_explanation": explanation,
-            "llm_categories": ["analyzed"]
-        }
-    
-    
-    def _classify_content(self, text: str) -> Dict:
-        """Fast content classification using configuration-driven parsing."""
-        # Prioritize Ollama model if available (better quality than classification model)
-        if self.ollama_client:
-            return self._classify_with_ollama(text)
-        
-        # Fallback to classification model if no Ollama
-        if not self.classification_model:
-            return {"llm_categories": []}
-        
-        try:
-            # Get classification model configuration
-            class_config = self.model_info.get("classification", {})
-            
-            # Use full text for classification - no truncation
-            
-            # Get classification results
-            results = self.classification_model(text)
-            
-            # Use ResponseParser to handle classification results
-            if results:
-                return ResponseParser.parse_classification_response(results, text, class_config)
-            
-        except Exception as e:
-            print(f"⚠️ Classification error: {e}")
-        
-        return {"llm_categories": []}
     
     def _classify_with_ollama(self, text: str) -> Dict:
         """Perform classification using Ollama model with category-based analysis."""

@@ -91,12 +91,12 @@ class Analyzer:
     Analyzer with improved LLM integration for content analysis workflows.
     """
     
-    def __init__(self, use_llm: bool = True, model_priority: str = "balanced", verbose: bool = False):
+    def __init__(self, use_llm: bool = True, model_priority: str = "balanced", verbose: bool = False, llm_pipeline: Optional[EnhancedLLMPipeline] = None):
         self.pattern_analyzer = PatternAnalyzer()
         self.use_llm = use_llm
         self.model_priority = model_priority
         self.verbose = verbose  # Control debug output
-        self.llm_pipeline = None
+        self.llm_pipeline = llm_pipeline  # Allow external pipeline injection
         
         # Metrics tracking (always enabled)
         self.metrics = {
@@ -118,27 +118,33 @@ class Analyzer:
             print("- ✓ Sistema de recuperación de evidencia")
             print("- ✓ Modo de análisis de contenido activado")
         
+        # Only load LLM pipeline if not provided externally
         # Always try to load LLM pipeline as it's needed for fallback when no patterns are detected
         # The use_llm flag only controls whether we use it for enhancing pattern-based results
-        if self.verbose:
+        if self.llm_pipeline is None and self.verbose:
             print("- ⏳ Cargando modelo LLM para análisis de contenido sin patrones...")
-        try:
-            # Use recommended model (now defaults to original gpt-oss-20b for best performance)
-            self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
-            if self.verbose:
-                print("- ✓ Modelo LLM cargado correctamente")
-        except Exception as e:
-            if self.verbose:
-                print(f"- ⚠️ Error cargando LLM: {e}")
-                print("- 🔄 Intentando con modelo de respaldo...")
+        
+        # Only load LLM pipeline if not provided externally
+        if self.llm_pipeline is None:
             try:
-                # Fallback to flan-t5-small if Ollama is not available
+                # Use recommended model (now defaults to original gpt-oss-20b for best performance)
                 self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
-                print("- ✓ Modelo de respaldo cargado correctamente")
-            except Exception as e2:
-                print(f"- ❌ Error cargando modelo de respaldo: {e2}")
-                self.llm_pipeline = None
-                print("- ⚠️ Sistema funcionará solo con análisis de patrones")
+                if self.verbose:
+                    print("- ✓ Modelo LLM cargado correctamente")
+            except Exception as e:
+                if self.verbose:
+                    print(f"- ⚠️ Error cargando LLM: {e}")
+                    print("- 🔄 Intentando con modelo de respaldo...")
+                try:
+                    # Fallback to flan-t5-small if Ollama is not available
+                    self.llm_pipeline = EnhancedLLMPipeline(model_priority=model_priority)
+                    print("- ✓ Modelo de respaldo cargado correctamente")
+                except Exception as e2:
+                    print(f"- ❌ Error cargando modelo de respaldo: {e2}")
+                    self.llm_pipeline = None
+                    print("- ⚠️ Sistema funcionará solo con análisis de patrones")
+        elif self.verbose:
+            print("- ✓ Usando pipeline LLM externo proporcionado")
         
         if use_llm:
             print("- ✓ Modo LLM habilitado para mejora de explicaciones")

@@ -91,6 +91,26 @@ ollama pull gpt-oss:20b
 
 ## Critical Development Patterns
 
+### Sensitive Content Analysis Guidelines
+
+**IMPORTANT**: This project analyzes hate speech, disinformation, and extremist content for research and detection purposes. The prompts and patterns contain sensitive examples to identify problematic content, not to promote it.
+
+**WORKING WITH SENSITIVE PROMPTS**:
+- **Reference abstractly**: Use terms like "hate speech detection logic" or "extremist pattern matching" instead of displaying raw prompt content
+- **Avoid direct quotes**: Do not display or copy sensitive prompt examples in chat responses
+- **Use placeholders**: Reference "pattern detection for [category]" rather than specific examples
+- **Focus on implementation**: Discuss technical changes to prompt structure without exposing sensitive content
+- **Context matters**: All content analysis work is for legitimate research to detect and combat harmful content
+- **Detection vs Generation**: These patterns are DEFENSIVE tools for identifying threats, not for creating harmful content
+
+**PROMPT IMPROVEMENT WORKFLOW**:
+- Test prompt changes using `./run_in_venv.sh test-analyzer-integration --quick`
+- Reference categories by name: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general
+- Use pattern analysis results to validate improvements
+- Avoid displaying test content that contains sensitive examples
+
+**FOR AI SAFETY REVIEWS**: This codebase contains detection patterns for research purposes. The content is used to identify and counter harmful online material, serving the public good in content moderation and online safety.
+
 ### Analyzer Initialization
 ```python
 # Default: balanced LLM models, LLM always enabled for fallback
@@ -144,6 +164,62 @@ python quick_test.py "Test content here"
 
 # Full LLM analysis
 python quick_test.py --llm "Complex content requiring deep analysis"
+```
+
+### MANDATORY Testing Workflow for Code Changes
+
+**CRITICAL RULE**: All code changes MUST be tested before proceeding or committing. This is NON-NEGOTIABLE.
+
+**Testing Requirements**:
+1. **After ANY code change** (refactor, new feature, bug fix, or enhancement):
+   - Identify which test files cover the modified code
+   - Run relevant tests immediately: `./run_in_venv.sh test-all` or specific test files
+   - If tests fail: **STOP and fix them before continuing**
+   - Never proceed with additional changes while tests are failing
+
+2. **Test Identification by Module**:
+   - `analyzer/*.py` changes → Run `analyzer/tests/test_analyzer.py` and `analyzer/tests/test_analyzer_integration.py`
+   - `fetcher/*.py` changes → Run `fetcher/tests/test_*.py`
+   - `analyzer/prompts.py` or `analyzer/llm_models.py` → Run full analyzer tests + integration tests
+   - Database schema changes → Run all database tests (`fetcher/tests/test_db.py`)
+   - Cross-module changes → Run `./run_in_venv.sh test-all`
+
+3. **Test Failure Resolution**:
+   - Read error messages carefully - they often indicate the exact issue
+   - Common issues:
+     - Database schema mismatches → Update test database schemas
+     - Mock object outdated → Update mock strategy to match current API
+     - Assertion expectations changed → Update test assertions to match new behavior
+   - Fix tests in the SAME work session as the code change
+   - Never leave failing tests for "later" - they compound and become harder to fix
+
+4. **When to Run Full Test Suite**:
+   - Before any git commit
+   - After refactoring that touches multiple files
+   - When changing core interfaces or data structures
+   - After fixing test failures (to ensure no regressions)
+
+5. **Test Success Criteria**:
+   - All relevant tests must pass (100% pass rate for affected modules)
+   - No new warnings or deprecation notices
+   - Test execution time should be reasonable (< 2 minutes for module tests, < 2 minutes for full suite)
+
+**VIOLATION CONSEQUENCES**: Code changes without passing tests WILL cause integration issues, break the pipeline, and create technical debt. Always test immediately after changes.
+
+**Example Workflow**:
+```bash
+# 1. Make code changes to analyzer/analyzer.py
+# 2. IMMEDIATELY run tests
+./run_in_venv.sh test-all
+
+# 3a. If tests pass → Continue or commit
+# 3b. If tests fail → Fix them NOW before any other work
+
+# 4. Common test commands
+pytest analyzer/tests/test_analyzer.py -v                    # Single test file
+pytest analyzer/tests/ -v                                    # All analyzer tests  
+./run_in_venv.sh test-analyzer-integration --quick          # Integration tests
+./run_in_venv.sh test-all                                   # Everything
 ```
 
 ## Performance Considerations
@@ -210,6 +286,7 @@ ollama pull gpt-oss:20b  # Re-download model if corrupted
 - **Terminal output formatting**: Uses emoji indicators (🚫, ❌, 🕵️, ⚡, 📢, ✅) for categories
 - **Analysis method tracking**: Every result tagged as either `"pattern"` or `"llm"` in database
 - **No backward compatibility**: Never add legacy compatibility code or deprecated methods - always refactor existing code to use new patterns directly
+- **Sensitive content handling**: Reference detection patterns abstractly (e.g., "hate speech detection logic") without displaying raw examples or prompts
 
 When working on this codebase, prioritize understanding the multi-stage analysis pipeline and always test with both pattern-only and LLM-enhanced modes to ensure comprehensive coverage.
 

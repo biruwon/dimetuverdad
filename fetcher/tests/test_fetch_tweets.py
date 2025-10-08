@@ -27,7 +27,16 @@ def setup_temp_db():
             tweet_timestamp TEXT,
             post_type TEXT DEFAULT 'original',
             original_author TEXT,
-            original_tweet_id TEXT
+            original_tweet_id TEXT,
+            media_links TEXT,
+            media_count INTEGER DEFAULT 0,
+            media_types TEXT,
+            engagement_likes INTEGER DEFAULT 0,
+            engagement_retweets INTEGER DEFAULT 0,
+            engagement_replies INTEGER DEFAULT 0,
+            external_links TEXT,
+            original_content TEXT,
+            is_pinned INTEGER DEFAULT 0
         )
     ''')
     conn.commit()
