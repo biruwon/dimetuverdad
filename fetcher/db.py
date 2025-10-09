@@ -8,6 +8,46 @@ def get_connection(timeout: float = 10.0) -> sqlite3.Connection:
     return sqlite3.connect(DB_PATH, timeout=timeout)
 
 
+def delete_account_data(username: str) -> Dict[str, int]:
+    """
+    Delete all data for a specific account from both tweets and content_analyses tables.
+    
+    Args:
+        username: The username to delete data for
+        
+    Returns:
+        Dict with counts of deleted records: {'tweets': count, 'analyses': count}
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    try:
+        # Count existing records before deletion
+        cur.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,))
+        tweets_count = cur.fetchone()[0]
+        
+        cur.execute("SELECT COUNT(*) FROM content_analyses WHERE username = ?", (username,))
+        analyses_count = cur.fetchone()[0]
+        
+        # Delete from content_analyses first (may have foreign key constraints)
+        cur.execute("DELETE FROM content_analyses WHERE username = ?", (username,))
+        
+        # Delete from tweets table
+        cur.execute("DELETE FROM tweets WHERE username = ?", (username,))
+        
+        conn.commit()
+        print(f"✅ Deleted {tweets_count} tweets and {analyses_count} analyses for @{username}")
+        
+        return {'tweets': tweets_count, 'analyses': analyses_count}
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Error deleting data for @{username}: {e}")
+        raise
+    finally:
+        conn.close()
+
+
 def get_last_tweet_timestamp(username: str) -> Optional[str]:
     try:
         conn = get_connection()

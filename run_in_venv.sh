@@ -53,9 +53,10 @@ fetch(){
   # Use portable date formatting (macOS/BSD date doesn't support --iso-8601)
   echo "# [$(date -u +"%Y-%m-%dT%H:%M:%SZ")] RUN: $PY $ROOT_DIR/fetcher/fetch_tweets.py $*" >> "$LOG_FILE"
 
-  # Execute Python and tee stdout/stderr to the log so we have a persistent record
+  # Execute Python with unbuffered output and tee stdout/stderr to the log so we have a persistent record
   # Use exec so PID is the Python process
-  exec "$PY" "$ROOT_DIR/fetcher/fetch_tweets.py" "$@" 2>&1 | tee -a "$LOG_FILE"
+  export PYTHONUNBUFFERED=1
+  exec "$PY" -u "$ROOT_DIR/fetcher/fetch_tweets.py" "$@" 2>&1 | tee -a "$LOG_FILE"
 }
 
 analyze_db(){

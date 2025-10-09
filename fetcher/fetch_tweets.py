@@ -102,9 +102,9 @@ def random_scroll_pattern(page, deep_scroll=False):
     human_delay(1.5, 4.0)
 
 def login_and_save_session(page, username, password):
-    """Enhanced login with better anti-detection measures."""
+    """Login with better anti-detection measures."""
     
-    print("🔐 Starting enhanced login process...")
+    print("🔐 Starting login process...")
     
     # Advanced stealth setup
     page.route("**/*", lambda route, request: (
@@ -183,18 +183,18 @@ def login_and_save_session(page, username, password):
         return False
 
 def init_db():
-    """Initialize database with enhanced schema."""
+    """Initialize database with schema."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
-    # The enhanced schema is already created by migrate_tweets_schema.py
+    # The schema is already created by migrate_tweets_schema.py
     # Just verify it exists
     c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tweets'")
     if not c.fetchone():
-        print("❌ Enhanced tweets table not found! Run migrate_tweets_schema.py first.")
+        print("❌ Tweets table not found! Run migrate_tweets_schema.py first.")
         raise Exception("Database not properly initialized")
     
-    print("✅ Enhanced database schema ready")
+    print("✅ Database schema ready")
     # Ensure scrape_errors table exists for logging errors during scraping
     c.execute("""
     CREATE TABLE IF NOT EXISTS scrape_errors (
@@ -237,45 +237,88 @@ def save_account_profile_info(conn, username: str, profile_pic_url: str = None):
     except Exception as e:
         print(f"  ❌ Error saving profile info for @{username}: {e}")
 
-def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_last: bool, oldest_timestamp: Optional[str], profile_pic_url: Optional[str]) -> List[Dict]:
+def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_last: bool, oldest_timestamp: Optional[str], profile_pic_url: Optional[str], conn) -> List[Dict]:
     collected_tweets = []
     seen_tweet_ids = set()
-    scroll_attempts = 0
-    max_scroll_attempts = 200  # Much higher limit for finding older tweets
+    consecutive_empty_scrolls = 0
+    max_consecutive_empty = 15  # Stop after 15 consecutive failed scrolls
     last_height = 0
-    consecutive_old_tweets = 0  # Track consecutive existing/covered tweets
-    max_consecutive_old = 100   # Much higher threshold to keep trying
-    found_older_tweets_yet = False  # Track if we've found any older tweets
+    tweets_found_this_cycle = 0
+    last_tweet_count = 0
+    saved_count = 0  # Track actually saved tweets
     
-    print(f"🔍 Collecting up to {max_tweets} tweets...")
+    if max_tweets == float('inf'):
+        print(f"🔍 Collecting unlimited tweets...")
+    else:
+        print(f"🔍 Collecting up to {max_tweets} tweets...")
+    
+    def try_recovery_strategies(page, attempt_number: int) -> bool:
+        """Try different recovery strategies when Twitter stops serving content."""
+        strategies = [
+            ("refresh_page", lambda: page.reload(wait_until="domcontentloaded")),
+            ("clear_cache", lambda: page.evaluate("localStorage.clear(); sessionStorage.clear();")),
+            ("jump_to_bottom", lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)")),
+            ("force_reload_tweets", lambda: page.evaluate("window.location.reload(true)")),
+            ("random_scroll_pattern", lambda: page.evaluate(f"window.scrollBy(0, {1000 + random.randint(500, 2000)})")),
+        ]
+        
+        if attempt_number <= len(strategies):
+            strategy_name, strategy_func = strategies[attempt_number - 1]
+            try:
+                print(f"    🔧 Trying recovery strategy {attempt_number}: {strategy_name}")
+                strategy_func()
+                human_delay(3.0, 6.0)  # Longer delay for recovery
+                
+                # Check if we can find tweet elements after recovery
+                articles = page.query_selector_all('article[data-testid="tweet"]')
+                if articles:
+                    print(f"    ✅ Recovery successful: found {len(articles)} articles")
+                    return True
+                else:
+                    print(f"    ❌ Recovery failed: no articles found")
+                    return False
+            except Exception as e:
+                print(f"    ⚠️ Recovery strategy {strategy_name} failed: {e}")
+                return False
+        
+        return False
     
     def event_scroll_cycle(page, iteration):
-        # Alternate between deep jumps, keyboard-like PageDown, and micro scrolls
+        # More varied scrolling patterns to avoid detection
+        scroll_patterns = [
+            lambda: page.evaluate("window.scrollBy(0, 800 + Math.random() * 600)"),  # Normal scroll
+            lambda: page.keyboard.press('PageDown'),  # Keyboard scroll
+            lambda: page.evaluate("window.scrollBy(0, 1200 + Math.random() * 800)"),  # Larger scroll
+            lambda: page.evaluate("window.scrollBy(0, 400 + Math.random() * 300)"),  # Smaller scroll
+            lambda: page.evaluate("window.scrollTo(0, window.scrollY + 1000)"),  # Absolute positioning
+        ]
+        
         try:
-            if iteration % 7 == 0:
-                # occasional deep jump
-                page.evaluate("window.scrollBy(0, 1600 + Math.random() * 800)")
-            elif iteration % 5 == 0:
-                # subtle keyboard-like page down
-                page.keyboard.press('PageDown')
-            else:
-                # micro wheel scroll simulation
-                page.evaluate("window.scrollBy(0, 600 + Math.random() * 400)")
+            # Vary the pattern based on iteration
+            pattern_index = iteration % len(scroll_patterns)
+            scroll_patterns[pattern_index]()
         except Exception:
-            # Fall back to JS scroll if keyboard not permitted
+            # Fallback to basic scroll
             try:
                 page.evaluate("window.scrollBy(0, 800 + Math.random() * 400)")
             except Exception:
                 pass
-        human_delay(0.8, 2.2)
+        
+        # Variable delays to seem more human
+        if iteration % 10 == 0:
+            human_delay(2.0, 4.0)  # Longer pause occasionally
+        else:
+            human_delay(0.8, 2.2)
 
     iteration = 0
 
-    while len(collected_tweets) < max_tweets and scroll_attempts < max_scroll_attempts:
+    while len(collected_tweets) < max_tweets and consecutive_empty_scrolls < max_consecutive_empty:
         # Find all tweet articles on current page
         articles = page.query_selector_all('article[data-testid="tweet"], [data-testid="tweet"]')
         
         print(f"  📄 Found {len(articles)} tweet elements on page")
+        
+        tweets_found_this_cycle = 0
         
         for i, article in enumerate(articles):
             if len(collected_tweets) >= max_tweets:
@@ -347,16 +390,9 @@ def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_l
 
                     if not needs_update:
                         print(f"    ⏭️ Skipping existing tweet ({tweet_id})")
-                        consecutive_old_tweets += 1
-                        # Be very patient - only stop if we've tried a LOT and found no older tweets
-                        stop_threshold = max_consecutive_old if found_older_tweets_yet else max_consecutive_old * 3
-                        if consecutive_old_tweets >= stop_threshold:
-                            reason = "consecutive existing tweets"
-                            print(f"    🛑 Seen {consecutive_old_tweets} {reason} - stopping")
-                            return collected_tweets
                         continue
 
-                    # We need to update existing row: build tweet_data and append so main will call save_enhanced_tweet which will perform the update
+                    # We need to update existing row: build tweet_data and save immediately
                     tweet_data = {
                         'tweet_id': tweet_id,
                         'tweet_url': tweet_url,
@@ -378,28 +414,26 @@ def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_l
                         'parent_tweet_id': post_analysis.get('reply_to_tweet_id') or post_analysis.get('original_tweet_id')
                     }
 
+                    # Save update immediately
+                    try:
+                        saved = fetcher_db.save_tweet(conn, tweet_data)
+                        if saved:
+                            saved_count += 1
+                            print(f"  🔁 Updated [{saved_count:2d}] {post_analysis['post_type']}: {tweet_id}")
+                        else:
+                            print(f"  ⏭️ Update failed or unchanged: {tweet_id}")
+                    except Exception as save_e:
+                        print(f"  ❌ Error updating tweet {tweet_id}: {save_e}")
+
                     collected_tweets.append(tweet_data)
                     seen_tweet_ids.add(tweet_id)
-                    print(f"  🔁 Queued existing tweet for update: {tweet_id} (will update DB row)")
+                    tweets_found_this_cycle += 1
                     continue
 
                 # Check if we should skip this tweet because it's still in our scraped range
                 if resume_from_last and tweet_timestamp and fetcher_parsers.should_skip_existing_tweet(tweet_timestamp, oldest_timestamp):
                     print(f"    ⏭️ Skipping already covered tweet ({tweet_timestamp})")
-                    consecutive_old_tweets += 1
-                    # Be very patient - only stop if we've tried a LOT and found no older tweets
-                    stop_threshold = max_consecutive_old if found_older_tweets_yet else max_consecutive_old * 3
-                    if consecutive_old_tweets >= stop_threshold:
-                        reason = "consecutive covered tweets"
-                        print(f"    🛑 Seen {consecutive_old_tweets} {reason} - stopping")
-                        return collected_tweets
                     continue
-
-                # Reset counter and mark that we found a collectible tweet
-                consecutive_old_tweets = 0
-                if not found_older_tweets_yet:
-                    found_older_tweets_yet = True
-                    print(f"    🎉 Found first older tweet! Continuing to collect...")
 
                 # Build comprehensive tweet data
                 tweet_data = {
@@ -433,10 +467,21 @@ def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_l
                     'parent_tweet_id': post_analysis.get('reply_to_tweet_id') or post_analysis.get('original_tweet_id')
                 }
                 
+                # Save tweet immediately instead of accumulating in memory
+                try:
+                    saved = fetcher_db.save_tweet(conn, tweet_data)
+                    if saved:
+                        saved_count += 1
+                        print(f"  💾 Saved [{saved_count:2d}] {post_analysis['post_type']}: {tweet_id}")
+                    else:
+                        print(f"  ⏭️ Not saved (duplicate/unchanged): {tweet_id}")
+                except Exception as save_e:
+                    print(f"  ❌ Error saving tweet {tweet_id}: {save_e}")
+                
+                # Keep tweet in collected list for compatibility (but we've already saved it)
                 collected_tweets.append(tweet_data)
                 seen_tweet_ids.add(tweet_id)
-                
-                print(f"  ✅ [{len(collected_tweets):2d}/{max_tweets}] {post_analysis['post_type']}: {tweet_id}")
+                tweets_found_this_cycle += 1
                 
             except Exception as e:
                 # Log processing error to DB for later inspection
@@ -457,76 +502,431 @@ def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_l
                 print(f"    ❌ Error processing tweet {i+1}: {e}")
                 continue
         
-        # Human-like scrolling with event-driven cycles for finding older tweets
+        # Track progress and handle Twitter content limits
+        current_tweet_count = len(collected_tweets)
+        
+        # Human-like scrolling with intelligent stopping
         if len(collected_tweets) < max_tweets:
-            print(f"  📜 Scrolling for more tweets... ({len(collected_tweets)}/{max_tweets})")
+            if max_tweets == float('inf'):
+                print(f"  📜 Scrolling for more tweets... ({current_tweet_count}/∞) - Found {tweets_found_this_cycle} this cycle")
+            else:
+                print(f"  📜 Scrolling for more tweets... ({current_tweet_count}/{max_tweets}) - Found {tweets_found_this_cycle} this cycle")
+            
+            # Track consecutive empty scrolls
+            if tweets_found_this_cycle == 0:
+                consecutive_empty_scrolls += 1
+                print(f"    ⚠️ No new tweets found ({consecutive_empty_scrolls}/{max_consecutive_empty} consecutive empty cycles)")
+                
+                # Try recovery strategies when we hit empty cycles
+                if consecutive_empty_scrolls % 5 == 0 and consecutive_empty_scrolls <= 10:
+                    recovery_attempt = consecutive_empty_scrolls // 5
+                    if try_recovery_strategies(page, recovery_attempt):
+                        consecutive_empty_scrolls = max(0, consecutive_empty_scrolls - 3)  # Reward successful recovery
+                        print(f"    🔄 Recovery successful, continuing...")
+                    else:
+                        print(f"    ❌ Recovery failed, consecutive empty count: {consecutive_empty_scrolls}")
+            else:
+                consecutive_empty_scrolls = 0  # Reset on success
+                print(f"    ✅ Found {tweets_found_this_cycle} new tweets, continuing...")
+            
             iteration += 1
             try:
-                event_scroll_cycle(page, iteration)
+                # Use more aggressive scrolling when we're not finding tweets
+                if consecutive_empty_scrolls > 5:
+                    print(f"    🚀 Using aggressive scrolling (attempt {consecutive_empty_scrolls})")
+                    page.evaluate("window.scrollBy(0, 2000 + Math.random() * 1000)")
+                    human_delay(3.0, 5.0)
+                else:
+                    event_scroll_cycle(page, iteration)
             except Exception:
-                # Fallback
-                random_scroll_pattern(page, deep_scroll=False)
-
-            new_height = page.evaluate("document.body.scrollHeight")
-            if new_height == last_height:
-                scroll_attempts += 1
-                print(f"    ⏳ No new content, attempt {scroll_attempts}/{max_scroll_attempts}")
-            else:
-                scroll_attempts = 0  # Reset if we got new content
-            last_height = new_height
+                # Fallback scrolling
+                try:
+                    page.evaluate("window.scrollBy(0, 1000)")
+                    human_delay(2.0, 3.0)
+                except Exception:
+                    print(f"    ❌ All scrolling methods failed")
+                    consecutive_empty_scrolls += 2  # Penalize scroll failures
+            
+            # Check page height changes (less important now)
+            try:
+                new_height = page.evaluate("document.body.scrollHeight")
+                if new_height == last_height:
+                    print(f"    📏 Page height unchanged ({new_height}px)")
+                else:
+                    print(f"    📏 Page height changed: {last_height}px → {new_height}px")
+                last_height = new_height
+            except Exception:
+                print(f"    ⚠️ Could not check page height")
+        
+        last_tweet_count = current_tweet_count
+    
+    # Better termination reporting
+    if consecutive_empty_scrolls >= max_consecutive_empty:
+        print(f"  🛑 Stopped: Twitter stopped serving new content after {consecutive_empty_scrolls} empty scroll cycles")
+        print(f"  📊 This is likely Twitter's content serving limit for @{username}")
+        print(f"  💡 Consider using search-based resume or waiting before retrying")
+    elif len(collected_tweets) >= max_tweets:
+        print(f"  ✅ Completed: Reached target tweet count ({max_tweets})")
+    else:
+        print(f"  🏁 Stopped: Collection completed")
+    
+    print(f"  📈 Final count: {len(collected_tweets)} tweets processed, {saved_count} saved to database from @{username}")
     
     return collected_tweets
 
 
-def fetch_enhanced_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bool = True) -> List[Dict]:
-    """
-    Enhanced tweet fetching with comprehensive post type detection.
-    
-    If resume_from_last is True, will skip existing tweets and fetch older ones.
-    """
-    print(f"\n🎯 Starting enhanced tweet collection for @{username}")
-    
-    # Get oldest tweet timestamp for continuing from where we left off
-    oldest_timestamp = None
-    if resume_from_last:
-        oldest_timestamp = fetcher_db.get_last_tweet_timestamp(username)
-        if oldest_timestamp:
-            print(f"📅 Oldest scraped tweet: {oldest_timestamp} - will fetch older tweets")
-        else:
-            print("🆕 No previous tweets found - scraping from beginning")
-    
-    url = f"https://x.com/{username}"
-    page.goto(url)
-    
-    # Wait for tweets to load
+def convert_timestamp_to_date_filter(timestamp: str) -> Optional[str]:
+    """Convert ISO timestamp to Twitter search date format (YYYY-MM-DD)."""
     try:
-        page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
-    except TimeoutError:
-        print(f"❌ No tweets found for @{username} or page failed to load")
-        return []
+        # Parse ISO timestamp and convert to date string
+        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        return dt.strftime('%Y-%m-%d')
+    except Exception as e:
+        print(f"⚠️ Error converting timestamp {timestamp}: {e}")
+        return None
 
-    human_delay(2.0, 4.0)
+
+def try_resume_via_search(page, username: str, oldest_timestamp: str) -> bool:
+    """
+    Try to resume fetching using Twitter's search with date filters.
     
-    # Extract profile picture before starting tweet collection
-    print(f"🖼️  Extracting profile picture for @{username}...")
-    profile_pic_url = fetcher_parsers.extract_profile_picture(page, username)
+    Args:
+        page: Playwright page object
+        username: Twitter username to search
+        oldest_timestamp: ISO timestamp of oldest scraped tweet
+        
+    Returns:
+        bool: True if successfully navigated to target timeframe
+    """
+    try:
+        # Convert timestamp to date for search
+        since_date = convert_timestamp_to_date_filter(oldest_timestamp)
+        if not since_date:
+            return False
+        
+        # Build search query to find tweets before our oldest timestamp
+        # Use "until" parameter to find tweets before the date we already have
+        search_query = f"from:{username} until:{since_date}"
+        search_url = f"https://x.com/search?q={search_query}&src=typed_query&f=live"
+        
+        print(f"🔍 Trying search-based resume: {search_url}")
+        page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+        human_delay(3.0, 5.0)
+        
+        # Check if we got results by looking for tweet articles
+        articles = page.query_selector_all('article[data-testid="tweet"]')
+        if articles:
+            print(f"✅ Search found {len(articles)} tweets in target timeframe")
+            return True
+        else:
+            print("⚠️ No tweets found in search results")
+            return False
+            
+    except Exception as e:
+        print(f"⚠️ Search-based resume failed: {e}")
+        return False
+
+
+def resume_positioning(page, username: str, oldest_timestamp: str) -> bool:
+    """
+    Resume functionality using Twitter search with date filters.
     
-    # Collect tweets from the page
-    collected_tweets = collect_tweets_from_page(page, username, max_tweets, resume_from_last, oldest_timestamp, profile_pic_url)
+    Args:
+        page: Playwright page object
+        username: Twitter username
+        oldest_timestamp: ISO timestamp of oldest scraped tweet
+        
+    Returns:
+        bool: True if successfully positioned for resume
+    """
+    print(f"🔄 Resume: positioning to fetch tweets older than {oldest_timestamp}")
     
-    print(f"\n📊 Collection complete: {len(collected_tweets)} tweets from @{username}")
+    # Try search-based navigation
+    if try_resume_via_search(page, username, oldest_timestamp):
+        print("✅ Resume successful via search")
+        return True
     
-    # Print summary by post type
-    post_type_counts = {}
-    for tweet in collected_tweets:
-        post_type = tweet['post_type']
-        post_type_counts[post_type] = post_type_counts.get(post_type, 0) + 1
+    # Fallback to regular profile load (will use normal scrolling)
+    print("⚠️ Search resume failed, falling back to standard profile navigation")
+    try:
+        profile_url = f"https://x.com/{username}"
+        page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
+        human_delay(2.0, 4.0)
+        print("✅ Loaded profile page for standard resume")
+        return True
+    except Exception as e:
+        print(f"❌ All resume strategies failed: {e}")
+        return False
+
+
+def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size: int = 800) -> List[Dict]:
+    """
+    Fetch tweets using multiple sessions to work around Twitter's content serving limits.
     
-    print("📈 Post type breakdown:")
-    for post_type, count in sorted(post_type_counts.items()):
-        print(f"    {post_type}: {count}")
+    Args:
+        page: Playwright page object
+        username: Twitter username
+        max_tweets: Total maximum tweets to fetch
+        session_size: Maximum tweets per session before refreshing
+        
+    Returns:
+        List of collected tweets from all sessions
+    """
+    if max_tweets <= session_size:
+        # Single session is sufficient - need to get DB connection
+        conn = init_db()
+        try:
+            result = collect_tweets_from_page(page, username, max_tweets, True, None, None, conn)
+            return result
+        finally:
+            conn.close()
     
-    return collected_tweets
+    print(f"🔄 Using multi-session strategy: {max_tweets} tweets in sessions of {session_size}")
+    
+    all_tweets = []
+    sessions_completed = 0
+    remaining_tweets = max_tweets
+    
+    # Initialize database connection for all sessions
+    conn = init_db()
+    
+    try:
+        while remaining_tweets > 0 and sessions_completed < 10:  # Max 10 sessions to prevent infinite loops
+            session_tweets = min(remaining_tweets, session_size)
+            sessions_completed += 1
+            
+            print(f"\n📍 SESSION {sessions_completed}: Fetching {session_tweets} tweets (remaining: {remaining_tweets})")
+            
+            # Navigate to profile page for each session
+            url = f"https://x.com/{username}"
+            print(f"🌐 Loading profile page: {url}")
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            
+            # Wait for tweets to load
+            try:
+                page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
+            except TimeoutError:
+                print(f"   ❌ Session {sessions_completed}: No tweets found for @{username} or page failed to load")
+                break
+            
+            human_delay(2.0, 4.0)
+            
+            # Get the oldest timestamp from our current collection to resume properly
+            oldest_timestamp = None
+            if all_tweets:
+                # Find the oldest timestamp from our collected tweets
+                timestamps = [t.get('tweet_timestamp') for t in all_tweets if t.get('tweet_timestamp')]
+                if timestamps:
+                    oldest_timestamp = min(timestamps)
+                    print(f"   📅 Resuming from oldest collected: {oldest_timestamp}")
+                    
+                    # For sessions 2+, use search-based positioning
+                    if not resume_positioning(page, username, oldest_timestamp):
+                        print(f"   ⚠️ Session {sessions_completed} positioning failed, continuing from profile start")
+            
+            # Extract profile picture (once per multi-session)
+            if sessions_completed == 1:
+                print(f"🖼️  Extracting profile picture for @{username}...")
+                profile_pic_url = fetcher_parsers.extract_profile_picture(page, username)
+            else:
+                profile_pic_url = None  # Use cached value from session 1
+            
+            # Collect tweets for this session
+            session_results = collect_tweets_from_page(page, username, session_tweets, True, oldest_timestamp, profile_pic_url, conn)
+            
+            if not session_results:
+                print(f"   ❌ Session {sessions_completed} returned no tweets, stopping multi-session")
+                break
+            
+            # Filter out duplicates (shouldn't happen with proper resume, but safety check)
+            existing_ids = {t['tweet_id'] for t in all_tweets}
+            new_tweets = [t for t in session_results if t['tweet_id'] not in existing_ids]
+            
+            all_tweets.extend(new_tweets)
+            remaining_tweets -= len(new_tweets)
+            
+            print(f"   ✅ Session {sessions_completed} complete: {len(new_tweets)} new tweets ({len(session_results)} total returned)")
+            print(f"   📊 Progress: {len(all_tweets)}/{max_tweets} tweets collected")
+            
+            # Break if we didn't get new tweets (hit content limit)
+            if len(new_tweets) == 0:
+                print(f"   🛑 No new tweets in session {sessions_completed}, stopping")
+                break
+            
+            # Refresh browser session between sessions to reset Twitter's limits
+            if remaining_tweets > 0 and sessions_completed < 10:
+                print(f"   🔄 Refreshing session for next batch...")
+                try:
+                    # Clear any cached data between sessions
+                    page.evaluate("localStorage.clear(); sessionStorage.clear();")
+                    human_delay(3.0, 6.0)  # Longer delay between sessions
+                except Exception as e:
+                    print(f"   ⚠️ Cache clearing failed: {e}")
+        
+        print(f"\n🏁 Multi-session complete: {len(all_tweets)} tweets collected in {sessions_completed} sessions")
+        return all_tweets
+    
+    finally:
+        conn.close()
+
+
+def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bool = True) -> List[Dict]:
+    """
+    Tweet fetching with comprehensive post type detection and smart resume.
+    For large collections (>800 tweets), automatically uses multi-session strategy.
+    
+    If resume_from_last is True, will fetch new tweets first, then continue from oldest timestamp.
+    """
+    print(f"\n🎯 Starting tweet collection for @{username} (target: {max_tweets} tweets)")
+    
+    # For very large collections, use multi-session approach to overcome Twitter's limits
+    if max_tweets > 800:
+        print(f"🔄 Large collection detected: Using multi-session strategy for {max_tweets} tweets")
+        return fetch_tweets_in_sessions(page, username, max_tweets, session_size=800)
+    
+    all_collected_tweets = []
+    
+    # Initialize database connection
+    conn = init_db()
+    
+    try:
+        # Get oldest tweet timestamp for continuing from where we left off
+        oldest_timestamp = None
+        newest_timestamp = None
+        if resume_from_last:
+            oldest_timestamp = fetcher_db.get_last_tweet_timestamp(username)
+            if oldest_timestamp:
+                # Also get the newest timestamp to detect new tweets
+                try:
+                    cur = conn.cursor()
+                    cur.execute("SELECT tweet_timestamp FROM tweets WHERE username = ? ORDER BY tweet_timestamp ASC LIMIT 1", (username,))
+                    row = cur.fetchone()
+                    newest_timestamp = row[0] if row else None
+                except Exception:
+                    newest_timestamp = None
+                
+                print(f"📅 Existing tweet range: {newest_timestamp} (newest) to {oldest_timestamp} (oldest)")
+                
+                # PHASE 1: Fetch new tweets (from profile start)
+                print(f"\n🔄 PHASE 1: Fetching new tweets (newer than {newest_timestamp})")
+                url = f"https://x.com/{username}"
+                print(f"🌐 Loading profile page: {url}")
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                
+                # Wait for tweets to load
+                try:
+                    page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
+                except TimeoutError:
+                    print(f"❌ No tweets found for @{username} or page failed to load")
+                    return []
+
+                human_delay(2.0, 4.0)
+                
+                # Extract profile picture
+                print(f"🖼️  Extracting profile picture for @{username}...")
+                profile_pic_url = fetcher_parsers.extract_profile_picture(page, username)
+                
+                # Collect new tweets (those newer than our newest timestamp)
+                new_tweets = collect_tweets_from_page(page, username, max_tweets, False, newest_timestamp, profile_pic_url, conn)
+                
+                # Filter to only truly new tweets (newer than newest_timestamp)
+                if newest_timestamp:
+                    newest_time = datetime.fromisoformat(newest_timestamp.replace('Z', '+00:00'))
+                    filtered_new_tweets = []
+                    for tweet in new_tweets:
+                        if tweet.get('tweet_timestamp'):
+                            try:
+                                tweet_time = datetime.fromisoformat(tweet['tweet_timestamp'].replace('Z', '+00:00'))
+                                if tweet_time > newest_time:
+                                    filtered_new_tweets.append(tweet)
+                            except Exception:
+                                # If timestamp parsing fails, include it to be safe
+                                filtered_new_tweets.append(tweet)
+                    new_tweets = filtered_new_tweets
+                
+                all_collected_tweets.extend(new_tweets)
+                print(f"📈 Phase 1 complete: {len(new_tweets)} new tweets collected")
+                
+                # PHASE 2: Continue from oldest timestamp if we haven't reached max_tweets
+                remaining_tweets = max_tweets - len(all_collected_tweets)
+                if remaining_tweets > 0:
+                    print(f"\n🔄 PHASE 2: Resuming from oldest timestamp ({remaining_tweets} tweets remaining)")
+                    
+                    if resume_positioning(page, username, oldest_timestamp):
+                        # Wait for tweets to load after resume positioning
+                        try:
+                            page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
+                            human_delay(2.0, 4.0)
+                        except TimeoutError:
+                            print("⚠️ No tweets found after resume positioning")
+                        
+                        # Collect older tweets
+                        older_tweets = collect_tweets_from_page(page, username, remaining_tweets, True, oldest_timestamp, profile_pic_url, conn)
+                        all_collected_tweets.extend(older_tweets)
+                        print(f"📈 Phase 2 complete: {len(older_tweets)} older tweets collected")
+                    else:
+                        print("❌ Resume positioning failed, skipping older tweets")
+                else:
+                    print(f"📊 Reached max_tweets limit with new tweets alone")
+            else:
+                print("🆕 No previous tweets found - scraping from beginning")
+                # Load profile page for fresh start
+                url = f"https://x.com/{username}"
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                
+                # Wait for tweets to load
+                try:
+                    page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
+                except TimeoutError:
+                    print(f"❌ No tweets found for @{username} or page failed to load")
+                    return []
+
+                human_delay(2.0, 4.0)
+                
+                # Extract profile picture before starting tweet collection
+                print(f"🖼️  Extracting profile picture for @{username}...")
+                profile_pic_url = fetcher_parsers.extract_profile_picture(page, username)
+                
+                # Collect tweets from the page (fresh start)
+                all_collected_tweets = collect_tweets_from_page(page, username, max_tweets, False, None, profile_pic_url, conn)
+        else:
+            # Load profile page for non-resume fetch
+            url = f"https://x.com/{username}"
+            print(f"🌐 Loading profile page: {url}")
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            
+            # Wait for tweets to load
+            try:
+                page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
+            except TimeoutError:
+                print(f"❌ No tweets found for @{username} or page failed to load")
+                return []
+
+            human_delay(2.0, 4.0)
+            
+            # Extract profile picture before starting tweet collection
+            print(f"🖼️  Extracting profile picture for @{username}...")
+            profile_pic_url = fetcher_parsers.extract_profile_picture(page, username)
+            
+            # Collect tweets from the page (non-resume)
+            all_collected_tweets = collect_tweets_from_page(page, username, max_tweets, False, None, profile_pic_url, conn)
+        
+        print(f"\n📊 Collection complete: {len(all_collected_tweets)} tweets from @{username}")
+        
+        # Print summary by post type
+        post_type_counts = {}
+        for tweet in all_collected_tweets:
+            post_type = tweet['post_type']
+            post_type_counts[post_type] = post_type_counts.get(post_type, 0) + 1
+        
+        print("📈 Post type breakdown:")
+        for post_type, count in sorted(post_type_counts.items()):
+            print(f"    {post_type}: {count}")
+        
+        return all_collected_tweets
+    
+    finally:
+        conn.close()
 
 def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_flag: bool):
     browser = p.chromium.launch(headless=False, slow_mo=50)
@@ -553,7 +953,7 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
     
     conn = init_db()
     # Fetch tweets for each handle in a single browser session
-    total = 0
+    total_saved = 0
     for handle in handles:
         print(f"\nFetching up to {max_tweets} tweets for @{handle}...")
         # Add retries with exponential backoff for each handle
@@ -562,7 +962,7 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
         tweets = []
         while attempt <= max_retries:
             try:
-                tweets = fetch_enhanced_tweets(page, handle, max_tweets=max_tweets, resume_from_last=resume_from_last_flag)
+                tweets = fetch_tweets(page, handle, max_tweets=max_tweets, resume_from_last=resume_from_last_flag)
                 break
             except Exception as e:
                 attempt += 1
@@ -579,7 +979,7 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
                     handle,
                     None,
                     'max_retries_exceeded',
-                    'fetch_enhanced_tweets',
+                    'fetch_tweets',
                     datetime.now().isoformat()
                 ))
                 conn_err.commit()
@@ -587,30 +987,19 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
             except Exception:
                 pass
         
-        # Save each tweet with comprehensive data
-        saved_count_for_handle = 0
-        for i, tweet in enumerate(tweets, 1):
-            try:
-                saved = fetcher_db.save_enhanced_tweet(conn, tweet)
-                if saved:
-                    saved_count_for_handle += 1
-                    print(f"  💾 Saved tweet {saved_count_for_handle}/{len(tweets)}: {tweet['tweet_id']}")
-                else:
-                    print(f"  ⏭️ Not saved tweet (skipped or duplicate): {tweet.get('tweet_id', 'unknown')}")
-            except Exception as e:
-                print(f"  ❌ Error saving tweet {tweet.get('tweet_id', 'unknown')}: {e}")
-        
+        # Tweets are already saved during fetch_tweets, so just count them
         # Save profile information if tweets were collected successfully
         if tweets and 'profile_pic_url' in tweets[0]:
             profile_pic_url = tweets[0]['profile_pic_url']
             fetcher_db.save_account_profile_info(conn, handle, profile_pic_url)
         
-        total += saved_count_for_handle
+        # Count tweets that were processed (saved during collection)
+        total_saved += len(tweets)
     
     conn.close()
     context.close()
     browser.close()
-    return total, len(handles)
+    return total_saved, len(handles)
 
 
 def refetch_single_tweet(tweet_id: str) -> bool:
@@ -703,6 +1092,50 @@ def refetch_single_tweet(tweet_id: str) -> bool:
         return False
 
 
+def refetch_account_all(username: str, max_tweets: int = None) -> bool:
+    """
+    Delete all existing data for an account and refetch all tweets from scratch.
+    
+    Args:
+        username: The username to refetch (without @)
+        max_tweets: Maximum number of tweets to fetch (None for unlimited)
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    username = username.lstrip('@').strip()
+    print(f"🔄 REFETCH ALL MODE: Cleaning and refetching @{username}")
+    
+    try:
+        # Delete existing data for the account
+        deleted_counts = fetcher_db.delete_account_data(username)
+        print(f"🗑️  Deleted {deleted_counts['tweets']} tweets and {deleted_counts['analyses']} analyses")
+        
+        # Handle unlimited case
+        if max_tweets is None:
+            max_tweets_display = "unlimited"
+            max_tweets_param = float('inf')
+        else:
+            max_tweets_display = str(max_tweets)
+            max_tweets_param = max_tweets
+        
+        # Fetch fresh data using the same pattern as main function
+        print(f"🚀 Starting fresh fetch for @{username} (max: {max_tweets_display})")
+        with sync_playwright() as p:
+            total_fetched, accounts_processed = run_fetch_session(p, [username], max_tweets_param, False)
+        
+        if total_fetched > 0:
+            print(f"✅ Successfully refetched {total_fetched} tweets for @{username}")
+            return True
+        else:
+            print(f"❌ No tweets fetched for @{username}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error during account refetch: {e}")
+        return False
+
+
 def _extract_tweet_with_quoted_content(page, tweet_id: str, username: str, tweet_url: str) -> dict:
     """
     Extract complete tweet data including quoted tweet content and media.
@@ -735,7 +1168,7 @@ def _extract_tweet_with_quoted_content(page, tweet_id: str, username: str, tweet
 
     print(f"✅ Main tweet extracted: {len(content)} chars, {main_media_count} media")
     
-    # Enhanced quoted tweet detection with multiple strategies
+    # Multi-strategy quoted tweet detection
     quoted_tweet_data = _find_and_extract_quoted_tweet(page, main_article, post_analysis)
     
     # Combine main and quoted media (Option A: single media_links field)
@@ -1125,18 +1558,24 @@ def main():
 
     parser = argparse.ArgumentParser(description="Fetch tweets from a given X (Twitter) user.")
     parser.add_argument("--user", "-u", dest="user", help="Optional single username to fetch tweets from (with or without leading @). Overrides positional username.")
-    parser.add_argument("--max", type=int, default=100, help="Maximum number of tweets to fetch per user (default: 100)")
+    parser.add_argument("--max", type=int, default=None, help="Maximum number of tweets to fetch per user (default: unlimited)")
     parser.add_argument("--handles-file", help="Path to a newline-separated file with target handles (overrides defaults)")
     parser.add_argument("--no-resume", action='store_true', help="Do not resume from previous scrape; fetch recent tweets instead of older ones")
     parser.add_argument("--refetch", help="Re-fetch a specific tweet ID (bypasses exists check and updates database)")
+    parser.add_argument("--refetch-all", help="Delete all data for specified username and refetch from scratch")
     args = parser.parse_args()
 
-    # Handle refetch mode for specific tweet
     # Handle refetch mode for specific tweet
     if args.refetch:
         tweet_id = args.refetch.strip()
         success = refetch_single_tweet(tweet_id)
         return  # Exit after refetch
+
+    # Handle refetch-all mode for entire account
+    if args.refetch_all:
+        username = args.refetch_all.strip()
+        success = refetch_account_all(username, args.max)
+        return  # Exit after refetch-all
 
     # Resolve effective target username robustly. --user takes precedence, then positional.
     effective_user = None
@@ -1150,9 +1589,14 @@ def main():
         effective_user = effective_user.lstrip('@').strip()
 
     max_tweets = args.max
+    if max_tweets is None:
+        max_tweets = float('inf')  # Unlimited
+        print(f"📣 max_tweets set to: unlimited")
+    else:
+        print(f"📣 max_tweets set to: {max_tweets}")
 
     # Diagnostic: show parsed args for debugging
-    print(f"🐞 parsed args: user={args.user} username={getattr(args, 'username', None)} max={max_tweets} handles_file={args.handles_file}")
+    print(f"🐞 parsed args: user={args.user} username={getattr(args, 'username', None)} max={args.max} handles_file={args.handles_file}")
 
     # Build handles list. If an explicit user was provided, enforce single-target.
     if effective_user:
@@ -1168,7 +1612,6 @@ def main():
             handles = DEFAULT_HANDLES.copy()
 
     print(f"📣 Targets resolved (final): {handles}")
-    print(f"📣 max_tweets set to: {max_tweets}")
 
     resume_from_last_flag = not args.no_resume
 
@@ -1218,7 +1661,7 @@ def run_in_background(username: str, max_tweets: int):
                 conn = init_db()
                 try:
                     # Background runs should respect the CLI resume flag if provided via env or caller; default to True
-                    tweets = fetch_enhanced_tweets(page, username, max_tweets=max_tweets, resume_from_last=True)
+                    tweets = fetch_tweets(page, username, max_tweets=max_tweets, resume_from_last=True)
                 except Exception as e:
                     tweets = []
                     try:
@@ -1236,16 +1679,11 @@ def run_in_background(username: str, max_tweets: int):
                     except Exception:
                         pass
 
-                total = 0
-                for i, tweet in enumerate(tweets, 1):
-                    try:
-                        fetcher_db.save_enhanced_tweet(conn, tweet)
-                        total += 1
-                    except Exception:
-                        pass
+                # Tweets are already saved during fetch_tweets, just count them
+                total = len(tweets)
 
                 # Print final summary to stdout (captured in parent)
-                print(f"Background fetch complete for @{username}: saved {total} tweets")
+                print(f"Background fetch complete for @{username}: processed {total} tweets")
                 conn.close()
                 browser.close()
         finally:
