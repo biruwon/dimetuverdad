@@ -11,6 +11,11 @@ import tempfile
 import time
 import requests
 from typing import Optional, Tuple, List
+
+# Simple warning suppression for Google Cloud libraries
+os.environ['GRPC_VERBOSITY'] = 'ERROR'
+os.environ['GLOG_minloglevel'] = '2'
+
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -271,7 +276,7 @@ def analyze_multimodal_content(media_urls: List[str], text_content: str) -> Tupl
             
             # Set up timeout signal
             signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(30)  # 30 second timeout
+            signal.alarm(60)
             
             try:
                 response = model.generate_content([media_file, prompt])

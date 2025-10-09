@@ -10,6 +10,7 @@ import sqlite3
 import time
 import warnings
 import sys
+import logging
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,6 +29,10 @@ from .categories import Categories
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
+
+# Configure logging for multimodal analysis debugging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # DB path (same as other scripts)
 from utils.paths import get_db_path
@@ -345,46 +350,78 @@ class Analyzer:
         from .gemini_multimodal import analyze_multimodal_content, extract_media_type
         
         # Perform multimodal analysis
-        media_analysis, analysis_time = analyze_multimodal_content(media_urls, content)
-        
-        if media_analysis:
-            # Extract category from Gemini analysis (simplified approach)
-            # For now, we'll use a basic heuristic - in production, you might want to parse the Gemini response
-            category = self._extract_category_from_gemini(media_analysis)
-            media_type = extract_media_type(media_urls)
-            
+        try:
             if self.verbose:
-                print(f"✅ Gemini analysis completed in {analysis_time:.2f}s")
-                print(f"🏷️ Category: {category}")
-                print(f"📊 Media type: {media_type}")
+                print(f"\n🎥 Attempting multimodal analysis: @{username}")
+                print(f"📝 Content: {content[:80]}...")
+                print(f"🖼️ Media URLs: {len(media_urls)} found")
+                for i, url in enumerate(media_urls):
+                    print(f"   {i+1}. {url}")
             
-            return ContentAnalysis(
-                tweet_id=tweet_id,
-                tweet_url=tweet_url,
-                username=username,
-                tweet_content=content,
-                analysis_timestamp=datetime.now().isoformat(),
-                category=category,
-                categories_detected=[category],  # Single category for now
-                llm_explanation="",  # Gemini analysis is in media_analysis field
-                analysis_method="llm",  # Use "llm" method for multimodal analysis
-                media_urls=media_urls,
-                media_analysis=media_analysis,
-                media_type=media_type,
-                multimodal_analysis=True,
-                pattern_matches=[],  # No pattern analysis for multimodal
-                topic_classification={},
-                analysis_json=json.dumps({
-                    'multimodal_analysis': True,
-                    'media_type': media_type,
-                    'analysis_time': analysis_time
-                }, ensure_ascii=False)
-            )
-        else:
-            # Multimodal analysis failed - do not process this tweet
+            # Log multimodal attempt
+            logger.info(f"Starting multimodal analysis for tweet {tweet_id} with {len(media_urls)} media URLs")
+            
+            media_analysis, analysis_time = analyze_multimodal_content(media_urls, content)
+            
+            if media_analysis:
+                # Extract category from Gemini analysis (simplified approach)
+                category = self._extract_category_from_gemini(media_analysis)
+                media_type = extract_media_type(media_urls)
+                
+                if self.verbose:
+                    print(f"✅ Gemini analysis completed in {analysis_time:.2f}s")
+                    print(f"🏷️ Category: {category}")
+                    print(f"📊 Media type: {media_type}")
+                
+                logger.info(f"Multimodal analysis successful for tweet {tweet_id}, category: {category}, time: {analysis_time:.2f}s")
+                
+                return ContentAnalysis(
+                    tweet_id=tweet_id,
+                    tweet_url=tweet_url,
+                    username=username,
+                    tweet_content=content,
+                    analysis_timestamp=datetime.now().isoformat(),
+                    category=category,
+                    categories_detected=[category],  # Single category for now
+                    llm_explanation="",  # Gemini analysis is in media_analysis field
+                    analysis_method="llm",  # Use "llm" method for multimodal analysis
+                    media_urls=media_urls,
+                    media_analysis=media_analysis,
+                    media_type=media_type,
+                    multimodal_analysis=True,
+                    pattern_matches=[],  # No pattern analysis for multimodal
+                    topic_classification={},
+                    analysis_json=json.dumps({
+                        'multimodal_analysis': True,
+                        'media_type': media_type,
+                        'analysis_time': analysis_time
+                    }, ensure_ascii=False)
+                )
+            else:
+                # Multimodal analysis failed - fall back to text-only analysis
+                if self.verbose:
+                    print("⚠️ Multimodal analysis returned no result - falling back to text-only analysis")
+                    print(f"📝 Processing text content: {content[:80]}...")
+                
+                logger.warning(f"Multimodal analysis returned None for tweet {tweet_id}, falling back to text-only analysis")
+                logger.info(f"Fallback: Processing tweet {tweet_id} with text-only pipeline")
+                
+                # Use text-only analysis pipeline directly (avoid recursion)
+                return self._analyze_text_only(tweet_id, tweet_url, username, content)
+                
+        except Exception as e:
+            # Multimodal analysis encountered an error - fall back to text-only analysis
             if self.verbose:
-                print("❌ Multimodal analysis failed - skipping tweet (media analysis required)")
-            raise Exception("Multimodal analysis failed for tweet with media - cannot process without proper media analysis")
+                print(f"⚠️ Multimodal analysis error: {str(e)[:100]}...")
+                print("📝 Falling back to text-only analysis")
+            
+            # Log detailed error information
+            logger.error(f"Multimodal analysis failed for tweet {tweet_id}: {type(e).__name__}: {str(e)}")
+            logger.info(f"Media URLs that failed: {media_urls}")
+            logger.info(f"Fallback: Processing tweet {tweet_id} with text-only pipeline")
+            
+            # Use text-only analysis pipeline directly (avoid recursion)
+            return self._analyze_text_only(tweet_id, tweet_url, username, content)
     
     def _extract_category_from_gemini(self, gemini_analysis: str) -> str:
         """

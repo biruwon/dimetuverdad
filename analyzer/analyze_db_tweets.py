@@ -6,6 +6,7 @@ Analyzes all tweets from the database using the analyzer system.
 
 import sqlite3
 import argparse
+import logging
 from datetime import datetime
 
 # Import utility modules
@@ -19,7 +20,52 @@ from analyzer.analyzer import Analyzer, save_content_analysis, ContentAnalysis, 
 from analyzer.categories import Categories
 from utils import database, paths
 
+# Configure logging for error tracking
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 DB_PATH = paths.get_db_path()
+
+def save_failed_analysis(tweet_id: str, tweet_url: str, username: str, content: str, 
+                        error_message: str, media_urls: list = None):
+    """
+    Save failed analysis attempt to database for debugging.
+    
+    Args:
+        tweet_id: ID of the tweet that failed analysis
+        tweet_url: URL of the tweet
+        username: Username of the tweet author
+        content: Tweet content
+        error_message: Error message from the failed analysis
+        media_urls: List of media URLs if any
+    """
+    try:
+        # Create a ContentAnalysis object for failed analysis
+        failed_analysis = ContentAnalysis(
+            tweet_id=tweet_id,
+            tweet_url=tweet_url,
+            username=username,
+            tweet_content=content,
+            analysis_timestamp=datetime.now().isoformat(),
+            category="ERROR",
+            categories_detected=["ERROR"],
+            llm_explanation=f"Analysis failed: {error_message}",
+            analysis_method="error",
+            media_urls=media_urls or [],
+            media_analysis="",
+            media_type="",
+            multimodal_analysis=bool(media_urls),
+            pattern_matches=[],
+            topic_classification={},
+            analysis_json=f'{{"error": "{error_message[:500]}", "media_urls": {len(media_urls or [])}}}'
+        )
+        
+        # Save to database
+        save_content_analysis(failed_analysis)
+        logger.info(f"Saved failed analysis for tweet {tweet_id}: {error_message[:100]}")
+        
+    except Exception as save_error:
+        logger.error(f"Failed to save error analysis for tweet {tweet_id}: {save_error}")
 
 def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False, tweet_id=None):
     """
@@ -229,14 +275,38 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
             print(f"    {method_emoji} Method: {result.analysis_method}")
             
         except Exception as e:
-            print(f"    ❌ Error analyzing tweet: {e}")
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            print(f"    ❌ Error analyzing tweet: {error_msg}")
+            
+            # Log detailed error information
+            logger.error(f"Analysis failed for tweet {tweet_id} (@{tweet_username}): {error_msg}")
+            logger.info(f"Tweet content: {content[:200]}...")
+            if media_urls:
+                logger.info(f"Media URLs that may have caused failure: {media_urls}")
+            
+            # Save failed analysis to database for debugging
+            save_failed_analysis(
+                tweet_id=tweet_id,
+                tweet_url=tweet_url,
+                username=tweet_username,
+                content=content,
+                error_message=error_msg,
+                media_urls=media_urls
+            )
+            
+            # Count as failed analysis
+            category_counts["ERROR"] = category_counts.get("ERROR", 0) + 1
             
         print()
     
     # Summary
     print("📊 Analysis Complete!")
     print("=" * 50)
-    print(f"📈 Tweets analyzed: {len(results)}")
+    total_processed = len(results) + category_counts.get("ERROR", 0)
+    print(f"📈 Tweets processed: {total_processed}")
+    print(f"✅ Successful analyses: {len(results)}")
+    if category_counts.get("ERROR", 0) > 0:
+        print(f"❌ Failed analyses: {category_counts['ERROR']}")
     print("📋 Category breakdown:")
     
     for category, count in sorted(category_counts.items()):
@@ -246,10 +316,11 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
             Categories.CONSPIRACY_THEORY: '🕵️',
             Categories.FAR_RIGHT_BIAS: '⚡',
             Categories.CALL_TO_ACTION: '📢',
-            Categories.GENERAL: '✅'
+            Categories.GENERAL: '✅',
+            'ERROR': '💥'
         }.get(category, '❓')
         
-        percentage = (count / len(results)) * 100
+        percentage = (count / total_processed) * 100 if total_processed > 0 else 0
         print(f"    {emoji} {category}: {count} ({percentage:.1f}%)")
     
     print()

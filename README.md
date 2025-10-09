@@ -380,20 +380,39 @@ python quick_test.py --interactive
 Run the full test suite to validate system performance:
 
 ```bash
-# Quick test (2 cases per category, ~1 minute)
-python analyzer/tests/test_analyzer_integration.py --quick
+# Quick integration test (2 cases per category, ~1 minute)
+./run_in_venv.sh test-analyzer-integration --quick
 
-# Full test suite (all cases, ~6 minutes)  
-python analyzer/tests/test_analyzer_integration.py --full
+# Full integration test suite (all cases, ~6 minutes)  
+./run_in_venv.sh test-analyzer-integration --full
 
 # Pattern-only tests (fast, ~10 seconds)
-python analyzer/tests/test_analyzer_integration.py --patterns-only
+./run_in_venv.sh test-analyzer-integration --patterns-only
 
 # LLM-only tests
-python analyzer/tests/test_analyzer_integration.py --llm-only
+./run_in_venv.sh test-analyzer-integration --llm-only
 
 # Test specific categories
-python analyzer/tests/test_analyzer_integration.py --categories hate_speech disinformation
+./run_in_venv.sh test-analyzer-integration --categories hate_speech disinformation
+
+# Run all unit tests across the entire project
+./run_in_venv.sh test-all
+
+# Test fetch integration (requires Twitter/X credentials)
+./run_in_venv.sh test-fetch-integration
+```
+
+### Performance Analysis
+
+```bash
+# Compare different LLM models
+./run_in_venv.sh compare-models --quick
+
+# Run comprehensive performance benchmarks
+./run_in_venv.sh benchmarks
+
+# Performance analysis with specific parameters
+./run_in_venv.sh compare-models --full --output results.json
 ```
 
 ### Twitter Data Collection
@@ -401,14 +420,54 @@ python analyzer/tests/test_analyzer_integration.py --categories hate_speech disi
 Collect data from Spanish far-right accounts:
 
 ```bash
-# Collect from default target accounts
-python fetch_tweets.py
+# Collect from default target accounts (11 Spanish far-right accounts)
+./run_in_venv.sh fetch
 
 # Collect from specific users
-python fetch_tweets.py --users "username1,username2"
+./run_in_venv.sh fetch --user "username1,username2" --max 20
 
-# Collect with analysis
-python fetch_tweets.py --analyze
+# Collect maximum number of tweets per user
+./run_in_venv.sh fetch --max 50
+
+# Re-fetch a specific tweet (bypasses exists check)
+./run_in_venv.sh fetch --refetch 1975540692899537249
+
+# Complete workflow: install dependencies, fetch, then analyze
+./run_in_venv.sh full
+```
+
+### Content Analysis
+
+Analyze collected tweets from the database:
+
+```bash
+# Analyze all unanalyzed tweets
+./run_in_venv.sh analyze-db
+
+# Analyze tweets from specific user
+./run_in_venv.sh analyze-db --username Santi_ABASCAL
+
+# Force reanalyze existing analyses (useful when prompts change)
+./run_in_venv.sh analyze-db --force-reanalyze --limit 10
+
+# Analyze specific tweet by ID
+./run_in_venv.sh analyze-db --tweet-id 1975540692899537249
+
+# Limit number of tweets to process
+./run_in_venv.sh analyze-db --limit 50
+
+# Reanalyze all tweets from a specific user (force reanalysis)
+./run_in_venv.sh analyze-db --username Santi_ABASCAL --force-reanalyze
+```
+
+### Database Management
+
+```bash
+# Initialize or reset database schema
+./run_in_venv.sh init-db --force
+
+# Initialize database (safe, won't overwrite existing data)
+./run_in_venv.sh init-db
 ```
 
 ### Web Interface
@@ -416,8 +475,8 @@ python fetch_tweets.py --analyze
 Launch the Flask web interface for browsing results:
 
 ```bash
-cd web
-python app.py
+# Start the web application on localhost:5000
+./run_in_venv.sh web
 ```
 
 Visit `http://localhost:5000` to explore:
@@ -503,20 +562,98 @@ Recent comprehensive test suite results:
 5. **call_to_action** (📢): Mobilization calls, organized activities
 6. **general** (✅): Neutral, non-problematic content
 
+## 📋 Complete Command Reference
+
+### Project Setup Commands
+
+```bash
+# Install all dependencies and setup environment
+./run_in_venv.sh install
+
+# Initialize database schema
+./run_in_venv.sh init-db --force
+
+# Complete setup workflow
+./run_in_venv.sh full  # install + fetch + analyze
+```
+
+### Data Collection Commands
+
+```bash
+# Fetch from default Spanish far-right accounts
+./run_in_venv.sh fetch
+
+# Fetch from specific users
+./run_in_venv.sh fetch --user "Santi_ABASCAL,AlexanderTDF" --max 25
+
+# Re-fetch specific tweet
+./run_in_venv.sh fetch --refetch 1975540692899537249
+```
+
+### Analysis Commands
+
+```bash
+# Analyze all unanalyzed tweets
+./run_in_venv.sh analyze-db
+
+# Analyze specific user's tweets
+./run_in_venv.sh analyze-db --username Santi_ABASCAL
+
+# Force reanalyze with updated prompts
+./run_in_venv.sh analyze-db --username Santi_ABASCAL --force-reanalyze
+
+# Analyze specific tweet
+./run_in_venv.sh analyze-db --tweet-id 1975540692899537249
+
+# Limit analysis (useful for testing)
+./run_in_venv.sh analyze-db --limit 10
+```
+
+### Testing Commands
+
+```bash
+# Quick integration test
+./run_in_venv.sh test-analyzer-integration --quick
+
+# Full test suite
+./run_in_venv.sh test-all
+
+# Pattern-only testing
+./run_in_venv.sh test-analyzer-integration --patterns-only
+
+# Test fetch functionality (requires credentials)
+./run_in_venv.sh test-fetch-integration
+```
+
+### Application Commands
+
+```bash
+# Start web interface
+./run_in_venv.sh web
+
+# Performance analysis
+./run_in_venv.sh benchmarks
+
+# Model comparison
+./run_in_venv.sh compare-models --quick
+```
+
 ## 🧪 Development & Testing
 
 ### Running Tests
 
 ```bash
-```bash
-# Full test suite with explanations
-python analyzer/tests/test_analyzer_integration.py --quick
+# Individual content testing
+python quick_test.py "Test content here"
 
-# Test specific functionality
-python test_llm_fallback.py
+# Fast pattern analysis
+python quick_test.py --patterns-only "Content to analyze"
 
-# Validate pattern detection
-python -c "from far_right_patterns import FarRightAnalyzer; analyzer = FarRightAnalyzer(); print(analyzer.analyze_text('test content'))"
+# Full LLM analysis
+python quick_test.py --llm "Complex content requiring deep analysis"
+
+# JSON output for integration
+python quick_test.py --llm --json "Content to analyze"
 ```
 
 ### Model Comparison
@@ -530,23 +667,27 @@ python scripts/compare_models.py --quick
 
 ### Adding New Patterns
 
-Edit `far_right_patterns.py` to add detection patterns:
+Edit `analyzer/pattern_analyzer.py` to add detection patterns:
 
 ```python
-'new_category': [
-    {
-        'pattern': r'\byour_regex_pattern\b',
-        'description': 'Description of what this detects'
-    }
-]
+'new_category': {
+    'patterns': [
+        r'\byour_regex_pattern\b',
+        r'\banother_pattern\b'
+    ],
+    'keywords': ['keyword1', 'keyword2'],
+    'description': 'Description of what this detects'
+}
 ```
 
 ### Model Comparison
 
-Compare different LLM models:
-
 ```bash
-python compare_models.py --quick
+# Compare different LLM models
+./run_in_venv.sh compare-models --quick
+
+# Full model comparison with detailed metrics
+./run_in_venv.sh compare-models --full
 ```
 
 ### Contributing

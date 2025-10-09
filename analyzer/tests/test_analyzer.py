@@ -642,21 +642,35 @@ class TestAnalyzerMultimodal(unittest.TestCase):
 
     @patch('analyzer.gemini_multimodal.analyze_multimodal_content')
     def test_analyze_multi_modal_failure_fallback(self, mock_analyze):
-        """Test multimodal analysis failure raises exception."""
-        # Mock failure
+        """Test multimodal analysis failure gracefully falls back to text-only analysis."""
+        # Mock multimodal failure
         mock_analyze.return_value = (None, 1.0)
 
-        # Should raise exception when multimodal analysis fails
-        with self.assertRaises(Exception) as context:
-            self.analyzer.analyze_multi_modal(
+        # Mock text-only fallback result
+        fallback_result = ContentAnalysis(
+            tweet_id="test_123",
+            tweet_url="https://twitter.com/test/status/test_123",
+            username="test_user",
+            tweet_content="Test content",
+            analysis_timestamp="2024-01-01T12:00:00",
+            category=Categories.GENERAL,
+            analysis_method="llm",
+            multimodal_analysis=False
+        )
+
+        with patch.object(self.analyzer, '_analyze_text_only', return_value=fallback_result) as mock_text_only:
+            result = self.analyzer.analyze_multi_modal(
                 tweet_id="test_123",
                 tweet_url="https://twitter.com/test/status/test_123",
                 username="test_user",
                 content="Test content",
                 media_urls=["https://example.com/image.jpg"]
             )
-        
-        self.assertIn("Multimodal analysis failed", str(context.exception))
+
+            # Ensure we fell back to text-only analysis and returned that result
+            mock_text_only.assert_called_once()
+            self.assertEqual(result, fallback_result)
+            self.assertFalse(result.multimodal_analysis)
 
     def test_analyze_content_routing_text_only(self):
         """Test that analyze_content routes to text-only for no media."""
