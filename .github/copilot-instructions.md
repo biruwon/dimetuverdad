@@ -1,5 +1,9 @@
 # dimetuverdad AI Agent Instructions
 
+## ⚠️ CRITICAL TESTING REQUIREMENT ⚠️
+
+**MANDATORY**: EVERY code change MUST be tested IMMEDIATELY. No exceptions. See "MANDATORY Testing Workflow" section below for enforcement details.
+
 ## Project Overview
 
 **dimetuverdad** is a Spanish far-right content analysis system that combines pattern matching, machine learning, and LLMs to detect hate speech, disinformation, and extremist content in Twitter/X data. The system follows a **multi-stage pipeline**: data collection → storage → analysis → web visualization.
@@ -65,11 +69,17 @@ ollama pull gpt-oss:20b
 
 ### Data Collection
 ```bash
-# Collect from 11 default Spanish far-right accounts (vox_es, Santi_ABASCAL, etc.)
-./run_in_venv.sh fetch --max 15
+# Default full history collection from 11 Spanish far-right accounts (vox_es, Santi_ABASCAL, etc.)
+./run_in_venv.sh fetch
 
-# Collect from specific users
-./run_in_venv.sh fetch --user "username1,username2" --max 20
+# Latest content strategy - stop after 10 consecutive existing tweets
+./run_in_venv.sh fetch --latest
+
+# Collect from specific users (full history)
+./run_in_venv.sh fetch --user "username1,username2"
+
+# Collect latest content from specific users
+./run_in_venv.sh fetch --user "username1,username2" --latest
 ```
 
 ### Analysis Execution
@@ -167,27 +177,35 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 
 ### MANDATORY Testing Workflow for Code Changes
 
-**CRITICAL RULE**: All code changes MUST be tested before proceeding or committing. This is NON-NEGOTIABLE.
+**ABSOLUTE REQUIREMENT**: ALL code changes MUST be tested IMMEDIATELY after making them. This is NON-NEGOTIABLE and CANNOT be skipped.
+
+**IMMEDIATE TESTING RULE**:
+- **EVERY CODE CHANGE** triggers immediate testing requirement
+- **NO EXCEPTIONS**: Functions, refactors, bug fixes, new features, config changes
+- **IMMEDIATE**: Test right after the change, not later, not at the end of session
+- **BLOCKING**: Cannot continue to other work until tests pass
+- **COPILOT VIOLATION**: Failing to test after code changes is a critical workflow violation
 
 **Testing Requirements**:
-1. **After ANY code change** (refactor, new feature, bug fix, or enhancement):
-   - Identify which test files cover the modified code
-   - Run relevant tests immediately: `./run_in_venv.sh test-all` or specific test files
-   - If tests fail: **STOP and fix them before continuing**
-   - Never proceed with additional changes while tests are failing
+1. **After ANY code change** (refactor, new feature, bug fix, enhancement, or modification):
+   - **IMMEDIATELY identify** which test files cover the modified code
+   - **IMMEDIATELY run** relevant tests: `./run_in_venv.sh test-all` or specific test files
+   - If tests fail: **IMMEDIATELY STOP and fix them before any other work**
+   - **NEVER proceed** with additional changes while tests are failing
+   - **NEVER delay** testing until "later" - test NOW
 
-2. **Test Identification by Module** (Run Targeted Tests First):
-   - `analyzer/analyzer.py` changes → Run `pytest analyzer/tests/test_analyzer.py -v`
-   - `analyzer/gemini_multimodal.py` changes → Run `pytest analyzer/tests/test_gemini_multimodal.py -v`
-   - `analyzer/prompts.py` changes → Run `pytest analyzer/tests/test_prompts.py -v`
-   - `analyzer/llm_models.py` changes → Run `pytest analyzer/tests/test_analyzer.py -v` (uses LLM pipeline)
-   - `fetcher/db.py` changes → Run `pytest fetcher/tests/test_db.py -v`
-   - `fetcher/parsers.py` changes → Run `pytest fetcher/tests/test_parsers.py -v`
-   - `fetch_tweets.py` changes → Run `pytest fetcher/tests/test_fetch_tweets.py -v`
-   - Database schema changes → Run all database tests (`pytest fetcher/tests/test_db.py fetcher/tests/test_fetch_tweets.py -v`)
-   - Cross-module changes → Run `./run_in_venv.sh test-all`
+2. **Test Identification by Module** (Run Targeted Tests IMMEDIATELY):
+   - `analyzer/analyzer.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_analyzer.py -v`
+   - `analyzer/gemini_multimodal.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_gemini_multimodal.py -v`
+   - `analyzer/prompts.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_prompts.py -v`
+   - `analyzer/llm_models.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_analyzer.py -v` (uses LLM pipeline)
+   - `fetcher/db.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_db.py -v`
+   - `fetcher/parsers.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_parsers.py -v`
+   - `fetcher/fetch_tweets.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_fetch_tweets.py -v`
+   - Database schema changes → **IMMEDIATELY** run all database tests (`source venv/bin/activate && python -m pytest fetcher/tests/test_db.py fetcher/tests/test_fetch_tweets.py -v`)
+   - Cross-module changes → **IMMEDIATELY** run `./run_in_venv.sh test-all`
    
-   **IMPORTANT**: Always run targeted tests first (faster feedback), then full test suite before commit
+   **CRITICAL**: Always run targeted tests IMMEDIATELY after changes (faster feedback), then full test suite before commit
 
 3. **Test Failure Resolution**:
    - Read error messages carefully - they often indicate the exact issue
@@ -195,39 +213,50 @@ python quick_test.py --llm "Complex content requiring deep analysis"
      - Database schema mismatches → Update test database schemas
      - Mock object outdated → Update mock strategy to match current API
      - Assertion expectations changed → Update test assertions to match new behavior
-   - Fix tests in the SAME work session as the code change
-   - Never leave failing tests for "later" - they compound and become harder to fix
+   - **FIX TESTS IMMEDIATELY** in the SAME work session as the code change
+   - **NEVER leave failing tests** for "later" - they compound and become harder to fix
 
 4. **When to Run Full Test Suite vs Targeted Tests**:
-   - **Targeted tests first**: Run module-specific tests immediately after changes for fast feedback
+   - **Targeted tests IMMEDIATELY**: Run module-specific tests immediately after changes for fast feedback
    - **Full test suite required**:
      - Before any git commit (mandatory)
      - After refactoring that touches multiple files
      - When changing core interfaces or data structures
      - After fixing test failures (to ensure no regressions)
-   - **Example workflow**: Change `gemini_multimodal.py` → Run `pytest analyzer/tests/test_gemini_multimodal.py -v` (30s) → If passes, run full suite before commit
+   - **Example workflow**: Change `gemini_multimodal.py` → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_gemini_multimodal.py -v` (30s) → If passes, run full suite before commit
 
 5. **Test Success Criteria**:
    - All relevant tests must pass (100% pass rate for affected modules)
    - No new warnings or deprecation notices
    - Test execution time should be reasonable (< 2 minutes for module tests, < 2 minutes for full suite)
 
-**VIOLATION CONSEQUENCES**: Code changes without passing tests WILL cause integration issues, break the pipeline, and create technical debt. Always test immediately after changes.
+**SEVERE VIOLATION CONSEQUENCES**: 
+- Code changes without IMMEDIATE testing WILL cause integration issues, break the pipeline, and create technical debt
+- **WORKFLOW VIOLATION**: Not testing immediately after code changes violates core development practices
+- **USER TRUST VIOLATION**: User expects all changes to be properly tested before proceeding
+- **MANDATORY REMEDIATION**: If tests are not run immediately after changes, must stop all work and run tests before continuing
 
-**Example Workflow**:
+**ENFORCEMENT**:
+- **COPILOT MUST** run tests immediately after any code change
+- **COPILOT MUST** report test results before proceeding to other work
+- **COPILOT MUST** fix any test failures before continuing
+- **COPILOT CANNOT** defer testing to a later time or session
+
+**MANDATORY Workflow Example**:
 ```bash
-# 1. Make code changes to analyzer/analyzer.py
-# 2. IMMEDIATELY run tests
+# 1. Make ANY code changes to ANY file
+# 2. IMMEDIATELY (not later) run tests
 ./run_in_venv.sh test-all
 
-# 3a. If tests pass → Continue or commit
-# 3b. If tests fail → Fix them NOW before any other work
+# 3a. If tests pass → Can continue or commit
+# 3b. If tests fail → MUST fix them NOW before any other work
 
-# 4. Common test commands
-pytest analyzer/tests/test_analyzer.py -v                    # Single test file
-pytest analyzer/tests/ -v                                    # All analyzer tests  
-./run_in_venv.sh test-analyzer-integration --quick          # Integration tests
-./run_in_venv.sh test-all                                   # Everything
+# 4. Common targeted test commands (run IMMEDIATELY after specific changes)
+source venv/bin/activate && python -m pytest analyzer/tests/test_analyzer.py -v         # After analyzer changes
+source venv/bin/activate && python -m pytest fetcher/tests/test_fetch_tweets.py -v     # After fetch_tweets changes
+source venv/bin/activate && python -m pytest fetcher/tests/ -v                         # After any fetcher changes  
+./run_in_venv.sh test-analyzer-integration --quick                                      # After analyzer integration changes
+./run_in_venv.sh test-all                                                               # Before any commit (mandatory)
 ```
 
 ## Performance Considerations

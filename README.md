@@ -211,8 +211,11 @@ exit
 If you have Twitter/X credentials configured:
 
 ```bash
-# Run data collection
-docker-compose exec dimetuverdad ./run_in_venv.sh fetch --max 15
+# Run data collection (full history strategy)
+docker-compose exec dimetuverdad ./run_in_venv.sh fetch
+
+# Run latest content collection (fast strategy)
+docker-compose exec dimetuverdad ./run_in_venv.sh fetch --latest
 
 # Run analysis on collected data
 docker-compose exec dimetuverdad ./run_in_venv.sh analyze-db
@@ -420,17 +423,17 @@ Run the full test suite to validate system performance:
 Collect data from Spanish far-right accounts:
 
 ```bash
-# Collect from default target accounts (11 Spanish far-right accounts)
+# Default full history collection from 11 Spanish far-right accounts
 ./run_in_venv.sh fetch
 
-# Collect from specific users
-./run_in_venv.sh fetch --user "username1,username2" --max 20
+# Latest content strategy - fast collection, stops after 10 consecutive existing tweets
+./run_in_venv.sh fetch --latest
 
-# Collect maximum number of tweets per user
-./run_in_venv.sh fetch --max 50
+# Collect from specific users (full history - comprehensive, slower)
+./run_in_venv.sh fetch --user "username1,username2"
 
-# Re-fetch a specific tweet (bypasses exists check)
-./run_in_venv.sh fetch --refetch 1975540692899537249
+# Collect latest content from specific users (fast strategy)
+./run_in_venv.sh fetch --user "username1,username2" --latest
 
 # Complete workflow: install dependencies, fetch, then analyze
 ./run_in_venv.sh full
@@ -580,14 +583,17 @@ Recent comprehensive test suite results:
 ### Data Collection Commands
 
 ```bash
-# Fetch from default Spanish far-right accounts
+# Default full history collection from 11 Spanish far-right accounts
 ./run_in_venv.sh fetch
 
-# Fetch from specific users
-./run_in_venv.sh fetch --user "Santi_ABASCAL,AlexanderTDF" --max 25
+# Latest content strategy - stops after 10 consecutive existing tweets
+./run_in_venv.sh fetch --latest
 
-# Re-fetch specific tweet
-./run_in_venv.sh fetch --refetch 1975540692899537249
+# Collect from specific users (full history)
+./run_in_venv.sh fetch --user "username1,username2"
+
+# Collect latest content from specific users
+./run_in_venv.sh fetch --user "username1,username2" --latest
 ```
 
 ### Analysis Commands

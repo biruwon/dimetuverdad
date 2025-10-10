@@ -492,7 +492,9 @@ class TestRefetchSingleTweet:
                     'engagement_replies': 0,
                 }
 
-            monkeypatch.setattr(fetch_tweets, '_extract_tweet_with_quoted_content', fake_extract)
+            # Import the parsers module
+            from fetcher import parsers as fetcher_parsers
+            monkeypatch.setattr(fetcher_parsers, 'extract_tweet_with_quoted_content', fake_extract)
 
             result = fetch_tweets.refetch_single_tweet("123456789")
 
@@ -504,7 +506,7 @@ class TestRefetchSingleTweet:
 
 
 class TestExtractTweetWithQuotedContent:
-    """Test suite for _extract_tweet_with_quoted_content function."""
+    """Test suite for extract_tweet_with_quoted_content function."""
     
     def test_extract_main_tweet_content(self, monkeypatch):
         """Test extraction of main tweet content."""
@@ -522,9 +524,9 @@ class TestExtractTweetWithQuotedContent:
         monkeypatch.setattr(fetcher_parsers, 'extract_content_elements', lambda a: {'hashtags': [], 'mentions': [], 'external_links': []})
         
         # Mock find_and_extract_quoted_tweet
-        monkeypatch.setattr(fetch_tweets, '_find_and_extract_quoted_tweet', lambda *args: None)
+        monkeypatch.setattr(fetcher_parsers, 'find_and_extract_quoted_tweet', lambda *args: None)
         
-        result = fetch_tweets._extract_tweet_with_quoted_content(
+        result = fetcher_parsers.extract_tweet_with_quoted_content(
             mock_page,
             "123456789",
             "testuser",
@@ -540,7 +542,9 @@ class TestExtractTweetWithQuotedContent:
         """Test handling when no tweet articles are found on page."""
         mock_page = FakePage([])
         
-        result = fetch_tweets._extract_tweet_with_quoted_content(
+        # Import the parsers module
+        from fetcher import parsers as fetcher_parsers
+        result = fetcher_parsers.extract_tweet_with_quoted_content(
             mock_page,
             "123456789",
             "testuser",
@@ -551,7 +555,7 @@ class TestExtractTweetWithQuotedContent:
 
 
 class TestUpdateTweetInDatabase:
-    """Test suite for _update_tweet_in_database function."""
+    """Test suite for update_tweet_in_database function."""
     
     def test_successful_update(self):
         """Test successful database update."""
@@ -579,7 +583,7 @@ class TestUpdateTweetInDatabase:
                 'engagement_replies': 2
             }
             
-            result = fetch_tweets._update_tweet_in_database("123456789", tweet_data)
+            result = fetcher_db.update_tweet_in_database("123456789", tweet_data)
             
             assert result == True
             
@@ -613,7 +617,7 @@ class TestUpdateTweetInDatabase:
                 'engagement_replies': 0
             }
             
-            result = fetch_tweets._update_tweet_in_database("999999999", tweet_data)
+            result = fetcher_db.update_tweet_in_database("999999999", tweet_data)
             
             assert result == False
         finally:

@@ -34,7 +34,7 @@ class TestFetchIntegration:
                 browser = p.chromium.launch(headless=True)
                 context = browser.new_context()
                 page = context.new_page()
-                results = fetch_tweets.fetch_enhanced_tweets(page, user, max_tweets=2, resume_from_last=False)
+                results = fetch_tweets.fetch_latest_tweets(page, user, max_tweets=2)
                 browser.close()
 
                 if isinstance(results, list) and len(results) <= 2:

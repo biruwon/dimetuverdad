@@ -27,6 +27,7 @@ except Exception:
     # Allow running examples and tests without python-dotenv installed.
     def load_dotenv():
         return None
+
 try:
     from playwright.sync_api import sync_playwright, TimeoutError
 except Exception:
@@ -181,61 +182,6 @@ def login_and_save_session(page, username, password):
     except TimeoutError:
         print("❌ Login verification failed - check for CAPTCHA or 2FA")
         return False
-
-def init_db():
-    """Initialize database with schema."""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    
-    # The schema is already created by migrate_tweets_schema.py
-    # Just verify it exists
-    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tweets'")
-    if not c.fetchone():
-        print("❌ Tweets table not found! Run migrate_tweets_schema.py first.")
-        raise Exception("Database not properly initialized")
-    
-    print("✅ Database schema ready")
-    # Ensure scrape_errors table exists for logging errors during scraping
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS scrape_errors (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT,
-        tweet_id TEXT,
-        error TEXT,
-        context TEXT,
-        timestamp TEXT
-    )
-    """)
-    conn.commit()
-    return conn
-
-def save_account_profile_info(conn, username: str, profile_pic_url: str = None):
-    """Save or update account profile information."""
-    if not profile_pic_url:
-        return
-    
-    cursor = conn.cursor()
-    try:
-        # Insert or update account profile information
-        cursor.execute("""
-            INSERT INTO accounts (username, profile_pic_url, profile_pic_updated, last_scraped)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(username) DO UPDATE SET
-                profile_pic_url = excluded.profile_pic_url,
-                profile_pic_updated = excluded.profile_pic_updated,
-                last_scraped = excluded.last_scraped
-        """, (
-            username, 
-            profile_pic_url, 
-            datetime.now().isoformat(),
-            datetime.now().isoformat()
-        ))
-        
-        conn.commit()
-        print(f"  💾 Updated profile info for @{username}")
-        
-    except Exception as e:
-        print(f"  ❌ Error saving profile info for @{username}: {e}")
 
 def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_last: bool, oldest_timestamp: Optional[str], profile_pic_url: Optional[str], conn) -> List[Dict]:
     collected_tweets = []
@@ -674,7 +620,7 @@ def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size:
     """
     if max_tweets <= session_size:
         # Single session is sufficient - need to get DB connection
-        conn = init_db()
+        conn = fetcher_db.init_db()
         try:
             result = collect_tweets_from_page(page, username, max_tweets, True, None, None, conn)
             return result
@@ -688,7 +634,7 @@ def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size:
     remaining_tweets = max_tweets
     
     # Initialize database connection for all sessions
-    conn = init_db()
+    conn = fetcher_db.init_db()
     
     try:
         while remaining_tweets > 0 and sessions_completed < 10:  # Max 10 sessions to prevent infinite loops
@@ -770,6 +716,158 @@ def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size:
         conn.close()
 
 
+def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]:
+    """
+    Strategy 1: Fetch latest tweets with simple stopping logic.
+    Stops after finding 10 consecutive existing tweets in a row.
+    
+    Args:
+        page: Playwright page object
+        username: Twitter username
+        max_tweets: Maximum number of tweets to fetch
+        
+    Returns:
+        List of collected tweets
+    """
+    print(f"🎯 Fetching latest tweets for @{username} (max: {max_tweets})")
+    
+    # Navigate to profile page
+    url = f"https://x.com/{username}"
+    print(f"🌐 Loading profile page: {url}")
+    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    
+    # Wait for tweets to load
+    try:
+        page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
+    except TimeoutError:
+        print(f"❌ No tweets found for @{username} or page failed to load")
+        return []
+    
+    human_delay(2.0, 4.0)
+    
+    # Extract profile picture
+    print(f"🖼️  Extracting profile picture for @{username}...")
+    profile_pic_url = fetcher_parsers.extract_profile_picture(page, username)
+    
+    # Initialize database connection
+    conn = fetcher_db.init_db()
+    
+    try:
+        tweets_collected = []
+        saved_count = 0
+        consecutive_existing = 0
+        scroll_count = 0
+        max_consecutive_existing = 10
+        
+        while saved_count < max_tweets and consecutive_existing < max_consecutive_existing:
+            scroll_count += 1
+            tweets_saved_this_scroll = 0
+            
+            # Get all tweet articles currently visible
+            articles = page.query_selector_all('[data-testid="tweet"]')
+            
+            for article in articles:
+                if saved_count >= max_tweets:
+                    break
+                    
+                try:
+                    # Extract basic tweet info
+                    tweet_link = article.query_selector('a[href*="/status/"]')
+                    if not tweet_link:
+                        continue
+                        
+                    href = tweet_link.get_attribute('href')
+                    tweet_id = href.split('/')[-1] if href else None
+                    
+                    if not tweet_id:
+                        continue
+                    
+                    # Check if we already processed this tweet in this session
+                    if any(t.get('tweet_id') == tweet_id for t in tweets_collected):
+                        continue
+                    
+                    # Extract content
+                    content = fetcher_parsers.extract_full_tweet_content(article)
+                    if not content:
+                        continue
+                    
+                    # Analyze post type
+                    post_analysis = fetcher_parsers.analyze_post_type(article, username)
+                    tweet_url = f"https://x.com/{username}/status/{tweet_id}"
+                    
+                    # Extract media information
+                    media_links, media_count, media_types = fetcher_parsers.extract_media_data(article)
+                    
+                    # Extract content elements (hashtags, mentions, links)
+                    content_elements = fetcher_parsers.extract_content_elements(article)
+                    
+                    # Build tweet data
+                    tweet_data = {
+                        'tweet_id': tweet_id,
+                        'username': username,
+                        'content': content,
+                        'tweet_url': tweet_url,
+                        'tweet_timestamp': time_elem.get_attribute('datetime') if (time_elem := article.query_selector('time')) else None,
+                        'post_type': post_analysis['post_type'],
+                        'media_count': media_count,
+                        'hashtags': content_elements.get('hashtags'),
+                        'mentions': content_elements.get('mentions'),
+                        'profile_pic_url': profile_pic_url,
+                        'engagement_likes': 0,
+                        'engagement_retweets': 0,
+                        'engagement_replies': 0,
+                        'engagement_views': 0,
+                        'is_repost': 1 if 'repost' in post_analysis['post_type'] else 0,
+                        'is_comment': 1 if post_analysis['post_type'] == 'repost_reply' else 0,
+                        'parent_tweet_id': post_analysis.get('reply_to_tweet_id') or post_analysis.get('original_tweet_id')
+                    }
+                    
+                    # Try to save tweet
+                    saved = fetcher_db.save_tweet(conn, tweet_data)
+                    if saved:
+                        saved_count += 1
+                        tweets_saved_this_scroll += 1
+                        consecutive_existing = 0  # Reset counter
+                        tweets_collected.append(tweet_data)
+                        print(f"  💾 Saved [{saved_count}] {post_analysis['post_type']}: {tweet_id}")
+                    else:
+                        print(f"  ⏭️ Existing tweet: {tweet_id}")
+                    
+                except Exception as e:
+                    print(f"  ❌ Error processing tweet: {e}")
+                    continue
+            
+            # Check consecutive existing logic
+            if tweets_saved_this_scroll == 0:
+                consecutive_existing += 1
+                print(f"  📊 No new tweets saved this scroll ({consecutive_existing}/{max_consecutive_existing})")
+            else:
+                print(f"  ✅ Saved {tweets_saved_this_scroll} new tweets this scroll")
+            
+            # Check if we should stop
+            if saved_count >= max_tweets:
+                print(f"  ✅ Completed: Reached target of {max_tweets} tweets")
+                break
+            elif consecutive_existing >= max_consecutive_existing:
+                print(f"  🛑 Stopped: Found {max_consecutive_existing} consecutive existing tweets")
+                break
+            
+            # Scroll for more content
+            random_scroll_pattern(page, deep_scroll=False)
+            human_delay(1.0, 2.0)
+        
+        print(f"📊 Latest tweets collection complete: {saved_count} new tweets saved")
+        
+        # Update profile info
+        fetcher_db.save_account_profile_info(conn, username, profile_pic_url)
+        print(f"  💾 Updated profile info for @{username}")
+        
+        return tweets_collected
+        
+    finally:
+        conn.close()
+
+
 def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bool = True) -> List[Dict]:
     """
     Tweet fetching with comprehensive post type detection and smart resume.
@@ -787,7 +885,7 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
     all_collected_tweets = []
     
     # Initialize database connection
-    conn = init_db()
+    conn = fetcher_db.init_db()
     
     try:
         # Get oldest tweet timestamp for continuing from where we left off
@@ -928,30 +1026,11 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
     finally:
         conn.close()
 
-def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_flag: bool):
-    browser = p.chromium.launch(headless=False, slow_mo=50)
+def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_flag: bool, latest: bool = False):
+    # Use shared browser setup helper to consolidate browser configuration
+    browser, context, page = _setup_browser_context(p, save_session=True)
     
-    # Select random user agent for this session
-    selected_user_agent = random.choice(USER_AGENTS)
-    
-    # Check if we have a saved session to reuse
-    session_file = "x_session.json"
-    context_kwargs = {
-        "user_agent": selected_user_agent,
-        "viewport": {"width": 1280, "height": 720},
-        "locale": "en-US",
-        "timezone_id": "America/New_York",
-        "color_scheme": "light",
-        "java_script_enabled": True,
-    }
-    
-    # Create browser context and page
-    if os.path.exists(session_file):
-        context_kwargs["storage_state"] = session_file
-    context = browser.new_context(**context_kwargs)
-    page = context.new_page()
-    
-    conn = init_db()
+    conn = fetcher_db.init_db()
     # Fetch tweets for each handle in a single browser session
     total_saved = 0
     for handle in handles:
@@ -962,7 +1041,11 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
         tweets = []
         while attempt <= max_retries:
             try:
-                tweets = fetch_tweets(page, handle, max_tweets=max_tweets, resume_from_last=resume_from_last_flag)
+                # Choose strategy based on latest flag
+                if latest:
+                    tweets = fetch_latest_tweets(page, handle, max_tweets=max_tweets)
+                else:
+                    tweets = fetch_tweets(page, handle, max_tweets=max_tweets, resume_from_last=resume_from_last_flag)
                 break
             except Exception as e:
                 attempt += 1
@@ -1002,6 +1085,118 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
     return total_saved, len(handles)
 
 
+def _setup_browser_context(p, save_session=False):
+    """
+    Helper function to set up browser context with consistent settings.
+    Consolidates browser setup logic used across main fetch and refetch operations.
+    
+    Args:
+        p: Playwright instance
+        save_session: Whether to save session state (used in main fetch operations)
+        
+    Returns:
+        tuple: (browser, context, page) instances
+    """
+    browser = p.chromium.launch(headless=False, slow_mo=50)
+    
+    # Select random user agent
+    selected_user_agent = random.choice(USER_AGENTS)
+    
+    # Load session if available
+    session_file = "x_session.json"
+    context_kwargs = {
+        "user_agent": selected_user_agent,
+        "viewport": {"width": 1280, "height": 720},
+        "locale": "en-US",
+        "timezone_id": "America/New_York",
+        "color_scheme": "light",
+        "java_script_enabled": True,
+    }
+    
+    # Create browser context - reuse session for both main fetch and refetch
+    if os.path.exists(session_file):
+        context_kwargs["storage_state"] = session_file
+    context = browser.new_context(**context_kwargs)
+    page = context.new_page()
+    
+    # Save session state if requested (used in main fetch operations)
+    if save_session:
+        context.storage_state(path=session_file)
+    
+    return browser, context, page
+
+
+def _get_tweet_info_from_db(tweet_id: str):
+    """
+    Helper function to get tweet information from database.
+    
+    Args:
+        tweet_id: The tweet ID to look up
+        
+    Returns:
+        tuple: (username, tweet_url) if found, (None, None) if not found
+        
+    Raises:
+        Exception: If database error occurs
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=10.0)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("SELECT username, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,))
+    row = cur.fetchone()
+    conn.close()
+    
+    if not row:
+        return None, None
+    
+    return row['username'], row['tweet_url']
+
+
+def _extract_and_update_tweet(page, tweet_id: str, username: str, tweet_url: str) -> bool:
+    """
+    Helper function to extract tweet data and update database.
+    Consolidates extraction logic used in refetch operations.
+    
+    Args:
+        page: Playwright page instance
+        tweet_id: The tweet ID
+        username: The username 
+        tweet_url: The tweet URL
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Load the tweet page
+        print(f"🌐 Loading tweet page...")
+        try:
+            page.goto(tweet_url, wait_until="domcontentloaded", timeout=60000)
+            fetcher_parsers.human_delay(2.0, 3.0)
+        except Exception as e:
+            print(f"⚠️ Page load warning: {e}")
+        
+        # Extract tweet data
+        tweet_data = fetcher_parsers.extract_tweet_with_quoted_content(page, tweet_id, username, tweet_url)
+        
+        if not tweet_data:
+            print(f"❌ Failed to extract tweet data")
+            return False
+        
+        # Update database
+        success = fetcher_db.update_tweet_in_database(tweet_id, tweet_data)
+        
+        if success:
+            print(f"✅ Successfully updated tweet {tweet_id}")
+        else:
+            print(f"❌ Failed to update tweet {tweet_id} in database")
+            
+        return success
+        
+    except Exception as e:
+        print(f"❌ Error during tweet extraction: {e}")
+        return False
+
+
 def refetch_single_tweet(tweet_id: str) -> bool:
     """
     Re-fetch a specific tweet by ID, extracting complete content including quoted tweets.
@@ -1016,19 +1211,12 @@ def refetch_single_tweet(tweet_id: str) -> bool:
     
     # Get tweet info from database
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT username, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,))
-        row = cur.fetchone()
-        conn.close()
+        username, tweet_url = _get_tweet_info_from_db(tweet_id)
         
-        if not row:
+        if not username:
             print(f"❌ Tweet ID {tweet_id} not found in database. Cannot refetch.")
             return False
         
-        username = row['username']
-        tweet_url = row['tweet_url']
         print(f"📍 Found tweet from @{username}")
         print(f"🔗 URL: {tweet_url}")
         
@@ -1036,49 +1224,13 @@ def refetch_single_tweet(tweet_id: str) -> bool:
         print(f"❌ Database error: {e}")
         return False
     
-    # Use Playwright to refetch the tweet
+    # Use shared browser setup and extraction logic
     try:
         with sync_playwright() as p:
-            # Reuse existing browser setup (same as run_fetch_session)
-            browser = p.chromium.launch(headless=False, slow_mo=50)
+            browser, context, page = _setup_browser_context(p)
             
-            # Select random user agent
-            selected_user_agent = random.choice(USER_AGENTS)
-            
-            # Load session if available
-            session_file = "x_session.json"
-            context_kwargs = {
-                "user_agent": selected_user_agent,
-                "viewport": {"width": 1280, "height": 720},
-                "locale": "en-US",
-                "timezone_id": "America/New_York",
-                "color_scheme": "light",
-                "java_script_enabled": True,
-            }
-            if os.path.exists(session_file):
-                context_kwargs["storage_state"] = session_file
-            context = browser.new_context(**context_kwargs)
-            page = context.new_page()
-            
-            # Load the tweet page
-            print(f"🌐 Loading tweet page...")
-            try:
-                page.goto(tweet_url, wait_until="domcontentloaded", timeout=60000)
-                human_delay(2.0, 3.0)
-            except Exception as e:
-                print(f"⚠️ Page load warning: {e}")
-            
-            # Extract tweet data
-            tweet_data = _extract_tweet_with_quoted_content(page, tweet_id, username, tweet_url)
-            
-            if not tweet_data:
-                print(f"❌ Failed to extract tweet data")
-                context.close()
-                browser.close()
-                return False
-            
-            # Update database
-            success = _update_tweet_in_database(tweet_id, tweet_data)
+            # Extract and update tweet using shared helper
+            success = _extract_and_update_tweet(page, tweet_id, username, tweet_url)
             
             context.close()
             browser.close()
@@ -1136,431 +1288,13 @@ def refetch_account_all(username: str, max_tweets: int = None) -> bool:
         return False
 
 
-def _extract_tweet_with_quoted_content(page, tweet_id: str, username: str, tweet_url: str) -> dict:
-    """
-    Extract complete tweet data including quoted tweet content and media.
-    
-    Args:
-        page: Playwright page object
-        tweet_id: Tweet ID
-        username: Tweet author username  
-        tweet_url: Tweet URL
-        
-    Returns:
-        dict: Tweet data with all fields, or None if extraction failed
-    """
-    # Find main tweet article
-    articles = page.query_selector_all('article[data-testid="tweet"]')
-    if not articles:
-        print(f"❌ Could not find tweet content on page")
-        return None
-
-    main_article = articles[0]
-    print(f"✅ Found main tweet article")
-
-    # Extract main tweet content
-    content = fetcher_parsers.extract_full_tweet_content(main_article)
-    post_analysis = fetcher_parsers.analyze_post_type(main_article, username)
-    post_analysis['tweet_id'] = tweet_id  # Add tweet_id for filtering
-    main_media_links, main_media_count, main_media_types = fetcher_parsers.extract_media_data(main_article)
-    engagement = fetcher_parsers.extract_engagement_metrics(main_article)
-    content_elements = fetcher_parsers.extract_content_elements(main_article)
-
-    print(f"✅ Main tweet extracted: {len(content)} chars, {main_media_count} media")
-    
-    # Multi-strategy quoted tweet detection
-    quoted_tweet_data = _find_and_extract_quoted_tweet(page, main_article, post_analysis)
-    
-    # Combine main and quoted media (Option A: single media_links field)
-    combined_media_links = list(main_media_links) if main_media_links else []
-    if quoted_tweet_data and quoted_tweet_data.get('media_links'):
-        quoted_media = quoted_tweet_data['media_links']
-        # Add quoted media that's not already in main media
-        for media_url in quoted_media:
-            if media_url not in combined_media_links:
-                combined_media_links.append(media_url)
-        if quoted_tweet_data.get('media_count', 0) > 0:
-            print(f"📎 Added {quoted_tweet_data['media_count']} media from quoted tweet")
-    
-    combined_media_count = len(combined_media_links)
-    
-    # Build complete tweet data
-    tweet_data = {
-        'tweet_id': tweet_id,
-        'tweet_url': tweet_url,
-        'username': username,
-        'content': content,
-        'post_type': post_analysis.get('post_type', 'original'),
-        'original_author': post_analysis.get('original_author'),
-        'original_tweet_id': post_analysis.get('original_tweet_id'),
-        'original_content': post_analysis.get('original_content'),
-        'reply_to_username': post_analysis.get('reply_to_username'),
-        'media_links': ','.join(combined_media_links) if combined_media_links else None,
-        'media_count': combined_media_count,
-        'hashtags': ','.join(content_elements.get('hashtags', [])) if content_elements.get('hashtags') else None,
-        'mentions': ','.join(content_elements.get('mentions', [])) if content_elements.get('mentions') else None,
-        'external_links': ','.join(content_elements.get('external_links', [])) if content_elements.get('external_links') else None,
-        'engagement_likes': engagement.get('likes', 0),
-        'engagement_retweets': engagement.get('retweets', 0),
-        'engagement_replies': engagement.get('replies', 0),
-    }
-    
-    print(f"📝 Main content: {content[:100]}...")
-    if tweet_data['original_content']:
-        print(f"📎 Quoted content: {tweet_data['original_content'][:100]}...")
-    if combined_media_count > 0:
-        print(f"🖼️ Total media (main + quoted): {combined_media_count} items")
-    
-    return tweet_data
-
-
-def _find_and_extract_quoted_tweet(page, main_article, post_analysis: dict) -> dict:
-    """
-    Find and extract quoted tweet using multiple detection strategies.
-    
-    Args:
-        page: Playwright page object
-        main_article: Main tweet article element
-        post_analysis: Post analysis dict to update with quoted content
-        
-    Returns:
-        dict: Quoted tweet data, or None if not found
-    """
-    # Strategy 1: Parser already found it
-    if post_analysis.get('original_content'):
-        print(f"✅ Parser found quoted content: {len(post_analysis['original_content'])} chars")
-        return {'content': post_analysis['original_content']}
-    
-    print(f"🔍 Searching for quoted tweet with multiple strategies...")
-    
-    # Strategy 2: Look for various quoted tweet card selectors
-    quoted_card_selectors = [
-        # New: Multiple tweet texts means there's a quoted tweet
-        # The page has main tweet text + quoted tweet text
-        ('check_multiple_tweets', None),  # Special check
-        # Original nested article selector (timeline view)
-        '[role="article"] [role="article"]',
-        '[data-testid="tweetText"] ~ div [role="article"]',
-        '[data-testid="card.wrapper"]',  # Quote card wrapper
-        'div[class*="quoted"]',  # Any div with "quoted" in class  
-        'article div[data-testid="card.layoutLarge.media"]',  # Large media card
-        'article a[href*="/status/"] img[alt][src*="pbs.twimg.com"]',  # Link with preview image (parent)
-    ]
-    
-    quoted_card = None
-    for selector_item in quoted_card_selectors:
-        try:
-            # Handle special case for multiple tweet check
-            if isinstance(selector_item, tuple) and selector_item[0] == 'check_multiple_tweets':
-                # Look for all tweetText elements WITHIN the main article
-                tweet_texts = main_article.query_selector_all('[data-testid="tweetText"]')
-                if len(tweet_texts) >= 2:
-                    # Second one is the quoted tweet (nested inside main article)
-                    quoted_text_elem = tweet_texts[1]
-                    print(f"✅ Found quoted tweet (2nd tweetText element within main article)")
-                    # Get the text content first
-                    quoted_text = quoted_text_elem.inner_text() if hasattr(quoted_text_elem, 'inner_text') else None
-                    if quoted_text:
-                        post_analysis['original_content'] = quoted_text
-                        print(f"📎 Quoted content: {quoted_text[:150]}...")
-                    
-                    # Now click on the quoted tweet to navigate to it for complete extraction
-                    try:
-                        print(f"🖱️ Clicking on quoted tweet to navigate to it...")
-                        quoted_text_elem.click()
-                        page.wait_for_load_state("domcontentloaded")
-                        human_delay(5.0, 7.0)
-
-                        # Try to dismiss overlays/popups
-                        try:
-                            overlay = page.query_selector('div:has-text("unusual activity"), div:has-text("actividad inusual"), div[role="dialog"]')
-                            if overlay:
-                                close_btn = overlay.query_selector('button, [role="button"]')
-                                if close_btn:
-                                    print("🛑 Dismissing overlay/popup...")
-                                    close_btn.click()
-                                    human_delay(1.0, 2.0)
-                        except Exception as e:
-                            print(f"⚠️ Overlay dismissal failed: {e}")
-
-                        # Poll for media elements for up to 10 seconds
-                        poll_start = time.time()
-                        found_media = False
-                        while time.time() - poll_start < 10:
-                            quoted_articles = page.query_selector_all('article[data-testid="tweet"]')
-                            if quoted_articles:
-                                quoted_main = quoted_articles[0]
-                                video_elems = quoted_main.query_selector_all('video, div[aria-label*="Video"], div[data-testid*="videoPlayer"]')
-                                img_elems = quoted_main.query_selector_all('img[src*="twimg.com"], img[src*="pbs.twimg.com"]')
-                                if video_elems or img_elems:
-                                    print(f"� Poll: Found {len(video_elems)} video and {len(img_elems)} image elements.")
-                                    found_media = True
-                                    # Try clicking video/play if present
-                                    try:
-                                        if video_elems:
-                                            print(f"🖱️ Clicking video element...")
-                                            video_elems[0].click()
-                                            human_delay(1.0, 2.0)
-                                        play_btn = quoted_main.query_selector('button[aria-label*="Play"], div[role="button"][aria-label*="Play"]')
-                                        if play_btn:
-                                            print(f"🖱️ Clicking play button...")
-                                            play_btn.click()
-                                            human_delay(1.0, 2.0)
-                                    except Exception as e:
-                                        print(f"⚠️ Video/play click failed: {e}")
-                                    break
-                            human_delay(1.0, 1.5)
-                        if not found_media:
-                            print("⚠️ No media found after polling.")
-
-                        # Playwright stealth mode (if available)
-                        try:
-                            if hasattr(page.context, 'use_stealth'):
-                                print("🕵️ Enabling Playwright stealth mode...")
-                                page.context.use_stealth()
-                        except Exception as e:
-                            print(f"⚠️ Stealth mode not available: {e}")
-                        if quoted_articles:
-                            quoted_main = quoted_articles[0]
-
-                            quoted_full_content = fetcher_parsers.extract_full_tweet_content(quoted_main)
-                            quoted_media_links, quoted_media_count, quoted_media_types = fetcher_parsers.extract_media_data(quoted_main)
-                            quoted_elements = fetcher_parsers.extract_content_elements(quoted_main)
-
-                            # Update post_analysis with full content
-                            post_analysis['original_content'] = quoted_full_content
-
-                            print(f"✅ Complete quoted tweet extracted: {len(quoted_full_content)} chars, {quoted_media_count} media")
-                            if quoted_media_count > 0:
-                                print(f"   🖼️ Media: {', '.join(quoted_media_links[:3])}")
-
-                            return {
-                                'content': quoted_full_content,
-                                'media_links': quoted_media_links,
-                                'media_count': quoted_media_count,
-                                'media_types': quoted_media_types,
-                                'hashtags': quoted_elements.get('hashtags', []),
-                                'mentions': quoted_elements.get('mentions', []),
-                            }
-                        else:
-                            print(f"⚠️ No article found after clicking quoted tweet")
-                    except Exception as e:
-                        print(f"⚠️ Could not click and extract quoted tweet: {e}")
-                continue
-            
-            selector = selector_item
-            if selector == 'article a[href*="/status/"] img[alt][src*="pbs.twimg.com"]':
-                # Special case: image preview means there's a quoted tweet nearby
-                img_elem = main_article.query_selector(selector)
-                if img_elem:
-                    # Get the parent link
-                    parent = img_elem.evaluate_handle('el => el.closest("a[href*=\\"/status/\\"]")')
-                    if parent:
-                        quoted_card = parent.as_element()
-                        print(f"✅ Found quoted card via image preview")
-                        break
-            else:
-                quoted_card = main_article.query_selector(selector)
-                if quoted_card:
-                    print(f"✅ Found quoted card with selector: {selector}")
-                    break
-        except Exception as e:
-            continue
-    
-    # Strategy 2.5: Look for ANY link to another tweet inside the main article
-    if not quoted_card:
-        print(f"🔍 Trying alternative: looking for any /status/ link in article...")
-        try:
-            all_links = main_article.query_selector_all('a[href*="/status/"]')
-            for link in all_links:
-                href = link.get_attribute('href')
-                # Make sure it's not the main tweet's own link
-                if href and '/status/' in href:
-                    parts = href.strip('/').split('/')
-                    if 'status' in parts:
-                        status_index = parts.index('status')
-                        if status_index >= 1:
-                            linked_tweet_id = parts[status_index + 1].split('?')[0]
-                            # If it's a different tweet ID, it might be a quoted tweet
-                            if linked_tweet_id != post_analysis.get('tweet_id', ''):
-                                quoted_card = link
-                                print(f"✅ Found potential quoted tweet link: {href}")
-                                break
-        except Exception as e:
-            print(f"⚠️ Alternative link search failed: {e}")
-    
-    if not quoted_card:
-        print(f"⚠️ No quoted tweet card found in main article")
-        return None
-    
-    # Extract quoted tweet URL and author
-    try:
-        # Try multiple methods to find the quoted tweet URL
-        quoted_link = None
-        quoted_href = None
-        
-        # Method 1: Direct link in quoted card
-        quoted_link = quoted_card.query_selector('a[href*="/status/"]')
-        if quoted_link:
-            quoted_href = quoted_link.get_attribute('href')
-        
-        # Method 2: If quoted_card IS a link
-        if not quoted_href and quoted_card.tag_name.lower() == 'a':
-            quoted_href = quoted_card.get_attribute('href')
-        
-        # Method 3: Look for time element which usually has the link
-        if not quoted_href:
-            time_elem = quoted_card.query_selector('time')
-            if time_elem:
-                parent_link = time_elem.evaluate_handle('el => el.closest("a[href*=\\"/status/\\"]")').as_element()
-                if parent_link:
-                    quoted_href = parent_link.get_attribute('href')
-        
-        # Method 4: Search for ANY link with status inside the quoted card area
-        if not quoted_href:
-            all_links = quoted_card.query_selector_all('a[href*="/status/"]')
-            for link in all_links:
-                href = link.get_attribute('href')
-                if href and '/status/' in href:
-                    # Make sure it's not the main tweet
-                    if post_analysis.get('tweet_id', '') not in href:
-                        quoted_href = href
-                        break
-        
-        if not quoted_href or '/status/' not in quoted_href:
-            print(f"⚠️ No status link found in quoted card")
-            return None
-        
-        # Extract author and tweet ID from URL
-        parts = quoted_href.strip('/').split('/')
-        status_index = parts.index('status') if 'status' in parts else -1
-        if status_index < 1:
-            print(f"⚠️ Cannot parse quoted tweet URL: {quoted_href}")
-            return None
-        
-        quoted_author = parts[status_index - 1]
-        quoted_tweet_id = parts[status_index + 1].split('?')[0]  # Remove query params
-        quoted_tweet_url = f"https://x.com/{quoted_author}/status/{quoted_tweet_id}"
-        
-        post_analysis['reply_to_username'] = quoted_author
-        post_analysis['reply_to_tweet_id'] = quoted_tweet_id
-        
-        print(f"🔗 Found quoted tweet by @{quoted_author}: {quoted_tweet_url}")
-        
-        # Try to extract embedded text first
-        quoted_text_elem = quoted_card.query_selector('[data-testid="tweetText"]')
-        if quoted_text_elem:
-            embedded_text = quoted_text_elem.inner_text().strip()
-            print(f"📄 Extracted embedded text: {len(embedded_text)} chars")
-        else:
-            embedded_text = None
-        
-        # Strategy 3: Visit the quoted tweet page for complete content
-        print(f"🌐 Visiting quoted tweet page for complete extraction...")
-        try:
-            page.goto(quoted_tweet_url, wait_until="domcontentloaded", timeout=60000)
-            human_delay(2.0, 3.0)
-            
-            # Extract complete quoted tweet
-            quoted_articles = page.query_selector_all('article[data-testid="tweet"]')
-            if quoted_articles:
-                quoted_main = quoted_articles[0]
-                
-                quoted_full_content = fetcher_parsers.extract_full_tweet_content(quoted_main)
-                quoted_media_links, quoted_media_count, quoted_media_types = fetcher_parsers.extract_media_data(quoted_main)
-                quoted_elements = fetcher_parsers.extract_content_elements(quoted_main)
-                
-                # Update post_analysis with full content
-                post_analysis['original_content'] = quoted_full_content
-                
-                print(f"✅ Complete quoted tweet: {len(quoted_full_content)} chars, {quoted_media_count} media")
-                if quoted_media_count > 0:
-                    print(f"   🖼️ Media: {', '.join(quoted_media_links[:3])}")
-                
-                return {
-                    'content': quoted_full_content,
-                    'media_links': quoted_media_links,
-                    'media_count': quoted_media_count,
-                    'media_types': quoted_media_types,
-                    'hashtags': quoted_elements.get('hashtags', []),
-                    'mentions': quoted_elements.get('mentions', []),
-                    'external_links': quoted_elements.get('external_links', [])
-                }
-        except Exception as e:
-            print(f"⚠️ Could not visit quoted tweet: {e}")
-            # Fall back to embedded text if available
-            if embedded_text:
-                post_analysis['original_content'] = embedded_text
-                print(f"⚠️ Using embedded text as fallback")
-                return {'content': embedded_text}
-            
-    except Exception as e:
-        print(f"⚠️ Error extracting quoted tweet: {e}")
-    
-    return None
-
-
-def _update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
-    """
-    Update tweet in database with refetched data.
-    
-    Args:
-        tweet_id: Tweet ID
-        tweet_data: Complete tweet data dict
-        
-    Returns:
-        bool: True if successful
-    """
-    try:
-        conn = init_db()
-        c = conn.cursor()
-        
-        # Direct UPDATE to force save all fields
-        c.execute("""
-            UPDATE tweets SET 
-                original_content = ?,
-                reply_to_username = ?,
-                media_links = ?,
-                media_count = ?,
-                engagement_likes = ?,
-                engagement_retweets = ?,
-                engagement_replies = ?
-            WHERE tweet_id = ?
-        """, (
-            tweet_data['original_content'],
-            tweet_data.get('reply_to_username'),
-            tweet_data['media_links'],
-            tweet_data['media_count'],
-            tweet_data['engagement_likes'],
-            tweet_data['engagement_retweets'],
-            tweet_data['engagement_replies'],
-            tweet_id
-        ))
-        
-        rows_updated = c.rowcount
-        conn.commit()
-        conn.close()
-        
-        if rows_updated > 0:
-            print(f"💾 Tweet updated in database ({rows_updated} rows)")
-            return True
-        else:
-            print(f"⚠️ No rows updated - tweet may not exist")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Database update error: {e}")
-        return False
-
-
 def main():
     start_time = time.time()  # Start timing
 
     parser = argparse.ArgumentParser(description="Fetch tweets from a given X (Twitter) user.")
     parser.add_argument("--user", "-u", dest="user", help="Optional single username to fetch tweets from (with or without leading @). Overrides positional username.")
     parser.add_argument("--max", type=int, default=None, help="Maximum number of tweets to fetch per user (default: unlimited)")
-    parser.add_argument("--handles-file", help="Path to a newline-separated file with target handles (overrides defaults)")
-    parser.add_argument("--no-resume", action='store_true', help="Do not resume from previous scrape; fetch recent tweets instead of older ones")
+    parser.add_argument("--latest", action='store_true', help="Strategy 1: Fetch only latest tweets, stop after 10 consecutive existing tweets")
     parser.add_argument("--refetch", help="Re-fetch a specific tweet ID (bypasses exists check and updates database)")
     parser.add_argument("--refetch-all", help="Delete all data for specified username and refetch from scratch")
     args = parser.parse_args()
@@ -1577,17 +1311,6 @@ def main():
         success = refetch_account_all(username, args.max)
         return  # Exit after refetch-all
 
-    # Resolve effective target username robustly. --user takes precedence, then positional.
-    effective_user = None
-    if args.user:
-        effective_user = args.user.strip()
-    elif getattr(args, 'username', None):
-        effective_user = args.username.strip()
-
-    if effective_user:
-        # Normalize leading @ if present
-        effective_user = effective_user.lstrip('@').strip()
-
     max_tweets = args.max
     if max_tweets is None:
         max_tweets = float('inf')  # Unlimited
@@ -1595,28 +1318,18 @@ def main():
     else:
         print(f"📣 max_tweets set to: {max_tweets}")
 
-    # Diagnostic: show parsed args for debugging
-    print(f"🐞 parsed args: user={args.user} username={getattr(args, 'username', None)} max={args.max} handles_file={args.handles_file}")
-
-    # Build handles list. If an explicit user was provided, enforce single-target.
-    if effective_user:
-        handles = [effective_user]
-        if args.handles_file:
-            print("⚠️  Ignoring --handles-file because a single username was requested via --user/positional argument")
+    # Build handles list. If --user was provided, use single target, otherwise use defaults
+    if args.user:
+        username = args.user.strip().lstrip('@')  # Remove @ if present
+        handles = [username]
     else:
-        # No single user specified: use handles file if present, else defaults
-        if args.handles_file and os.path.exists(args.handles_file):
-            with open(args.handles_file, 'r') as f:
-                handles = [l.strip() for l in f if l.strip()]
-        else:
-            handles = DEFAULT_HANDLES.copy()
+        # No single user specified: use default handles
+        handles = DEFAULT_HANDLES.copy()
 
     print(f"📣 Targets resolved (final): {handles}")
 
-    resume_from_last_flag = not args.no_resume
-
     with sync_playwright() as p:
-        total, accounts_processed = run_fetch_session(p, handles, max_tweets, resume_from_last_flag)
+        total, accounts_processed = run_fetch_session(p, handles, max_tweets, True, args.latest)
     
     # Calculate and display execution time
     end_time = time.time()
@@ -1630,64 +1343,6 @@ def main():
     print(f"📈 Average tweets per account: {total/accounts_processed:.1f}")
 
 
-
-def run_in_background(username: str, max_tweets: int):
-    """Run the fetch script in the background using os.fork (Unix-only)."""
-    pid = os.fork()
-    if pid > 0:
-        # Parent: return child PID
-        print(f"Started background fetch (pid={pid}) for @{username}")
-        return pid
-    else:
-        # Child: run main-like logic for single user then exit
-        try:
-            # Minimal context startup for background run
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                selected_user_agent = random.choice(USER_AGENTS)
-                context_kwargs = {
-                    "user_agent": selected_user_agent,
-                    "viewport": {"width": 1280, "height": 720},
-                    "locale": "en-US",
-                    "timezone_id": "America/New_York",
-                    "color_scheme": "light",
-                    "java_script_enabled": True,
-                }
-                session_file = "x_session.json"
-                if os.path.exists(session_file):
-                    context_kwargs["storage_state"] = session_file
-                context = browser.new_context(**context_kwargs)
-                page = context.new_page()
-                conn = init_db()
-                try:
-                    # Background runs should respect the CLI resume flag if provided via env or caller; default to True
-                    tweets = fetch_tweets(page, username, max_tweets=max_tweets, resume_from_last=True)
-                except Exception as e:
-                    tweets = []
-                    try:
-                        conn_err = sqlite3.connect(DB_PATH)
-                        cur_err = conn_err.cursor()
-                        cur_err.execute("INSERT INTO scrape_errors (username, tweet_id, error, context, timestamp) VALUES (?, ?, ?, ?, ?)", (
-                            username,
-                            None,
-                            str(e),
-                            'background_fetch',
-                            datetime.now().isoformat()
-                        ))
-                        conn_err.commit()
-                        conn_err.close()
-                    except Exception:
-                        pass
-
-                # Tweets are already saved during fetch_tweets, just count them
-                total = len(tweets)
-
-                # Print final summary to stdout (captured in parent)
-                print(f"Background fetch complete for @{username}: processed {total} tweets")
-                conn.close()
-                browser.close()
-        finally:
-            os._exit(0)
 
 if __name__ == "__main__":
     main()

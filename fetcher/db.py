@@ -195,3 +195,86 @@ def save_account_profile_info(conn, username: str, profile_pic_url: str = None):
         
     except Exception as e:
         print(f"  ❌ Error saving profile info for @{username}: {e}")
+
+
+def init_db():
+    """Initialize database with schema."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    # The schema is already created by migrate_tweets_schema.py
+    # Just verify it exists
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tweets'")
+    if not c.fetchone():
+        print("❌ Tweets table not found! Run migrate_tweets_schema.py first.")
+        raise Exception("Database not properly initialized")
+    
+    print("✅ Database schema ready")
+    # Ensure scrape_errors table exists for logging errors during scraping
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS scrape_errors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        tweet_id TEXT,
+        error TEXT,
+        context TEXT,
+        timestamp TEXT
+    )
+    """)
+    conn.commit()
+    return conn
+
+
+def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
+    """
+    Update tweet in database with refetched data.
+    
+    Args:
+        tweet_id: Tweet ID
+        tweet_data: Complete tweet data dict
+        
+    Returns:
+        bool: True if successful
+    """
+    try:
+        # Import here to avoid circular imports and get current DB_PATH value
+        from fetcher import fetch_tweets
+        conn = sqlite3.connect(fetch_tweets.DB_PATH, timeout=10.0)
+        c = conn.cursor()
+        
+        # Direct UPDATE to force save all fields
+        c.execute("""
+            UPDATE tweets SET 
+                original_content = ?,
+                reply_to_username = ?,
+                media_links = ?,
+                media_count = ?,
+                engagement_likes = ?,
+                engagement_retweets = ?,
+                engagement_replies = ?
+            WHERE tweet_id = ?
+        """, (
+            tweet_data['original_content'],
+            tweet_data.get('reply_to_username'),
+            tweet_data['media_links'],
+            tweet_data['media_count'],
+            tweet_data['engagement_likes'],
+            tweet_data['engagement_retweets'],
+            tweet_data['engagement_replies'],
+            tweet_id
+        ))
+        
+        rows_updated = c.rowcount
+        conn.commit()
+        conn.close()
+        
+        if rows_updated > 0:
+            print(f"💾 Tweet updated in database ({rows_updated} rows)")
+            return True
+        else:
+            print(f"⚠️ No rows updated - tweet may not exist")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Database update error: {e}")
+        return False
