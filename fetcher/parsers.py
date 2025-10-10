@@ -17,7 +17,8 @@ def should_skip_existing_tweet(tweet_timestamp: str, oldest_timestamp: Optional[
         return False
 
 
-def extract_media_data(article) -> Tuple[List[str], int, List[str]]:
+def extract_image_data(article) -> Tuple[List[str], List[str]]:
+    """Extract image URLs from a tweet article."""
     media_links = []
     media_types = []
 
@@ -36,25 +37,7 @@ def extract_media_data(article) -> Tuple[List[str], int, List[str]]:
                 media_links.append(src)
                 media_types.append('image')
 
-    video_selectors = ['video', '[data-testid="videoComponent"] video', '[data-testid="videoPlayer"] video']
-    for selector in video_selectors:
-        for video in article.query_selector_all(selector):
-            poster = video.get_attribute('poster')
-            if poster and poster not in media_links:
-                media_links.append(poster)
-                media_types.append('image')
-            src = video.get_attribute('src')
-            if src and src not in media_links:
-                media_links.append(src)
-                media_types.append('video')
-            # NEW: Check for <source> tags inside <video>
-            source_elems = video.query_selector_all('source')
-            for source in source_elems:
-                source_src = source.get_attribute('src')
-                if source_src and source_src not in media_links:
-                    media_links.append(source_src)
-                    media_types.append('video')
-
+    # Extract background images
     for elem in article.query_selector_all('[style*="background-image"]'):
         style = elem.get_attribute('style')
         if style and 'twimg.com' in style:
@@ -64,6 +47,125 @@ def extract_media_data(article) -> Tuple[List[str], int, List[str]]:
                 if bg_url not in media_links:
                     media_links.append(bg_url)
                     media_types.append('image')
+
+    return media_links, media_types
+
+
+def extract_video_data(article) -> Tuple[List[str], List[str]]:
+    """Extract video URLs from a tweet article."""
+    media_links = []
+    media_types = []
+
+    video_selectors = [
+        'video',  # Direct video elements
+        '[data-testid="videoComponent"] video',  # Video inside videoComponent
+        '[data-testid="videoPlayer"] video',     # Video inside videoPlayer
+        '[data-testid="videoComponent"]',        # Video component container
+        '[data-testid="videoPlayer"]',           # Video player container
+        'div[aria-label*="Video"]',              # Accessible video containers
+        'div[aria-label*="video"]',
+        'div[data-testid*="video"]',             # Any div with video in testid
+        'div[class*="video"]',                   # CSS class based
+        'div[class*="Video"]'
+    ]
+    
+    print(f"🔍 Looking for video elements with {len(video_selectors)} selectors...")
+    
+    for selector in video_selectors:
+        try:
+            elements = article.query_selector_all(selector)
+            if elements:
+                print(f"📹 Found {len(elements)} elements with selector: {selector}")
+                for i, video in enumerate(elements):
+                    # Check if it's an actual video element
+                    tag_name = video.evaluate('el => el.tagName.toLowerCase()')
+                    
+                    # Extract poster (thumbnail)
+                    poster = video.get_attribute('poster')
+                    if poster and poster not in media_links:
+                        print(f"  🖼️ Found poster: {poster[:100]}...")
+                        media_links.append(poster)
+                        media_types.append('image')
+                    
+                    # Extract direct src from video elements
+                    if tag_name == 'video':
+                        src = video.get_attribute('src')
+                        if src and src not in media_links:
+                            print(f"  🎥 Found video src: {src[:100]}...")
+                            media_links.append(src)
+                            media_types.append('video')
+                        
+                        # Check for <source> tags inside <video>
+                        source_elems = video.query_selector_all('source')
+                        for source in source_elems:
+                            source_src = source.get_attribute('src')
+                            if source_src and source_src not in media_links:
+                                print(f"  🎬 Found source src: {source_src[:100]}...")
+                                media_links.append(source_src)
+                                media_types.append('video')
+                    
+                    # For container divs, check for data attributes that might contain video URLs
+                    elif tag_name == 'div':
+                        # Check common data attributes that might contain video URLs
+                        data_attrs = ['data-url', 'data-src', 'data-video-url', 'data-playback-url', 'data-stream-url']
+                        for attr in data_attrs:
+                            data_url = video.get_attribute(attr)
+                            if data_url and data_url not in media_links:
+                                print(f"  📡 Found {attr}: {data_url[:100]}...")
+                                media_links.append(data_url)
+                                media_types.append('video')
+                        
+                        # Check for video-related attributes
+                        video_attrs = ['data-video-id', 'data-media-key', 'data-tweet-id']
+                        for attr in video_attrs:
+                            attr_val = video.get_attribute(attr)
+                            if attr_val:
+                                print(f"  📝 Found {attr}: {attr_val}")
+                        
+                        # Look for any attribute containing video-related keywords in the value
+                        all_attrs = video.evaluate('el => Array.from(el.attributes).map(attr => [attr.name, attr.value])')
+                        for attr_name, attr_value in all_attrs:
+                            if attr_value and isinstance(attr_value, str):
+                                lower_val = attr_value.lower()
+                                # Look for actual URLs (http/https) or video file extensions
+                                if (lower_val.startswith('http') or 
+                                    any(ext in lower_val for ext in ['.mp4', '.m3u8', '.webm', '.mov', 'blob:']) or
+                                    any(keyword in lower_val for keyword in ['video.twimg.com', 'pbs.twimg.com', 'mediadelivery'])):
+                                    if attr_value not in media_links:
+                                        print(f"  🔗 Found video URL in {attr_name}: {attr_value[:100]}...")
+                                        media_links.append(attr_value)
+                                        media_types.append('video')
+                        
+                        # Debug: print all attributes for video-related elements (limit output)
+                        if 'video' in selector.lower() and len(all_attrs) > 0:
+                            print(f"  🔍 Debug attributes for {selector} (first 5):")
+                            for attr_name, attr_value in all_attrs[:5]:
+                                if attr_value and len(str(attr_value)) < 100:  # Skip very long values
+                                    print(f"    {attr_name}: {str(attr_value)[:80]}...")
+                                elif attr_value:
+                                    print(f"    {attr_name}: [long value, {len(str(attr_value))} chars]")
+                                else:
+                                    print(f"    {attr_name}: (empty or null)")
+        except Exception as e:
+            print(f"⚠️ Selector failed {selector}: {e}")
+
+    return media_links, media_types
+
+
+def extract_media_data(article) -> Tuple[List[str], int, List[str]]:
+    """Extract all media (images and videos) from a tweet article."""
+    media_links = []
+    media_types = []
+
+    # Extract images
+    image_links, image_types = extract_image_data(article)
+    media_links.extend(image_links)
+    media_types.extend(image_types)
+
+    # Extract videos
+    video_links, video_types = extract_video_data(article)
+    media_links.extend(video_links)
+    media_types.extend(video_types)
 
     # Filter out unwanted media types: profile images and card previews
     filtered_media_links = []
@@ -121,20 +223,111 @@ def extract_engagement_metrics(article) -> Dict[str, int]:
 
 
 def extract_full_tweet_content(article) -> str:
-    try:
-        text_elem = article.query_selector('[data-testid="tweetText"]')
-        if text_elem:
-            try:
-                return text_elem.inner_text()
-            except Exception:
-                return text_elem.get_attribute('text') or ''
-        # fallback: try generic inner_text
+    """
+    Extract full tweet text content using multiple selector strategies.
+    Handles different tweet layouts and structures.
+    """
+    text_selectors = [
+        # Primary: Standard tweet text
+        '[data-testid="tweetText"]',
+
+        # Alternative: Different test IDs
+        '[data-testid="Tweet-User-Text"]',
+        '[data-testid="TweetText"]',
+
+        # CSS class-based selectors (common patterns)
+        '.tweet-text',
+        '.TweetTextSize',
+        '[class*="TweetText"]',
+        '[class*="tweet-text"]',
+
+        # Generic text containers
+        'div[role="group"] p',  # Paragraph inside role group
+        'article p',            # Any paragraph in article
+
+        # Span-based text (newer Twitter layout)
+        'span[data-testid="tweetText"]',
+        'span[class*="tweet-text"]',
+        'span[role="text"]',
+
+        # Fallback: Any text content in the article
+        'div[dir="ltr"]',       # Left-to-right text direction
+        'div[dir="auto"]',      # Auto text direction
+    ]
+
+    print(f"🔍 Extracting tweet text with {len(text_selectors)} selector strategies...")
+
+    for i, selector in enumerate(text_selectors):
         try:
-            return article.inner_text()
-        except Exception:
-            return ''
-    except Exception:
-        return ''
+            elements = article.query_selector_all(selector)
+            if elements:
+                print(f"✅ Found {len(elements)} text elements with selector: {selector}")
+
+                # For primary selectors, take the first match
+                if i < 3:  # Primary selectors
+                    text_elem = elements[0]
+                    try:
+                        text = text_elem.inner_text()
+                        if text and text.strip():
+                            print(f"📝 Extracted text ({len(text)} chars): {text[:100]}...")
+                            return text.strip()
+                    except Exception as e:
+                        print(f"⚠️ inner_text() failed for {selector}: {e}")
+
+                    # Try textContent as fallback
+                    try:
+                        text = text_elem.evaluate('el => el.textContent')
+                        if text and text.strip():
+                            print(f"📝 Extracted textContent ({len(text)} chars): {text[:100]}...")
+                            return text.strip()
+                    except Exception as e:
+                        print(f"⚠️ textContent failed for {selector}: {e}")
+
+                # For generic selectors, we need to be more careful
+                else:
+                    for elem in elements:
+                        try:
+                            text = elem.inner_text()
+                            if text and text.strip() and len(text.strip()) > 10:  # Minimum length filter
+                                # Additional validation: should not contain URLs or be too short
+                                if not any(skip in text.lower() for skip in ['http', 'twitter.com', '@']):
+                                    print(f"📝 Extracted generic text ({len(text)} chars): {text[:100]}...")
+                                    return text.strip()
+                        except Exception:
+                            continue
+
+        except Exception as e:
+            print(f"⚠️ Selector failed {selector}: {e}")
+            continue
+
+    # Ultimate fallback: Extract all text from the article
+    print(f"🔄 Using ultimate fallback: extracting all article text...")
+    try:
+        all_text = article.inner_text()
+        if all_text and len(all_text.strip()) > 20:
+            # Try to extract just the main content by splitting on common patterns
+            lines = all_text.split('\n')
+            # Look for lines that look like tweet content (not usernames, timestamps, etc.)
+            content_lines = []
+            for line in lines:
+                line = line.strip()
+                if (line and
+                    len(line) > 10 and
+                    not line.startswith('@') and
+                    not any(pattern in line.lower() for pattern in ['retweet', 'like', 'reply', 'follow', '·', '2024', '2025']) and
+                    not re.match(r'^\d+[hm]$', line)):  # Not "2h" style timestamps
+                    content_lines.append(line)
+
+            if content_lines:
+                combined_text = ' '.join(content_lines)
+                print(f"📝 Extracted fallback text ({len(combined_text)} chars): {combined_text[:100]}...")
+                return combined_text.strip()
+
+    except Exception as e:
+        print(f"⚠️ Ultimate fallback failed: {e}")
+
+    print(f"❌ Could not extract any text content from tweet")
+    return ''
 
 
 def extract_content_elements(article) -> Dict[str, any]:

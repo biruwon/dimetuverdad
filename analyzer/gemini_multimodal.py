@@ -122,7 +122,7 @@ def download_media_to_temp_file(media_url: str, is_video: bool = False, max_retr
                         downloaded += len(chunk)
                         if total_size > 1024 * 1024:  # Show progress for files > 1MB
                             progress = (downloaded / total_size) * 100 if total_size > 0 else 0
-                            print(".1f")
+                            print(f"{progress:.1f}%")
 
             # Verify file was downloaded and has content
             file_size = os.path.getsize(temp_file.name)
@@ -247,8 +247,20 @@ def analyze_multimodal_content(media_urls: List[str], text_content: str) -> Tupl
         return None, time.time() - start_time
 
     # Process the first media URL (for now, we handle one media per analysis)
-    media_url = media_urls[0]
-    is_video = 'video' in media_url.lower()
+    # But prioritize video URLs over image URLs if available
+    has_video = any('video' in url.lower() or '.mp4' in url.lower() or '.m3u8' in url.lower() for url in media_urls)
+    
+    # Prefer actual video files (.mp4, .m3u8) over thumbnails, then video URLs over images
+    if has_video:
+        # Priority: 1. MP4/M3U8 files, 2. Other video URLs, 3. First URL as fallback
+        media_url = next(
+            (url for url in media_urls if '.mp4' in url.lower() or '.m3u8' in url.lower()),
+            next((url for url in media_urls if 'video' in url.lower()), media_urls[0])
+        )
+    else:
+        media_url = media_urls[0]
+    
+    is_video = has_video
 
     media_path = None
     try:

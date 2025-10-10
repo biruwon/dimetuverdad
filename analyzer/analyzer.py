@@ -383,10 +383,10 @@ class Analyzer:
                     analysis_timestamp=datetime.now().isoformat(),
                     category=category,
                     categories_detected=[category],  # Single category for now
-                    llm_explanation="",  # Gemini analysis is in media_analysis field
+                    llm_explanation=media_analysis,  # Put Gemini explanation in llm_explanation field
                     analysis_method="llm",  # Use "llm" method for multimodal analysis
                     media_urls=media_urls,
-                    media_analysis=media_analysis,
+                    media_analysis=media_analysis,  # Keep it here too for backward compatibility
                     media_type=media_type,
                     multimodal_analysis=True,
                     pattern_matches=[],  # No pattern analysis for multimodal

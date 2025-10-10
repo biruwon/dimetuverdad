@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from datetime import datetime
 
 DB_PATH = "accounts.db"
@@ -242,6 +242,19 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
         conn = sqlite3.connect(fetch_tweets.DB_PATH, timeout=10.0)
         c = conn.cursor()
         
+        # Get current media_links to combine with any new video URLs
+        c.execute("SELECT media_links FROM tweets WHERE tweet_id = ?", (tweet_id,))
+        row = c.fetchone()
+        current_media = row[0] if row and row[0] else ""
+        
+        # If tweet_data contains media_links, combine them with existing ones
+        if tweet_data.get('media_links'):
+            existing_urls = current_media.split(',') if current_media else []
+            new_urls = tweet_data['media_links'].split(',') if tweet_data['media_links'] else []
+            combined_urls = list(set(existing_urls + new_urls))  # Remove duplicates
+            tweet_data['media_links'] = ','.join([url for url in combined_urls if url.strip()])
+            tweet_data['media_count'] = len([u for u in combined_urls if u.strip()])
+        
         # Direct UPDATE to force save all fields
         c.execute("""
             UPDATE tweets SET 
@@ -256,8 +269,8 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
         """, (
             tweet_data['original_content'],
             tweet_data.get('reply_to_username'),
-            tweet_data['media_links'],
-            tweet_data['media_count'],
+            tweet_data.get('media_links'),
+            tweet_data.get('media_count', 0),
             tweet_data['engagement_likes'],
             tweet_data['engagement_retweets'],
             tweet_data['engagement_replies'],

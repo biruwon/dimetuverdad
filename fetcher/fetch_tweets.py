@@ -193,6 +193,20 @@ def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_l
     last_tweet_count = 0
     saved_count = 0  # Track actually saved tweets
     
+    # Monitor network requests for video URLs during collection
+    video_urls = []
+    
+    def handle_request(request):
+        url = request.url
+        # Look for video-related URLs
+        if any(ext in url.lower() for ext in ['.mp4', '.m3u8', '.webm', '.mov']) or \
+           any(keyword in url.lower() for keyword in ['video.twimg.com', 'pbs.twimg.com', 'mediadelivery']):
+            if url not in video_urls:
+                video_urls.append(url)
+                print(f"🎥 Captured video URL during fetch: {url[:100]}...")
+    
+    page.on("request", handle_request)
+    
     if max_tweets == float('inf'):
         print(f"🔍 Collecting unlimited tweets...")
     else:
@@ -301,6 +315,16 @@ def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_l
                 
                 # Extract media information  
                 media_links, media_count, media_types = fetcher_parsers.extract_media_data(article)
+                
+                # Add any video URLs captured via network monitoring
+                if video_urls:
+                    for video_url in video_urls:
+                        if video_url not in media_links:
+                            media_links.append(video_url)
+                            media_types.append('video')
+                            media_count += 1
+                    print(f"📹 Added {len(video_urls)} video URLs from network monitoring")
+                    video_urls.clear()  # Clear for next tweet
                 
                 # Extract engagement metrics
                 engagement = fetcher_parsers.extract_engagement_metrics(article)
@@ -1229,8 +1253,53 @@ def refetch_single_tweet(tweet_id: str) -> bool:
         with sync_playwright() as p:
             browser, context, page = _setup_browser_context(p)
             
-            # Extract and update tweet using shared helper
-            success = _extract_and_update_tweet(page, tweet_id, username, tweet_url)
+            # Monitor network requests for video URLs
+            video_urls = []
+            
+            def handle_request(request):
+                url = request.url
+                # Look for video-related URLs
+                if any(ext in url.lower() for ext in ['.mp4', '.m3u8', '.webm', '.mov']) or \
+                   any(keyword in url.lower() for keyword in ['video.twimg.com', 'pbs.twimg.com', 'mediadelivery']):
+                    if url not in video_urls:
+                        video_urls.append(url)
+                        print(f"🎥 Captured video URL: {url[:100]}...")
+            
+            page.on("request", handle_request)
+            
+            # Navigate to tweet page
+            try:
+                page.goto(tweet_url, wait_until="networkidle", timeout=30000)
+                print(f"📄 Page loaded: {tweet_url}")
+            except Exception as e:
+                print(f"⚠️ Page load warning: {e}")
+            
+            # Extract tweet data
+            tweet_data = fetcher_parsers.extract_tweet_with_quoted_content(page, tweet_id, username, tweet_url)
+            
+            if not tweet_data:
+                print(f"❌ Failed to extract tweet data")
+                context.close()
+                browser.close()
+                return False
+            
+            # Add captured video URLs to tweet data
+            if video_urls:
+                print(f"📹 Found {len(video_urls)} video URLs via network monitoring")
+                # Combine video URLs with existing media_links
+                existing_media = tweet_data.get('media_links', '')
+                existing_urls = existing_media.split(',') if existing_media else []
+                combined_urls = list(set(existing_urls + video_urls))  # Remove duplicates
+                tweet_data['media_links'] = ','.join([url for url in combined_urls if url.strip()])
+                tweet_data['media_count'] = len([u for u in combined_urls if u.strip()])
+            
+            # Update database with combined data
+            success = fetcher_db.update_tweet_in_database(tweet_id, tweet_data)
+            
+            if success:
+                print(f"✅ Successfully updated tweet {tweet_id}")
+            else:
+                print(f"❌ Failed to update tweet {tweet_id} in database")
             
             context.close()
             browser.close()
