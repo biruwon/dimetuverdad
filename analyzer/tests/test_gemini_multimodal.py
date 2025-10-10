@@ -60,14 +60,14 @@ class TestGeminiMultimodal(unittest.TestCase):
         """Test analysis prompt creation for images."""
         prompt = EnhancedPromptGenerator.build_gemini_analysis_prompt(self.test_text, is_video=False)
         self.assertIn("imagen", prompt)
-        self.assertIn("Descripción detallada del contenido visual de la imagen", prompt)
+        self.assertIn("contenido político problemático en la imagen", prompt)
         self.assertIn(self.test_text, prompt)
 
     def test_create_analysis_prompt_video(self):
         """Test analysis prompt creation for videos."""
         prompt = EnhancedPromptGenerator.build_gemini_analysis_prompt(self.test_text, is_video=True)
         self.assertIn("video", prompt)
-        self.assertIn("Resumen del contenido visual del video", prompt)
+        self.assertIn("contenido político problemático en la video", prompt)
         self.assertIn(self.test_text, prompt)
 
     @patch.dict(os.environ, {'GOOGLE_API_KEY': 'test_key'}, clear=True)
@@ -78,8 +78,9 @@ class TestGeminiMultimodal(unittest.TestCase):
         mock_model = MagicMock()
         mock_model_class.return_value = mock_model
 
-        result = _get_gemini_client()
+        result, error = _get_gemini_client()
         self.assertEqual(result, mock_model)
+        self.assertIsNone(error)
         # Don't assert exact API key - just verify configure was called
         mock_configure.assert_called_once()
         mock_model_class.assert_called_once_with('gemini-2.0-flash-exp')
@@ -87,8 +88,9 @@ class TestGeminiMultimodal(unittest.TestCase):
     @patch.dict(os.environ, {}, clear=True)
     def test_get_gemini_client_no_key(self):
         """Test Gemini client creation without API key."""
-        result = _get_gemini_client()
+        result, error = _get_gemini_client()
         self.assertIsNone(result)
+        self.assertIsNotNone(error)
 
     @patch('analyzer.gemini_multimodal.requests.get')
     def test_download_media_success(self, mock_get):
@@ -125,7 +127,7 @@ class TestGeminiMultimodal(unittest.TestCase):
         """Test successful multimodal analysis."""
         # Setup mocks
         mock_model = MagicMock()
-        mock_get_client.return_value = mock_model
+        mock_get_client.return_value = (mock_model, None)
 
         mock_download.return_value = "/tmp/test.jpg"
 
@@ -160,7 +162,7 @@ class TestGeminiMultimodal(unittest.TestCase):
         """Test that MP4 files are prioritized over thumbnails in video detection."""
         # Setup mocks
         mock_model = MagicMock()
-        mock_get_client.return_value = mock_model
+        mock_get_client.return_value = (mock_model, None)
 
         mock_download.return_value = "/tmp/test.mp4"
 
@@ -190,7 +192,7 @@ class TestGeminiMultimodal(unittest.TestCase):
         """Test fallback to video URLs when no MP4/M3U8 files exist."""
         # Setup mocks
         mock_model = MagicMock()
-        mock_get_client.return_value = mock_model
+        mock_get_client.return_value = (mock_model, None)
 
         mock_download.return_value = "/tmp/test.jpg"
 
@@ -220,7 +222,7 @@ class TestGeminiMultimodal(unittest.TestCase):
         """Test fallback to first URL when no video content detected."""
         # Setup mocks
         mock_model = MagicMock()
-        mock_get_client.return_value = mock_model
+        mock_get_client.return_value = (mock_model, None)
 
         mock_download.return_value = "/tmp/test.jpg"
 
@@ -250,7 +252,7 @@ class TestGeminiMultimodal(unittest.TestCase):
         """Test detection of M3U8 video files."""
         # Setup mocks
         mock_model = MagicMock()
-        mock_get_client.return_value = mock_model
+        mock_get_client.return_value = (mock_model, None)
 
         mock_download.return_value = "/tmp/test.m3u8"
 
@@ -281,7 +283,7 @@ class TestGeminiMultimodal(unittest.TestCase):
         """Test video detection priority: MP4 > M3U8 > video URLs > thumbnails."""
         # Setup mocks
         mock_model = MagicMock()
-        mock_get_client.return_value = mock_model
+        mock_get_client.return_value = (mock_model, None)
 
         mock_download.return_value = "/tmp/test.mp4"
 
@@ -314,7 +316,7 @@ class TestGeminiMultimodal(unittest.TestCase):
         """Test that M3U8 files are prioritized over generic video URLs."""
         # Setup mocks
         mock_model = MagicMock()
-        mock_get_client.return_value = mock_model
+        mock_get_client.return_value = (mock_model, None)
 
         mock_download.return_value = "/tmp/test.m3u8"
 
@@ -341,43 +343,11 @@ class TestGeminiMultimodal(unittest.TestCase):
     @patch('analyzer.gemini_multimodal._get_gemini_client')
     @patch('analyzer.gemini_multimodal.download_media_to_temp_file')
     @patch('analyzer.gemini_multimodal._upload_media_to_gemini')
-    def test_analyze_multimodal_video_url_fallback(self, mock_upload, mock_download, mock_get_client):
-        """Test fallback to video URLs when no MP4/M3U8 files exist."""
-        # Setup mocks
-        mock_model = MagicMock()
-        mock_get_client.return_value = mock_model
-
-        mock_download.return_value = "/tmp/test.jpg"
-
-        mock_file = MagicMock()
-        mock_upload.return_value = mock_file
-
-        mock_response = MagicMock()
-        mock_response.text = "Video URL fallback result"
-        mock_model.generate_content.return_value = mock_response
-
-        # Test URLs: only video URLs (no MP4/M3U8), should pick first video URL
-        media_urls = [
-            "https://pbs.twimg.com/profile.jpg",              # profile image
-            "https://video.twimg.com/amplify_video/123/vid/", # video URL
-            "https://video.twimg.com/ext/tweet/456/"          # another video URL
-        ]
-
-        result, time_taken = analyze_multimodal_content(media_urls, self.test_text)
-
-        # Should download the first video URL and treat as video
-        mock_download.assert_called_once_with("https://video.twimg.com/amplify_video/123/vid/", True)
-        self.assertEqual(result, "Video URL fallback result")
-
-
-    @patch('analyzer.gemini_multimodal._get_gemini_client')
-    @patch('analyzer.gemini_multimodal.download_media_to_temp_file')
-    @patch('analyzer.gemini_multimodal._upload_media_to_gemini')
     def test_analyze_multimodal_no_video_content(self, mock_upload, mock_download, mock_get_client):
         """Test that non-video URLs fall back to first available media."""
         # Setup mocks
         mock_model = MagicMock()
-        mock_get_client.return_value = mock_model
+        mock_get_client.return_value = (mock_model, None)
 
         mock_download.return_value = "/tmp/test.jpg"
 

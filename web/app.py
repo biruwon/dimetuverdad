@@ -35,6 +35,26 @@ load_env_file()
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
 
+# Configure logging to show in terminal
+import logging
+import sys
+
+# Set up logging to stdout for development
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+
+# Ensure Flask logger outputs to stdout
+app.logger.setLevel(logging.INFO)
+app.logger.addHandler(logging.StreamHandler(sys.stdout))
+
+# Also ensure werkzeug (Flask's underlying server) logs to stdout
+werkzeug_logger = logging.getLogger('werkzeug')
+werkzeug_logger.setLevel(logging.INFO)
+werkzeug_logger.addHandler(logging.StreamHandler(sys.stdout))
+
 # Admin configuration
 ADMIN_TOKEN = os.environ.get('ADMIN_TOKEN', 'admin123')  # Change this in production!
 
@@ -254,6 +274,193 @@ def reanalyze_tweet(tweet_id):
     """Reanalyze a single tweet and return the result."""
     from analyzer.analyzer import reanalyze_tweet as analyzer_reanalyze_tweet  # Local import
     return analyzer_reanalyze_tweet(tweet_id)
+
+def refetch_tweet(tweet_id):
+    """Refetch a single tweet from Twitter."""
+    from fetcher.fetch_tweets import refetch_single_tweet  # Local import
+    return refetch_single_tweet(tweet_id)
+
+def handle_reanalyze_action(tweet_id, referrer):
+    """Handle the reanalyze action for a tweet."""
+    print(f"🔄 Reanalyze action triggered for tweet_id: {tweet_id}")
+    
+    tweet_data = get_tweet_data(tweet_id)
+    
+    if not tweet_data:
+        print(f"❌ Tweet data not found for tweet_id: {tweet_id}")
+        flash('Tweet no encontrado', 'error')
+        return redirect(referrer or url_for('admin_dashboard'))
+    
+    print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data.get('username', 'unknown')}")
+    
+    # Debug: Check if tweet data was retrieved
+    print(f"🔍 Tweet data retrieved: {tweet_data is not None}")
+    if tweet_data:
+        print(f"🔍 Tweet content length: {len(tweet_data.get('content', ''))}")
+        print(f"🔍 Tweet media_urls: {tweet_data.get('media_urls', [])}")
+    
+    # Reanalyze the content
+    try:
+        analysis_result = reanalyze_tweet(tweet_id)
+        print(f"🔍 Reanalyze result type: {type(analysis_result)}")
+        print(f"🔍 Reanalyze result: {analysis_result is not None}")
+    except Exception as reanalyze_e:
+        print(f"❌ Error in reanalyze_tweet: {reanalyze_e}")
+        app.logger.error(f"Error in reanalyze_tweet for {tweet_id}: {str(reanalyze_e)}")
+        flash('Error interno durante el reanálisis. Inténtalo de nuevo.', 'error')
+        return redirect(referrer or url_for('admin_dashboard'))
+    
+    if analysis_result:
+        try:
+            # More defensive access to category
+            if hasattr(analysis_result, 'category') and analysis_result.category:
+                category = analysis_result.category
+                print(f"🔍 Analysis category: {category}")
+                flash(f'Tweet reanálizado correctamente. Nueva categoría: {category}', 'success')
+            else:
+                print(f"❌ Analysis result has no valid category: {analysis_result}")
+                flash('Tweet reanálizado pero no se pudo determinar la categoría.', 'warning')
+        except Exception as cat_e:
+            print(f"❌ Error accessing category: {cat_e}")
+            print(f"❌ Analysis result attributes: {dir(analysis_result) if analysis_result else 'None'}")
+            flash('Tweet reanálizado pero error al acceder a la categoría.', 'warning')
+    else:
+        print(f"❌ Reanalyze returned None")
+        flash('Error: No se pudo reanalizar el tweet. Verifica que existe y tiene contenido.', 'error')
+
+def handle_refresh_action(tweet_id, referrer):
+    """Handle the refresh action for a tweet."""
+    print(f"🔄 Refresh action triggered for tweet_id: {tweet_id}")
+    
+    try:
+        success = refetch_tweet(tweet_id)
+        if success:
+            print(f"✅ Tweet {tweet_id} refreshed successfully")
+            flash('Datos del tweet actualizados correctamente desde Twitter', 'success')
+        else:
+            print(f"❌ Failed to refresh tweet {tweet_id}")
+            flash('Error al actualizar los datos del tweet. Verifica que el tweet existe en Twitter.', 'error')
+    except Exception as refresh_e:
+        print(f"❌ Error in refetch_tweet: {refresh_e}")
+        app.logger.error(f"Error in refetch_tweet for {tweet_id}: {str(refresh_e)}")
+        flash('Error interno al actualizar los datos del tweet. Inténtalo de nuevo.', 'error')
+
+def handle_refresh_and_reanalyze_action(tweet_id, referrer):
+    """Handle the refresh and reanalyze action for a tweet."""
+    print(f"🔄 Refresh and reanalyze action triggered for tweet_id: {tweet_id}")
+    
+    # First refresh the tweet data
+    try:
+        refresh_success = refetch_tweet(tweet_id)
+        if not refresh_success:
+            print(f"❌ Failed to refresh tweet {tweet_id}, skipping reanalysis")
+            flash('Error al actualizar los datos del tweet. No se pudo proceder con el reanálisis.', 'error')
+            return redirect(referrer or url_for('admin_dashboard'))
+        
+        print(f"✅ Tweet {tweet_id} refreshed successfully, proceeding with reanalysis")
+    except Exception as refresh_e:
+        print(f"❌ Error in refetch_tweet during refresh_and_reanalyze: {refresh_e}")
+        app.logger.error(f"Error in refetch_tweet for {tweet_id}: {str(refresh_e)}")
+        flash('Error interno al actualizar los datos del tweet. Inténtalo de nuevo.', 'error')
+        return redirect(referrer or url_for('admin_dashboard'))
+    
+    # Then reanalyze the content
+    try:
+        analysis_result = reanalyze_tweet(tweet_id)
+        print(f"🔍 Reanalyze result type: {type(analysis_result)}")
+        print(f"🔍 Reanalyze result: {analysis_result is not None}")
+    except Exception as reanalyze_e:
+        print(f"❌ Error in reanalyze_tweet: {reanalyze_e}")
+        app.logger.error(f"Error in reanalyze_tweet for {tweet_id}: {str(reanalyze_e)}")
+        flash('Datos actualizados pero error interno durante el reanálisis. Inténtalo de nuevo.', 'warning')
+        return redirect(referrer or url_for('admin_dashboard'))
+    
+    if analysis_result:
+        try:
+            # More defensive access to category
+            if hasattr(analysis_result, 'category') and analysis_result.category:
+                category = analysis_result.category
+                print(f"🔍 Analysis category: {category}")
+                flash(f'Tweet actualizado y reanálizado correctamente. Nueva categoría: {category}', 'success')
+            else:
+                print(f"❌ Analysis result has no valid category: {analysis_result}")
+                flash('Tweet actualizado y reanálizado pero no se pudo determinar la categoría.', 'warning')
+        except Exception as cat_e:
+            print(f"❌ Error accessing category: {cat_e}")
+            print(f"❌ Analysis result attributes: {dir(analysis_result) if analysis_result else 'None'}")
+            flash('Tweet actualizado y reanálizado pero error al acceder a la categoría.', 'warning')
+    else:
+        print(f"❌ Reanalyze returned None")
+        flash('Datos actualizados pero error: No se pudo reanalizar el tweet. Verifica que tiene contenido.', 'warning')
+
+def handle_manual_update_action(tweet_id, new_category, new_explanation):
+    """Handle the manual update action for a tweet."""
+    if not new_category or not new_explanation:
+        flash('Categoría y explicación son requeridas', 'error')
+        return redirect(request.url)
+    
+    conn = get_db_connection()
+    
+    # Update analysis manually
+    conn.execute("""
+        UPDATE content_analyses 
+        SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = datetime('now')
+        WHERE tweet_id = ?
+    """, (new_category, new_explanation, tweet_id))
+    
+    if conn.total_changes == 0:
+        # Create new analysis if none exists
+        conn.execute("""
+            INSERT INTO content_analyses (tweet_id, category, llm_explanation, analysis_method, analysis_timestamp, username)
+            SELECT ?, ?, ?, 'manual', datetime('now'), username FROM tweets WHERE tweet_id = ?
+        """, (tweet_id, new_category, new_explanation, tweet_id))
+    
+    conn.commit()
+    conn.close()
+    
+    flash('Análisis actualizado correctamente', 'success')
+
+def get_tweet_display_data(tweet_id, referrer):
+    """Get tweet data for display in the edit form."""
+    conn = get_db_connection()
+    
+    try:
+        # Get tweet and current analysis
+        tweet_data = conn.execute("""
+            SELECT 
+                t.content, t.username, t.tweet_timestamp,
+                ca.category, ca.llm_explanation, t.tweet_url, t.original_content
+            FROM tweets t
+            LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
+            WHERE t.tweet_id = ?
+        """, (tweet_id,)).fetchone()
+        
+        conn.close()
+        
+        if not tweet_data:
+            flash('Tweet no encontrado', 'error')
+            return redirect(referrer or url_for('admin_dashboard'))
+        
+        # Convert to dict safely
+        tweet_dict = {
+            'content': tweet_data[0] or '',
+            'username': tweet_data[1] or '',
+            'tweet_timestamp': tweet_data[2] or '',
+            'category': tweet_data[3] or 'general',
+            'llm_explanation': tweet_data[4] or '',
+            'tweet_url': tweet_data[5] or '',
+            'original_content': tweet_data[6] or ''
+        }
+        
+        categories = ['general', 'hate_speech', 'disinformation', 'conspiracy_theory', 
+                      'far_right_bias', 'call_to_action', 'political_general']
+        
+        return tweet_dict, categories
+        
+    except Exception as e:
+        app.logger.error(f"Error loading edit analysis for {tweet_id}: {str(e)}")
+        flash('No se pudo cargar la información del tweet. Inténtalo de nuevo.', 'error')
+        return redirect(referrer or url_for('admin_dashboard'))
 
 def get_account_statistics(username):
     """Get comprehensive statistics for an account."""
@@ -543,79 +750,14 @@ def admin_edit_analysis(tweet_id):
         
         try:
             if action == 'reanalyze':
-                # Trigger full reanalysis using the analysis pipeline
-                print(f"🔄 Reanalyze action triggered for tweet_id: {tweet_id}")
-                
-                tweet_data = get_tweet_data(tweet_id)
-                
-                if not tweet_data:
-                    print(f"❌ Tweet data not found for tweet_id: {tweet_id}")
-                    flash('Tweet no encontrado', 'error')
-                    return redirect(referrer or url_for('admin_dashboard'))
-                
-                print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data.get('username', 'unknown')}")
-                
-                # Debug: Check if tweet data was retrieved
-                print(f"🔍 Tweet data retrieved: {tweet_data is not None}")
-                if tweet_data:
-                    print(f"🔍 Tweet content length: {len(tweet_data.get('content', ''))}")
-                    print(f"🔍 Tweet media_urls: {tweet_data.get('media_urls', [])}")
-                
-                # Reanalyze the content
-                try:
-                    analysis_result = reanalyze_tweet(tweet_id)
-                    print(f"🔍 Reanalyze result type: {type(analysis_result)}")
-                    print(f"🔍 Reanalyze result: {analysis_result is not None}")
-                except Exception as reanalyze_e:
-                    print(f"❌ Error in reanalyze_tweet: {reanalyze_e}")
-                    app.logger.error(f"Error in reanalyze_tweet for {tweet_id}: {str(reanalyze_e)}")
-                    flash('Error interno durante el reanálisis. Inténtalo de nuevo.', 'error')
-                    conn.close()
-                    return redirect(referrer or url_for('admin_dashboard'))
-                
-                if analysis_result:
-                    try:
-                        # More defensive access to category
-                        if hasattr(analysis_result, 'category') and analysis_result.category:
-                            category = analysis_result.category
-                            print(f"🔍 Analysis category: {category}")
-                            flash(f'Tweet reanálizado correctamente. Nueva categoría: {category}', 'success')
-                        else:
-                            print(f"❌ Analysis result has no valid category: {analysis_result}")
-                            flash('Tweet reanálizado pero no se pudo determinar la categoría.', 'warning')
-                    except Exception as cat_e:
-                        print(f"❌ Error accessing category: {cat_e}")
-                        print(f"❌ Analysis result attributes: {dir(analysis_result) if analysis_result else 'None'}")
-                        flash('Tweet reanálizado pero error al acceder a la categoría.', 'warning')
-                else:
-                    print(f"❌ Reanalyze returned None")
-                    flash('Error: No se pudo reanalizar el tweet. Verifica que existe y tiene contenido.', 'error')
-                
+                handle_reanalyze_action(tweet_id, referrer)
+            elif action == 'refresh':
+                handle_refresh_action(tweet_id, referrer)
+            elif action == 'refresh_and_reanalyze':
+                handle_refresh_and_reanalyze_action(tweet_id, referrer)
             else:
                 # Manual update
-                if not new_category or not new_explanation:
-                    flash('Categoría y explicación son requeridas', 'error')
-                    conn.close()
-                    return redirect(request.url)
-                
-                # Update analysis manually
-                conn.execute("""
-                    UPDATE content_analyses 
-                    SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = datetime('now')
-                    WHERE tweet_id = ?
-                """, (new_category, new_explanation, tweet_id))
-                
-                if conn.total_changes == 0:
-                    # Create new analysis if none exists
-                    conn.execute("""
-                        INSERT INTO content_analyses (tweet_id, category, llm_explanation, analysis_method, analysis_timestamp, username)
-                        SELECT ?, ?, ?, 'manual', datetime('now'), username FROM tweets WHERE tweet_id = ?
-                    """, (tweet_id, new_category, new_explanation, tweet_id))
-                
-                conn.commit()
-                conn.close()
-                
-                flash('Análisis actualizado correctamente', 'success')
+                handle_manual_update_action(tweet_id, new_category, new_explanation)
             
             # Redirect back to user view if possible, otherwise admin dashboard
             if referrer and '/user/' in referrer:
@@ -629,51 +771,20 @@ def admin_edit_analysis(tweet_id):
             import traceback
             app.logger.error(f"Traceback: {traceback.format_exc()}")
             flash('Ocurrió un error al procesar la solicitud. Inténtalo de nuevo.', 'error')
-            conn.close()
             return redirect(referrer or url_for('admin_dashboard'))
     
     # GET request - show edit form
-    try:
-        # Get tweet and current analysis
-        tweet_data = conn.execute("""
-            SELECT 
-                t.content, t.username, t.tweet_timestamp,
-                ca.category, ca.llm_explanation, t.tweet_url, t.original_content
-            FROM tweets t
-            LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
-            WHERE t.tweet_id = ?
-        """, (tweet_id,)).fetchone()
-        
-        conn.close()
-        
-        if not tweet_data:
-            flash('Tweet no encontrado', 'error')
-            return redirect(referrer or url_for('admin_dashboard'))
-        
-        # Convert to dict safely
-        tweet_dict = {
-            'content': tweet_data[0] or '',
-            'username': tweet_data[1] or '',
-            'tweet_timestamp': tweet_data[2] or '',
-            'category': tweet_data[3] or 'general',
-            'llm_explanation': tweet_data[4] or '',
-            'tweet_url': tweet_data[5] or '',
-            'original_content': tweet_data[6] or ''
-        }
-        
-        categories = ['general', 'hate_speech', 'disinformation', 'conspiracy_theory', 
-                      'far_right_bias', 'call_to_action', 'political_general']
-        
+    result = get_tweet_display_data(tweet_id, referrer)
+    if isinstance(result, tuple):
+        tweet_dict, categories = result
         return render_template('admin/edit_analysis.html',
                              tweet=tweet_dict,
                              tweet_id=tweet_id,
                              categories=categories,
                              referrer=referrer)
-    
-    except Exception as e:
-        app.logger.error(f"Error loading edit analysis for {tweet_id}: {str(e)}")
-        flash('No se pudo cargar la información del tweet. Inténtalo de nuevo.', 'error')
-        return redirect(referrer or url_for('admin_dashboard'))
+    else:
+        # It's a redirect response
+        return result
 
 @app.route('/admin/reanalyze-single/<tweet_id>', methods=['POST'])
 @admin_required

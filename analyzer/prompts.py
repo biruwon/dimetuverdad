@@ -172,40 +172,41 @@ Responde SOLO con el nombre de la categoría más apropiada:"""
     def build_gemini_analysis_prompt(text_content: str, is_video: bool = False) -> str:
         """
         Create the analysis prompt for Gemini multimodal analysis based on media type.
+        Uses the same format structure as generate_explanation_prompt for consistency.
         
         Args:
             text_content: The text content accompanying the media
             is_video: Whether the media is a video
             
         Returns:
-            Formatted analysis prompt for Gemini
+            Formatted analysis prompt for Gemini following standardized format
         """
         media_type = "video" if is_video else "imagen"
         
-        return f"""Analiza esta {media_type} y el texto adjunto que pertenecen al MISMO POST en una cuenta de Twitter/X para detectar contenido político de extrema derecha o desinformación.
-
-TEXTO DEL POST: "{text_content}"
-
-El contenido está en español y proviene de redes sociales. Evalúa si el post promueve o contiene:
-
-CONTEXTO DEL POST:
-- El texto y {media_type} son parte del mismo tweet/publicación en Twitter
-- El texto proporciona contexto adicional al contenido visual de la {media_type}
-
-ANÁLISIS REQUERIDO:
-1. {"Resumen del contenido visual del video" if is_video else "Descripción detallada del contenido visual de la imagen (¿Quiénes aparecen? ¿Qué están haciendo?)"}
-2. Análisis del texto adjunto para detectar:
-   - Discurso político de extrema derecha
-   - Teorías conspirativas
-   - Llamados a la acción política
-   - Ataques a instituciones democráticas
-   - Desinformación o fake news
-   - Retórica nacionalista o anti-inmigración
-3. Evaluación de la relación entre texto y {media_type}
-4. Clasificación por categorías: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general
-5. Nivel de credibilidad y sesgo político detectado
-
-IMPORTANTE: Responde completamente en español y sé específico sobre el contenido político español. Si reconoces personas públicas, identifícalas claramente."""
+        prompt_parts = [
+            f'TEXTO DEL POST ANALIZADO: "{text_content}"',
+            "",
+            f"ANÁLISIS DETALLADO - Enfócate en contenido político problemático en la {media_type} y texto:",
+            "",
+            "1. ¿Qué elementos visuales específicos aparecen en la imagen/video que sugieren contenido político?",
+            "2. ¿Qué texto o elementos gráficos indican sesgo político, especialmente de extrema derecha?",
+            "3. ¿Se mencionan datos, estadísticas o hechos específicos? Evalúalos por veracidad y contexto",
+            "4. ¿Cómo se relacionan el contenido visual y textual para crear una narrativa política?",
+            "5. ¿Qué categorías problemáticas se detectan: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action?",
+            "6. Si se mencionan hechos o datos, ¿son verificables y se presentan en contexto correcto?",
+            "7. ¿Cómo contribuye la combinación de imagen/video + texto a narrativas problemáticas?",
+            "",
+            "INSTRUCCIONES DE FORMATO:",
+            "- Responde SOLO con texto plano en español, sin markdown ni formato especial",
+            "- NO uses negritas (**), títulos (##), listas numeradas, tablas, o símbolos",
+            "- Escribe 2-3 oraciones claras y directas explicando los elementos detectados",
+            "- Evalúa cualquier dato o hecho mencionado por su veracidad y contexto",
+            "- Como si le explicaras a una persona que no conoce el tema",
+            "",
+            "EXPLICACIÓN:"
+        ]
+        
+        return "\n".join(prompt_parts)
     
     # ============================================================================
     # INSTANCE METHODS FOR SOPHISTICATED PROMPTS

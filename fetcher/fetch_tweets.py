@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fetcher import db as fetcher_db
 from fetcher import parsers as fetcher_parsers
+from utils import paths
 try:
     from dotenv import load_dotenv
 except Exception:
@@ -52,7 +53,8 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
 ]
 
-DB_PATH = "accounts.db"
+# Use consistent database path resolution
+DB_PATH = str(paths.get_db_path())
 
 # Default target handles (focusing on Spanish far-right accounts)
 DEFAULT_HANDLES = [
@@ -296,50 +298,30 @@ def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_l
                 if not tweet_id or tweet_id in seen_tweet_ids:
                     continue
                 
-                # Analyze post type first 
-                post_analysis = fetcher_parsers.analyze_post_type(article, username)
-                
-                # Skip pinned posts as requested
-                if post_analysis['should_skip']:
-                    continue
-                
                 tweet_url = f"https://x.com{href}"
                 
-                # Extract tweet content with expansion handling
-                content = fetcher_parsers.extract_full_tweet_content(article)
+                # Check if this tweet already exists in database first (before heavy parsing)
+                tweet_exists_in_db = False
+                if resume_from_last:
+                    tweet_exists_in_db = fetcher_db.check_if_tweet_exists(username, tweet_id)
                 
-                # Skip if no content (media-only posts still have some text usually)
-                if not content:
-                    print(f"    ⏭️ Skipping content-less tweet: {tweet_id}")
-                    continue
-                
-                # Extract media information  
-                media_links, media_count, media_types = fetcher_parsers.extract_media_data(article)
-                
-                # Add any video URLs captured via network monitoring
-                if video_urls:
-                    for video_url in video_urls:
-                        if video_url not in media_links:
-                            media_links.append(video_url)
-                            media_types.append('video')
-                            media_count += 1
-                    print(f"📹 Added {len(video_urls)} video URLs from network monitoring")
-                    video_urls.clear()  # Clear for next tweet
-                
-                # Extract engagement metrics
-                engagement = fetcher_parsers.extract_engagement_metrics(article)
-                
-                # Extract content elements (hashtags, mentions, links)
-                content_elements = fetcher_parsers.extract_content_elements(article)
-                
-                # Extract timestamp if available
-                time_elem = article.query_selector('time')
-                tweet_timestamp = None
-                if time_elem:
-                    tweet_timestamp = time_elem.get_attribute('datetime')
-                
-                # Check if this tweet already exists (skip duplicates) but allow updates when analysis/content changed
-                if resume_from_last and fetcher_db.check_if_tweet_exists(username, tweet_id):
+                # If tweet exists, check if we need to update it (minimal parsing)
+                if tweet_exists_in_db:
+                    # Extract minimal data needed for update check
+                    post_analysis = fetcher_parsers.analyze_post_type(article, username)
+                    
+                    # Skip pinned posts as requested
+                    if post_analysis['should_skip']:
+                        continue
+                    
+                    content = fetcher_parsers.extract_full_tweet_content(article)
+                    
+                    # Skip if no content (media-only posts still have some text usually)
+                    if not content:
+                        print(f"    ⏭️ Skipping content-less tweet: {tweet_id}")
+                        continue
+                    
+                    # Check if update is needed by comparing with DB
                     try:
                         conn_check = sqlite3.connect(DB_PATH, timeout=10.0)
                         cur_check = conn_check.cursor()
@@ -361,45 +343,53 @@ def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_l
                     if not needs_update:
                         print(f"    ⏭️ Skipping existing tweet ({tweet_id})")
                         continue
-
-                    # We need to update existing row: build tweet_data and save immediately
-                    tweet_data = {
-                        'tweet_id': tweet_id,
-                        'tweet_url': tweet_url,
-                        'username': username,
-                        'content': content,
-                        'tweet_timestamp': tweet_timestamp,
-                        'profile_pic_url': profile_pic_url,
-                        **post_analysis,
-                        'media_links': ','.join(media_links) if media_links else None,
-                        'media_count': media_count,
-                        'media_types': json.dumps(media_types) if media_types else None,
-                        **content_elements,
-                        'engagement_retweets': engagement['retweets'],
-                        'engagement_likes': engagement['likes'],
-                        'engagement_replies': engagement['replies'],
-                        'engagement_views': engagement['views'],
-                        'is_repost': 1 if 'repost' in post_analysis['post_type'] else 0,
-                        'is_comment': 1 if post_analysis['post_type'] == 'repost_reply' else 0,
-                        'parent_tweet_id': post_analysis.get('reply_to_tweet_id') or post_analysis.get('original_tweet_id')
-                    }
-
-                    # Save update immediately
-                    try:
-                        saved = fetcher_db.save_tweet(conn, tweet_data)
-                        if saved:
-                            saved_count += 1
-                            print(f"  🔁 Updated [{saved_count:2d}] {post_analysis['post_type']}: {tweet_id}")
-                        else:
-                            print(f"  ⏭️ Update failed or unchanged: {tweet_id}")
-                    except Exception as save_e:
-                        print(f"  ❌ Error updating tweet {tweet_id}: {save_e}")
-
-                    collected_tweets.append(tweet_data)
-                    seen_tweet_ids.add(tweet_id)
-                    tweets_found_this_cycle += 1
-                    continue
-
+                    
+                    # Tweet exists but needs update - do full parsing
+                    print(f"    🔁 Tweet {tweet_id} exists but needs update")
+                
+                # At this point: either tweet doesn't exist, or exists and needs update
+                # Do full parsing for new tweets or updates
+                
+                # Extract post type analysis (if not already done for update check)
+                if not tweet_exists_in_db:
+                    post_analysis = fetcher_parsers.analyze_post_type(article, username)
+                    
+                    # Skip pinned posts as requested
+                    if post_analysis['should_skip']:
+                        continue
+                    
+                    content = fetcher_parsers.extract_full_tweet_content(article)
+                    
+                    # Skip if no content (media-only posts still have some text usually)
+                    if not content:
+                        print(f"    ⏭️ Skipping content-less tweet: {tweet_id}")
+                        continue
+                
+                # Extract media information  
+                media_links, media_count, media_types = fetcher_parsers.extract_media_data(article)
+                
+                # Add any video URLs captured via network monitoring
+                if video_urls:
+                    for video_url in video_urls:
+                        if video_url not in media_links:
+                            media_links.append(video_url)
+                            media_types.append('video')
+                            media_count += 1
+                    print(f"� Added {len(video_urls)} video URLs from network monitoring")
+                    video_urls.clear()  # Clear for next tweet
+                
+                # Extract engagement metrics
+                engagement = fetcher_parsers.extract_engagement_metrics(article)
+                
+                # Extract content elements (hashtags, mentions, links)
+                content_elements = fetcher_parsers.extract_content_elements(article)
+                
+                # Extract timestamp if available
+                time_elem = article.query_selector('time')
+                tweet_timestamp = None
+                if time_elem:
+                    tweet_timestamp = time_elem.get_attribute('datetime')
+                
                 # Check if we should skip this tweet because it's still in our scraped range
                 if resume_from_last and tweet_timestamp and fetcher_parsers.should_skip_existing_tweet(tweet_timestamp, oldest_timestamp):
                     print(f"    ⏭️ Skipping already covered tweet ({tweet_timestamp})")
@@ -442,7 +432,10 @@ def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_l
                     saved = fetcher_db.save_tweet(conn, tweet_data)
                     if saved:
                         saved_count += 1
-                        print(f"  💾 Saved [{saved_count:2d}] {post_analysis['post_type']}: {tweet_id}")
+                        if tweet_exists_in_db:
+                            print(f"  🔁 Updated [{saved_count:2d}] {post_analysis['post_type']}: {tweet_id}")
+                        else:
+                            print(f"  💾 Saved [{saved_count:2d}] {post_analysis['post_type']}: {tweet_id}")
                     else:
                         print(f"  ⏭️ Not saved (duplicate/unchanged): {tweet_id}")
                 except Exception as save_e:
@@ -688,11 +681,8 @@ def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size:
                 timestamps = [t.get('tweet_timestamp') for t in all_tweets if t.get('tweet_timestamp')]
                 if timestamps:
                     oldest_timestamp = min(timestamps)
-                    print(f"   📅 Resuming from oldest collected: {oldest_timestamp}")
-                    
-                    # For sessions 2+, use search-based positioning
-                    if not resume_positioning(page, username, oldest_timestamp):
-                        print(f"   ⚠️ Session {sessions_completed} positioning failed, continuing from profile start")
+                    print(f"   📅 Oldest collected timestamp: {oldest_timestamp}")
+                    # Note: For multi-session, we don't use resume positioning to avoid navigation issues
             
             # Extract profile picture (once per multi-session)
             if sessions_completed == 1:
@@ -702,7 +692,7 @@ def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size:
                 profile_pic_url = None  # Use cached value from session 1
             
             # Collect tweets for this session
-            session_results = collect_tweets_from_page(page, username, session_tweets, True, oldest_timestamp, profile_pic_url, conn)
+            session_results = collect_tweets_from_page(page, username, session_tweets, False, None, profile_pic_url, conn)
             
             if not session_results:
                 print(f"   ❌ Session {sessions_completed} returned no tweets, stopping multi-session")
@@ -916,12 +906,20 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
         oldest_timestamp = None
         newest_timestamp = None
         if resume_from_last:
-            oldest_timestamp = fetcher_db.get_last_tweet_timestamp(username)
+            # Get the oldest timestamp for resume
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT tweet_timestamp FROM tweets WHERE username = ? ORDER BY tweet_timestamp ASC LIMIT 1", (username,))
+                row = cur.fetchone()
+                oldest_timestamp = row[0] if row else None
+            except Exception:
+                oldest_timestamp = None
+            
             if oldest_timestamp:
                 # Also get the newest timestamp to detect new tweets
                 try:
                     cur = conn.cursor()
-                    cur.execute("SELECT tweet_timestamp FROM tweets WHERE username = ? ORDER BY tweet_timestamp ASC LIMIT 1", (username,))
+                    cur.execute("SELECT tweet_timestamp FROM tweets WHERE username = ? ORDER BY tweet_timestamp DESC LIMIT 1", (username,))
                     row = cur.fetchone()
                     newest_timestamp = row[0] if row else None
                 except Exception:

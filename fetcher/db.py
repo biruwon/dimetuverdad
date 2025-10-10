@@ -2,7 +2,14 @@ import sqlite3
 from typing import Optional, Dict, List
 from datetime import datetime
 
-DB_PATH = "accounts.db"
+# Import path utilities for consistent database path resolution
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+from utils import paths
+
+DB_PATH = str(paths.get_db_path())
 
 def get_connection(timeout: float = 10.0) -> sqlite3.Connection:
     return sqlite3.connect(DB_PATH, timeout=timeout)

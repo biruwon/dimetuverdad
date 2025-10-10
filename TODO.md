@@ -4,7 +4,6 @@
 
 Top priority:
 
-- [H] **VIDEO URL EXTRACTION**: Implement video URL extraction for tweets with video content. Current fetcher can extract images but videos are blocked by Twitter/X anti-bot protections and service worker loading. Need to investigate proxy-based capture, browser extension approach, or alternative scraping strategies to access real video URLs from video.twimg.com
 - [L] Edited recent posts, how will affect fetching? And show the original
 - [M] Disinformation/political retrieval to get up to date data/checks
 - [L] Analyze images and videos, not just text
