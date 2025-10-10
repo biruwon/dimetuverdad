@@ -752,8 +752,8 @@
             modal.setAttribute('tabindex', '-1');
             
             let versionsHtml = '';
-            if (data.versions && data.versions.length > 0) {
-                data.versions.forEach(function(version, index) {
+            if (data.previous_versions && data.previous_versions.length > 0) {
+                data.previous_versions.forEach(function(version, index) {
                     const versionDate = new Date(version.detected_at).toLocaleString('es-ES');
                     versionsHtml += `
                         <div class="card mb-3">
@@ -773,7 +773,7 @@
                     `;
                 });
             } else {
-                versionsHtml = '<p class="text-muted">No hay versiones anteriores disponibles.</p>';
+                versionsHtml = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>No hay versiones anteriores disponibles para este tweet.</div>';
             }
             
             modal.innerHTML = `
@@ -782,14 +782,15 @@
                         <div class="modal-header">
                             <h5 class="modal-title">
                                 <i class="fas fa-edit me-2"></i>
-                                Historial de Ediciones
+                                Historial de Ediciones - Tweet ${data.tweet_id}
                             </h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body">
                             <div class="alert alert-info">
                                 <i class="fas fa-info-circle me-2"></i>
-                                <strong>Versión actual:</strong> ${data.current_content}
+                                <strong>Versión actual (${data.total_versions} versiones totales):</strong><br>
+                                ${data.current_version.content}
                             </div>
                             
                             <h6 class="mt-4 mb-3">Versiones anteriores:</h6>

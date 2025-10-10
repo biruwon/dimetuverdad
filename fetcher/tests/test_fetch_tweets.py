@@ -141,6 +141,7 @@ class FakePage:
         # articles: list of FakeElement
         self._articles = articles
         self._url = ''
+        self._event_handlers = {}
 
     def goto(self, url, **kwargs):
         """Accept any keyword arguments like wait_until"""
@@ -154,6 +155,12 @@ class FakePage:
 
     def evaluate(self, script):
         return 1000
+
+    def on(self, event, handler):
+        """Mock event handler registration"""
+        if event not in self._event_handlers:
+            self._event_handlers[event] = []
+        self._event_handlers[event].append(handler)
 
 
 # ===== DATABASE TESTS =====

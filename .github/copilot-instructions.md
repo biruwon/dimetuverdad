@@ -189,7 +189,7 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 **Testing Requirements**:
 1. **After ANY code change** (refactor, new feature, bug fix, enhancement, or modification):
    - **IMMEDIATELY identify** which test files cover the modified code
-   - **IMMEDIATELY run** relevant tests: `./run_in_venv.sh test-all` or specific test files
+   - **IMMEDIATELY run** relevant tests: specific test files
    - If tests fail: **IMMEDIATELY STOP and fix them before any other work**
    - **NEVER proceed** with additional changes while tests are failing
    - **NEVER delay** testing until "later" - test NOW

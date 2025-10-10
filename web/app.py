@@ -1150,6 +1150,73 @@ def check_tweet_status(tweet_id):
     # This would be used by JavaScript to fallback to stored content if tweet is deleted
     return jsonify({'exists': True})  # Placeholder - would need actual Twitter API integration
 
+@app.route('/api/tweet-versions/<tweet_id>')
+@rate_limit(max_requests=20, window_seconds=60)  # 20 requests per minute for version API
+def get_tweet_versions(tweet_id):
+    """API endpoint to get version history for edited tweets."""
+    try:
+        conn = get_db_connection()
+        
+        # Get current tweet data
+        current_tweet = conn.execute("""
+            SELECT 
+                t.content, t.username, t.tweet_timestamp, t.tweet_url,
+                ca.category, ca.llm_explanation
+            FROM tweets t
+            LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
+            WHERE t.tweet_id = ?
+        """, (tweet_id,)).fetchone()
+        
+        if not current_tweet:
+            conn.close()
+            return jsonify({'error': 'Tweet not found'}), 404
+        
+        # Get version history from edit_history table
+        versions = conn.execute("""
+            SELECT 
+                version_number, content, hashtags, mentions, media_links, 
+                media_count, external_links, detected_at
+            FROM edit_history 
+            WHERE original_tweet_id = ?
+            ORDER BY version_number DESC
+        """, (tweet_id,)).fetchall()
+        
+        conn.close()
+        
+        # Format response
+        version_history = []
+        for version in versions:
+            version_history.append({
+                'version_number': version['version_number'],
+                'content': version['content'],
+                'hashtags': version['hashtags'],
+                'mentions': version['mentions'], 
+                'media_links': version['media_links'],
+                'media_count': version['media_count'],
+                'external_links': version['external_links'],
+                'detected_at': version['detected_at']
+            })
+        
+        response_data = {
+            'tweet_id': tweet_id,
+            'current_version': {
+                'content': current_tweet['content'],
+                'username': current_tweet['username'],
+                'tweet_timestamp': current_tweet['tweet_timestamp'],
+                'tweet_url': current_tweet['tweet_url'],
+                'category': current_tweet['category'],
+                'llm_explanation': current_tweet['llm_explanation']
+            },
+            'previous_versions': version_history,
+            'total_versions': len(version_history) + 1  # +1 for current version
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        app.logger.error(f"Error getting tweet versions for {tweet_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
 @app.route('/admin/export/csv')
 @admin_required
 @rate_limit(max_requests=3, window_seconds=600)  # 3 requests per 10 minutes
