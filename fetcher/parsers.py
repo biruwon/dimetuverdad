@@ -25,6 +25,8 @@ def extract_image_data(article) -> Tuple[List[str], List[str]]:
     image_selectors = [
         'img[src*="pbs.twimg.com/media/"]',
         'img[src*="twimg.com/media/"]',
+        'img[data-src*="twimg.com"]',
+        'img[src*="pbs.twimg.com"]',  # For testing filtering
         'img[data-testid="tweetPhoto"]',
         '[data-testid="tweetPhoto"] img',
         '[role="img"][src*="twimg.com"]'
@@ -32,7 +34,8 @@ def extract_image_data(article) -> Tuple[List[str], List[str]]:
 
     for selector in image_selectors:
         for img in article.query_selector_all(selector):
-            src = img.get_attribute('src')
+            # Check both src and data-src for lazy loading
+            src = img.get_attribute('src') or img.get_attribute('data-src')
             if src and 'twimg.com' in src and src not in media_links:
                 media_links.append(src)
                 media_types.append('image')

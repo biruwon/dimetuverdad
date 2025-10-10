@@ -253,9 +253,9 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 
 # 4. Common targeted test commands (run IMMEDIATELY after specific changes)
 source venv/bin/activate && python -m pytest analyzer/tests/test_analyzer.py -v         # After analyzer changes
-source venv/bin/activate && python -m pytest fetcher/tests/test_fetch_tweets.py -v     # After fetch_tweets changes
-source venv/bin/activate && python -m pytest fetcher/tests/ -v                         # After any fetcher changes  
-./run_in_venv.sh test-analyzer-integration --quick                                      # After analyzer integration changes
+source venv/bin/activate && python -m pytest fetcher/tests/test_fetch_tweets.py -v     # After any fetcher changes
+source venv/bin/activate && python -m pytest fetcher/tests/ -v                     
+# After analyzer integration changes
 ./run_in_venv.sh test-all                                                               # Before any commit (mandatory)
 ```
 

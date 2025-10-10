@@ -3,14 +3,13 @@ from fetcher import parsers
 
 
 class FakeElem:
-    """Unified fake element class for all parser tests"""
-    def __init__(self, attrs=None, text='', children=None, tag='div', mapping=None):
+    """Mock element for testing"""
+    def __init__(self, attrs=None, text="", children=None, mapping=None, tag='div'):
         self._attrs = attrs or {}
         self._text = text
         self._children = children or []
-        self.tag = tag
-        # mapping: selector -> element or list
         self._mapping = mapping or {}
+        self.tag = tag
 
     def get_attribute(self, name):
         return self._attrs.get(name)
@@ -84,9 +83,18 @@ class FakeElem:
             for c in self._children:
                 if c._attrs.get('href'):
                     results.append(c)
+        
+        # Special case: don't return anything for tweetText when no explicit mapping
+        if selector == '[data-testid="tweetText"]' and not self._mapping.get(selector):
+            return []
+        
         return results
 
     def evaluate(self, js):
+        if 'tagName.toLowerCase()' in js:
+            return self.tag
+        if 'Array.from(el.attributes)' in js:
+            return [(k, v) for k, v in self._attrs.items()]
         return None
 
     def click(self):
@@ -316,8 +324,205 @@ def test_extract_full_tweet_content_and_fallback():
     assert parsers.extract_full_tweet_content(article) == 'Hello world'
 
     # Fallback to article.inner_text
-    article2 = FakeElem(text='Fallback full text')
-    assert parsers.extract_full_tweet_content(article2) == 'Fallback full text'
+    article2 = FakeElem(text='This is a much longer fallback full text that should definitely be extracted properly')
+    article2.query_selector_all = lambda selector: []  # Mock to force fallback
+    assert parsers.extract_full_tweet_content(article2) == 'This is a much longer fallback full text that should definitely be extracted properly'
+
+
+def test_extract_full_tweet_content_multiple_selectors():
+    """Test the enhanced extract_full_tweet_content with multiple selector strategies."""
+    # Test primary selector (data-testid="tweetText")
+    primary_elem = FakeElem(text='Primary tweet text')
+    article1 = FakeElem(mapping={'[data-testid="tweetText"]': primary_elem})
+    result1 = parsers.extract_full_tweet_content(article1)
+    assert result1 == 'Primary tweet text'
+
+    # Test alternative selectors when primary fails
+    alt_elem = FakeElem(text='Alternative tweet text')
+    article2 = FakeElem(mapping={
+        '[data-testid="Tweet-User-Text"]': alt_elem,
+        '[data-testid="tweetText"]': None  # Primary not found
+    })
+    result2 = parsers.extract_full_tweet_content(article2)
+    assert result2 == 'Alternative tweet text'
+
+    # Test CSS class-based selectors
+    css_elem = FakeElem(text='CSS class tweet text')
+    article3 = FakeElem(mapping={
+        '.tweet-text': css_elem,
+        '[data-testid="tweetText"]': None
+    })
+    result3 = parsers.extract_full_tweet_content(article3)
+    assert result3 == 'CSS class tweet text'
+
+    # Test generic paragraph selectors
+    para_elem = FakeElem(text='Paragraph tweet text')
+    article4 = FakeElem(mapping={
+        'article p': para_elem,
+        '[data-testid="tweetText"]': None
+    })
+    result4 = parsers.extract_full_tweet_content(article4)
+    assert result4 == 'Paragraph tweet text'
+
+    # Test span-based selectors
+    span_elem = FakeElem(text='Span tweet text')
+    article5 = FakeElem(mapping={
+        'span[data-testid="tweetText"]': span_elem,
+        '[data-testid="tweetText"]': None
+    })
+    result5 = parsers.extract_full_tweet_content(article5)
+    assert result5 == 'Span tweet text'
+
+    # Test direction-based selectors
+    dir_elem = FakeElem(text='LTR direction tweet text')
+    article6 = FakeElem(mapping={
+        'div[dir="ltr"]': dir_elem,
+        '[data-testid="tweetText"]': None
+    })
+    result6 = parsers.extract_full_tweet_content(article6)
+    assert result6 == 'LTR direction tweet text'
+
+
+def test_extract_full_tweet_content_ultimate_fallback():
+    """Test the ultimate fallback text extraction from article.inner_text."""
+    # Test fallback with multiple lines, filtering out unwanted content
+    article_text = """@username
+This is the main tweet content that should be extracted.
+2h
+Like Reply Retweet
+2024"""
+
+    article = FakeElem(text=article_text)
+    # Mock all selectors to return None to trigger fallback
+    article.query_selector_all = lambda selector: []
+
+    result = parsers.extract_full_tweet_content(article)
+    assert 'This is the main tweet content that should be extracted' in result
+    assert '@username' not in result  # Should filter out usernames
+    assert '2h' not in result  # Should filter out timestamps
+    assert 'Like Reply Retweet' not in result  # Should filter out engagement text
+
+
+def test_extract_full_tweet_content_empty_and_invalid():
+    """Test extract_full_tweet_content with empty or invalid inputs."""
+    # Empty article
+    empty_article = FakeElem(text='')
+    empty_article.query_selector_all = lambda selector: []
+    result = parsers.extract_full_tweet_content(empty_article)
+    assert result == ''
+
+    # Article with only unwanted content
+    unwanted_article = FakeElem(text='@user 2h Like Reply')
+    unwanted_article.query_selector_all = lambda selector: []
+    result = parsers.extract_full_tweet_content(unwanted_article)
+    assert result == ''  # Should return empty when no valid content found
+
+
+def test_extract_image_data_function():
+    """Test the new extract_image_data function."""
+    # Test standard image selector
+    img_elem = FakeElem(attrs={'src': 'https://pbs.twimg.com/media/test.jpg'})
+    article1 = FakeElem(mapping={
+        'img[src*="pbs.twimg.com/media/"]': [img_elem]
+    })
+
+    links, types = parsers.extract_image_data(article1)
+    assert 'https://pbs.twimg.com/media/test.jpg' in links
+    assert 'image' in types
+
+    # Test data-src attribute
+    data_img = FakeElem(attrs={'data-src': 'https://pbs.twimg.com/media/data.jpg'})
+    article2 = FakeElem(mapping={
+        'img[data-src*="twimg.com"]': [data_img]
+    })
+
+    links2, types2 = parsers.extract_image_data(article2)
+    assert 'https://pbs.twimg.com/media/data.jpg' in links2
+    assert 'image' in types2
+
+    # Test background image extraction
+    bg_elem = FakeElem(attrs={'style': 'background-image: url("https://pbs.twimg.com/media/bg.jpg")'})
+    article3 = FakeElem(mapping={
+        '[style*="background-image"]': [bg_elem]
+    })
+
+    links3, types3 = parsers.extract_image_data(article3)
+    assert 'https://pbs.twimg.com/media/bg.jpg' in links3
+    assert 'image' in types3
+
+
+def test_extract_video_data_function():
+    """Test the new extract_video_data function."""
+    # Test direct video element
+    video_elem = FakeElem(attrs={'src': 'https://video.twimg.com/test.mp4'})
+    article1 = FakeElem(mapping={
+        'video': [video_elem]
+    })
+
+    links1, types1 = parsers.extract_video_data(article1)
+    assert 'https://video.twimg.com/test.mp4' in links1
+    assert 'video' in types1
+
+    # Test video with poster (thumbnail)
+    video_with_poster = FakeElem(attrs={
+        'poster': 'https://pbs.twimg.com/media/thumb.jpg'
+    })
+    article2 = FakeElem(mapping={
+        'video': [video_with_poster]
+    })
+
+    links2, types2 = parsers.extract_video_data(article2)
+    assert 'https://pbs.twimg.com/media/thumb.jpg' in links2
+    assert 'image' in types2  # Poster is image type
+
+    # Test video component selectors
+    video_comp = FakeElem(attrs={'data-video-id': '12345'})
+    article3 = FakeElem(mapping={
+        '[data-testid="videoComponent"]': [video_comp]
+    })
+
+    links3, types3 = parsers.extract_video_data(article3)
+    # Should not extract anything without actual video URLs
+    assert len(links3) == 0
+
+
+def test_extract_media_data_combined():
+    """Test the combined extract_media_data function."""
+    # Create article with both image and video
+    img_elem = FakeElem(attrs={'src': 'https://pbs.twimg.com/media/test.jpg'})
+    video_elem = FakeElem(attrs={'src': 'https://video.twimg.com/test.mp4'})
+
+    article = FakeElem(mapping={
+        'img[src*="pbs.twimg.com/media/"]': [img_elem],
+        'video': [video_elem]
+    })
+
+    links, count, types = parsers.extract_media_data(article)
+    assert count == 2
+    assert 'image' in types
+    assert 'video' in types
+    assert len([l for l in links if 'pbs.twimg.com' in l]) == 1
+    assert len([l for l in links if 'video.twimg.com' in l]) == 1
+
+
+def test_extract_media_data_filters_unwanted():
+    """Test that extract_media_data filters out profile images and card previews."""
+    # Profile image (should be filtered out)
+    profile_img = FakeElem(attrs={'src': 'https://pbs.twimg.com/profile_images/test.jpg'})
+    # Card image (should be filtered out)
+    card_img = FakeElem(attrs={'src': 'https://pbs.twimg.com/card_img/test.jpg'})
+    # Regular media image (should be kept)
+    media_img = FakeElem(attrs={'src': 'https://pbs.twimg.com/media/test.jpg'})
+
+    article = FakeElem(mapping={
+        'img[src*="pbs.twimg.com"]': [profile_img, card_img, media_img]
+    })
+
+    links, count, types = parsers.extract_media_data(article)
+    assert count == 1  # Only the media image should remain
+    assert 'https://pbs.twimg.com/media/test.jpg' in links
+    assert 'profile_images' not in ' '.join(links)
+    assert 'card_img' not in ' '.join(links)
 
 
 def test_extract_content_elements_hashtags_mentions_and_links():

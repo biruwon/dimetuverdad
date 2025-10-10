@@ -246,19 +246,37 @@ def analyze_multimodal_content(media_urls: List[str], text_content: str) -> Tupl
     if not model:
         return None, time.time() - start_time
 
+    # Filter out unwanted media (profile images, card previews)
+    filtered_urls = []
+    for url in media_urls:
+        if 'profile_images' in url or 'card_img' in url:
+            continue
+        filtered_urls.append(url)
+
+    if not filtered_urls:
+        print("No valid media URLs found after filtering")
+        return None, time.time() - start_time
+
     # Process the first media URL (for now, we handle one media per analysis)
     # But prioritize video URLs over image URLs if available
-    has_video = any('video' in url.lower() or '.mp4' in url.lower() or '.m3u8' in url.lower() for url in media_urls)
+    has_video = any('video' in url.lower() or '.mp4' in url.lower() or '.m3u8' in url.lower() for url in filtered_urls)
     
-    # Prefer actual video files (.mp4, .m3u8) over thumbnails, then video URLs over images
+    # Priority order: MP4 > M3U8 > other video URLs > images
     if has_video:
-        # Priority: 1. MP4/M3U8 files, 2. Other video URLs, 3. First URL as fallback
-        media_url = next(
-            (url for url in media_urls if '.mp4' in url.lower() or '.m3u8' in url.lower()),
-            next((url for url in media_urls if 'video' in url.lower()), media_urls[0])
-        )
+        # Find MP4 files first (highest priority)
+        mp4_url = next((url for url in filtered_urls if '.mp4' in url.lower()), None)
+        if mp4_url:
+            media_url = mp4_url
+        else:
+            # No MP4, check for M3U8
+            m3u8_url = next((url for url in filtered_urls if '.m3u8' in url.lower()), None)
+            if m3u8_url:
+                media_url = m3u8_url
+            else:
+                # No MP4/M3U8, use first video URL
+                media_url = next((url for url in filtered_urls if 'video' in url.lower()), filtered_urls[0])
     else:
-        media_url = media_urls[0]
+        media_url = filtered_urls[0]
     
     is_video = has_video
 
