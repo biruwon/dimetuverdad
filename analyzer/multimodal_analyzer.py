@@ -107,11 +107,11 @@ class MultimodalAnalyzer:
             if self.verbose:
                 print(f"🖼️  Analyzing {len(media_urls)} media items...")
 
-            # Analyze first media item (can be extended for multiple)
-            primary_media_url = media_urls[0]
+            # Use Gemini's URL selection logic to pick the best media URL
+            selected_media_url = self.gemini_analyzer._select_media_url(media_urls)
 
             media_analysis_result, analysis_time = self.gemini_analyzer.analyze_multimodal_content(
-                [primary_media_url], text_context
+                [selected_media_url], text_context
             )
 
             if media_analysis_result is None:

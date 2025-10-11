@@ -459,13 +459,24 @@ def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) -> Optio
     # Delete existing analysis
     analyzer.repository.delete_existing_analysis(tweet_id)
 
+    # Parse media URLs from media_links string
+    media_urls = []
+    if tweet_data.get('media_links'):
+        media_urls = [url.strip() for url in tweet_data['media_links'].split(',') if url.strip()]
+    
+    # Debug print
+    if media_urls:
+        print(f"    🖼️ Found {len(media_urls)} media files for analysis")
+        for i, url in enumerate(media_urls):
+            print(f"      {i+1}. {url[:50]}...")
+
     # Reanalyze
     analysis_result = analyzer.analyze_content(
         tweet_id=tweet_data['tweet_id'],
         tweet_url=f"https://twitter.com/placeholder/status/{tweet_data['tweet_id']}",
         username=tweet_data['username'],
         content=tweet_data['content'],
-        media_urls=tweet_data.get('media_urls', [])
+        media_urls=media_urls
     )
 
     # Save result

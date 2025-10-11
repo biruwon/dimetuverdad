@@ -1,11 +1,12 @@
 """
 Browser session management for the fetcher module.
 
-Handles browser setup, context creation, session persistence, and cleanup.
+Handles browser setup, context creation, session persistence, login operations, and cleanup.
 """
 
 import os
 import random
+import time
 from typing import Tuple, Optional, TYPE_CHECKING
 from pathlib import Path
 
@@ -13,12 +14,15 @@ if TYPE_CHECKING:
     from playwright.sync_api import Browser, BrowserContext, Page
 
 try:
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import sync_playwright, TimeoutError
 except Exception:
     sync_playwright = None
+    class TimeoutError(Exception):
+        pass
 
 from .config import get_config
 from .logging_config import get_logger
+from .scroller import Scroller
 
 logger = get_logger('session_manager')
 
@@ -28,6 +32,98 @@ class SessionManager:
     def __init__(self):
         self.config = get_config()
         self.session_file = Path("x_session.json")
+        self.scroller = Scroller()
+
+    def login_and_save_session(self, page, username: str, password: str) -> bool:
+        """
+        Login with better anti-detection measures.
+        
+        Args:
+            page: Playwright page object
+            username: Login username
+            password: Login password
+            
+        Returns:
+            bool: True if login successful, False otherwise
+        """
+        
+        print("🔐 Starting login process...")
+        
+        # Advanced stealth setup
+        page.route("**/*", lambda route, request: (
+            route.continue_() if not any(keyword in request.url.lower() 
+                for keyword in ["webdriver", "automation", "headless"]) 
+            else route.abort()
+        ))
+        
+        # Go to login page with random delay
+        page.goto("https://x.com/login")
+        self.scroller.delay(2.0, 4.0)
+
+        # Step 1: Enter username with human-like typing
+        try:
+            page.wait_for_selector('input[name="text"]', timeout=10000)
+            username_field = page.locator('input[name="text"]')
+            
+            # Type with human-like delays
+            for char in username:
+                username_field.type(char)
+                time.sleep(random.uniform(0.05, 0.15))
+            
+            self.scroller.delay(0.5, 1.5)
+            page.click('div[data-testid="LoginForm_Login_Button"], div[role="button"]:has-text("Siguiente"), button:has-text("Next")')
+            self.scroller.delay(2.0, 4.0)
+            
+        except TimeoutError:
+            print("⚠️ Username field not found, may already be logged in")
+
+        # Step 2: Handle unusual activity or confirmation
+        try:
+            page.wait_for_selector('input[name="text"]', timeout=4000)
+            unusual_activity = page.query_selector('div:has-text("unusual activity"), div:has-text("actividad inusual")')
+            
+            if unusual_activity:
+                print("⚠️ Unusual activity detected, entering email/phone...")
+                confirmation_field = page.locator('input[name="text"]')
+                confirmation_field.fill(self.config.email_or_phone or username)
+            else:
+                print("🔄 Confirming username...")
+                username_field = page.locator('input[name="text"]') 
+                username_field.fill(username)
+            
+            self.scroller.delay(1.0, 2.0)
+            page.click('div[data-testid="LoginForm_Login_Button"], div[role="button"]:has-text("Siguiente"), button:has-text("Next")')
+            self.scroller.delay(2.0, 4.0)
+            
+        except TimeoutError:
+            print("✅ No additional confirmation needed")
+
+        # Step 3: Enter password with human-like typing
+        try:
+            page.wait_for_selector('input[name="password"]', timeout=10000)
+            password_field = page.locator('input[name="password"]')
+            
+            # Type password with human-like delays
+            for char in password:
+                password_field.type(char)
+                time.sleep(random.uniform(0.05, 0.12))
+            
+            self.scroller.delay(0.5, 1.5)
+            page.click('div[data-testid="LoginForm_Login_Button"], button:has-text("Iniciar sesión"), button:has-text("Log in")')
+            self.scroller.delay(3.0, 6.0)
+            
+        except TimeoutError:
+            print("⚠️ Password field not found")
+
+        # Verify login success
+        try:
+            page.wait_for_url("https://x.com/home", timeout=15000)
+            print("✅ Login successful!")
+            self.scroller.delay(2.0, 4.0)
+            return True
+        except TimeoutError:
+            print("❌ Login verification failed - check for CAPTCHA or 2FA")
+            return False
 
     def create_browser_context(
         self,

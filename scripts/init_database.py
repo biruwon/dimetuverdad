@@ -43,6 +43,7 @@ def create_fresh_database():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 profile_pic_url TEXT,
+                profile_pic_updated TIMESTAMP,
                 last_scraped TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )

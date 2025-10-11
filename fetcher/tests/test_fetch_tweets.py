@@ -417,14 +417,17 @@ class TestRefetchSingleTweet:
         """Test refetching a tweet that doesn't exist in database."""
         conn, path = setup_temp_db()
         try:
-            orig = fetch_tweets.DB_PATH
-            fetch_tweets.DB_PATH = path
+            # Create refetch manager with temporary database path
+            from fetcher.refetch_manager import RefetchManager
+            refetch_manager = RefetchManager()
+            orig_path = refetch_manager.db_path
+            refetch_manager.db_path = path
             
-            result = fetch_tweets.refetch_single_tweet("999999999999")
+            result = refetch_manager.refetch_single_tweet("999999999999")
             
             assert result == False
         finally:
-            fetch_tweets.DB_PATH = orig
+            refetch_manager.db_path = orig_path
             conn.close()
             os.remove(path)
     
@@ -434,7 +437,10 @@ class TestRefetchSingleTweet:
             raise sqlite3.Error("Connection failed")
         
         monkeypatch.setattr(sqlite3, 'connect', fake_connect)
-        result = fetch_tweets.refetch_single_tweet("123456789")
+        
+        from fetcher.refetch_manager import RefetchManager
+        refetch_manager = RefetchManager()
+        result = refetch_manager.refetch_single_tweet("123456789")
         assert result == False
     
     def test_refetch_successful_flow(self, monkeypatch):
@@ -449,8 +455,11 @@ class TestRefetchSingleTweet:
             """)
             conn.commit()
 
-            orig = fetch_tweets.DB_PATH
-            fetch_tweets.DB_PATH = path
+            # Create refetch manager with temporary database path
+            from fetcher.refetch_manager import RefetchManager
+            manager = RefetchManager()
+            orig_path = manager.db_path
+            manager.db_path = path
 
             # Mock Playwright components
             mock_article = FakeElement(
@@ -480,7 +489,9 @@ class TestRefetchSingleTweet:
                 def __exit__(self, *args):
                     return None
 
-            monkeypatch.setattr(fetch_tweets, 'sync_playwright', MockPlaywrightContext)
+            # Import the refetch manager to mock its sync_playwright
+            from fetcher import refetch_manager
+            monkeypatch.setattr(refetch_manager, 'sync_playwright', MockPlaywrightContext)
             monkeypatch.setattr(fetch_tweets.scroller, 'delay', lambda *args: None)
 
             # Mock extraction to return valid data
@@ -503,11 +514,15 @@ class TestRefetchSingleTweet:
             from fetcher import parsers as fetcher_parsers
             monkeypatch.setattr(fetcher_parsers, 'extract_tweet_with_quoted_content', fake_extract)
 
-            result = fetch_tweets.refetch_single_tweet("123456789")
+            # Mock database update to return success
+            from fetcher import db as fetcher_db
+            monkeypatch.setattr(fetcher_db, 'update_tweet_in_database', lambda tweet_id, tweet_data: True)
+
+            result = manager.refetch_single_tweet("123456789")
 
             assert result == True
         finally:
-            fetch_tweets.DB_PATH = orig
+            refetch_manager.db_path = orig_path
             conn.close()
             os.remove(path)
 

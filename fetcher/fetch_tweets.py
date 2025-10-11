@@ -1,19 +1,24 @@
 """
-Full fetch implementation moved into the `fetcher` package.
+Main entry point for tweet fetching operations.
 
-This file contains the full implementation that used to live at the
-project root `fetch_tweets.py`. It's placed inside the `fetcher` package
-to consolidate fetch-related helpers and make testing/refactoring easier.
+This module coordinates the fetching process by using specialized components:
+- TweetCollector: Core tweet collection logic
+- SessionManager: Browser session management and login
+- ResumeManager: Resume positioning and search navigation
+- RefetchManager: Individual tweet and account refetching
+- Scroller: Scrolling and navigation
+- MediaMonitor: Network request monitoring
+- Parsers: Content extraction
+- DB: Database operations
 """
 
-import os
-import sqlite3
-import time
 import argparse
-import sys
-import json
 import random
-import re
+import sqlite3
+import sys
+import os
+import time
+import traceback
 from typing import Dict, List, Optional, Tuple
 
 # Add parent directory to path for imports when run as script
@@ -27,36 +32,39 @@ from fetcher.session_manager import SessionManager
 from fetcher.scroller import Scroller
 from fetcher.collector import TweetCollector
 from fetcher.media_monitor import MediaMonitor
+from fetcher.resume_manager import ResumeManager
+from fetcher.refetch_manager import RefetchManager
 from utils import paths
+
 try:
     from dotenv import load_dotenv
 except Exception:
-    # Allow running examples and tests without python-dotenv installed.
+    # Allow running without python-dotenv
     def load_dotenv():
         return None
 
 try:
     from playwright.sync_api import sync_playwright, TimeoutError
 except Exception:
-    # Playwright may not be available in lightweight test environments.
+    # Playwright may not be available in lightweight test environments
     sync_playwright = None
     class TimeoutError(Exception):
         pass
+
 from datetime import datetime
 
 # Load configuration
 config = get_config()
 
-# Initialize scroller for scrolling operations
+# Initialize components
+session_manager = SessionManager()
 scroller = Scroller()
-
-# Initialize media monitor for network request monitoring
 media_monitor = MediaMonitor()
-
-# Initialize collector for tweet collection
 collector = TweetCollector()
+resume_manager = ResumeManager()
+refetch_manager = RefetchManager()
 
-# Legacy constants for backward compatibility (now sourced from config)
+# Legacy constants for backward compatibility
 USERNAME = config.username
 PASSWORD = config.password
 EMAIL_OR_PHONE = config.email_or_phone
@@ -77,170 +85,6 @@ DEFAULT_HANDLES = [
     "Doct_Tricornio",
     "LosMeconios"
 ]
-
-def login_and_save_session(page, username, password):
-    """Login with better anti-detection measures."""
-    
-    print("🔐 Starting login process...")
-    
-    # Advanced stealth setup
-    page.route("**/*", lambda route, request: (
-        route.continue_() if not any(keyword in request.url.lower() 
-            for keyword in ["webdriver", "automation", "headless"]) 
-        else route.abort()
-    ))
-    
-    # Go to login page with random delay
-    page.goto("https://x.com/login")
-    scroller.delay(2.0, 4.0)
-
-    # Step 1: Enter username with human-like typing
-    try:
-        page.wait_for_selector('input[name="text"]', timeout=10000)
-        username_field = page.locator('input[name="text"]')
-        
-        # Type with human-like delays
-        for char in username:
-            username_field.type(char)
-            time.sleep(random.uniform(0.05, 0.15))
-        
-        scroller.delay(0.5, 1.5)
-        page.click('div[data-testid="LoginForm_Login_Button"], div[role="button"]:has-text("Siguiente"), button:has-text("Next")')
-        scroller.delay(2.0, 4.0)
-        
-    except TimeoutError:
-        print("⚠️ Username field not found, may already be logged in")
-
-    # Step 2: Handle unusual activity or confirmation
-    try:
-        page.wait_for_selector('input[name="text"]', timeout=4000)
-        unusual_activity = page.query_selector('div:has-text("unusual activity"), div:has-text("actividad inusual")')
-        
-        if unusual_activity:
-            print("⚠️ Unusual activity detected, entering email/phone...")
-            confirmation_field = page.locator('input[name="text"]')
-            confirmation_field.fill(EMAIL_OR_PHONE or username)
-        else:
-            print("🔄 Confirming username...")
-            username_field = page.locator('input[name="text"]') 
-            username_field.fill(username)
-        
-        scroller.delay(1.0, 2.0)
-        page.click('div[data-testid="LoginForm_Login_Button"], div[role="button"]:has-text("Siguiente"), button:has-text("Next")')
-        scroller.delay(2.0, 4.0)
-        
-    except TimeoutError:
-        print("✅ No additional confirmation needed")
-
-    # Step 3: Enter password with human-like typing
-    try:
-        page.wait_for_selector('input[name="password"]', timeout=10000)
-        password_field = page.locator('input[name="password"]')
-        
-        # Type password with human-like delays
-        for char in password:
-            password_field.type(char)
-            time.sleep(random.uniform(0.05, 0.12))
-        
-        scroller.delay(0.5, 1.5)
-        page.click('div[data-testid="LoginForm_Login_Button"], button:has-text("Iniciar sesión"), button:has-text("Log in")')
-        scroller.delay(3.0, 6.0)
-        
-    except TimeoutError:
-        print("⚠️ Password field not found")
-
-    # Verify login success
-    try:
-        page.wait_for_url("https://x.com/home", timeout=15000)
-        print("✅ Login successful!")
-        scroller.delay(2.0, 4.0)
-        return True
-    except TimeoutError:
-        print("❌ Login verification failed - check for CAPTCHA or 2FA")
-        return False
-
-def convert_timestamp_to_date_filter(timestamp: str) -> Optional[str]:
-    """Convert ISO timestamp to Twitter search date format (YYYY-MM-DD)."""
-    try:
-        # Parse ISO timestamp and convert to date string
-        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-        return dt.strftime('%Y-%m-%d')
-    except Exception as e:
-        print(f"⚠️ Error converting timestamp {timestamp}: {e}")
-        return None
-
-
-def try_resume_via_search(page, username: str, oldest_timestamp: str) -> bool:
-    """
-    Try to resume fetching using Twitter's search with date filters.
-    
-    Args:
-        page: Playwright page object
-        username: Twitter username to search
-        oldest_timestamp: ISO timestamp of oldest scraped tweet
-        
-    Returns:
-        bool: True if successfully navigated to target timeframe
-    """
-    try:
-        # Convert timestamp to date for search
-        since_date = convert_timestamp_to_date_filter(oldest_timestamp)
-        if not since_date:
-            return False
-        
-        # Build search query to find tweets before our oldest timestamp
-        # Use "until" parameter to find tweets before the date we already have
-        search_query = f"from:{username} until:{since_date}"
-        search_url = f"https://x.com/search?q={search_query}&src=typed_query&f=live"
-        
-        print(f"🔍 Trying search-based resume: {search_url}")
-        page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-        scroller.delay(3.0, 5.0)
-        
-        # Check if we got results by looking for tweet articles
-        articles = page.query_selector_all('article[data-testid="tweet"]')
-        if articles:
-            print(f"✅ Search found {len(articles)} tweets in target timeframe")
-            return True
-        else:
-            print("⚠️ No tweets found in search results")
-            return False
-            
-    except Exception as e:
-        print(f"⚠️ Search-based resume failed: {e}")
-        return False
-
-
-def resume_positioning(page, username: str, oldest_timestamp: str) -> bool:
-    """
-    Resume functionality using Twitter search with date filters.
-    
-    Args:
-        page: Playwright page object
-        username: Twitter username
-        oldest_timestamp: ISO timestamp of oldest scraped tweet
-        
-    Returns:
-        bool: True if successfully positioned for resume
-    """
-    print(f"🔄 Resume: positioning to fetch tweets older than {oldest_timestamp}")
-    
-    # Try search-based navigation
-    if try_resume_via_search(page, username, oldest_timestamp):
-        print("✅ Resume successful via search")
-        return True
-    
-    # Fallback to regular profile load (will use normal scrolling)
-    print("⚠️ Search resume failed, falling back to standard profile navigation")
-    try:
-        profile_url = f"https://x.com/{username}"
-        page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
-        scroller.delay(2.0, 4.0)
-        print("✅ Loaded profile page for standard resume")
-        return True
-    except Exception as e:
-        print(f"❌ All resume strategies failed: {e}")
-        return False
 
 
 def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size: int = 800) -> List[Dict]:
@@ -353,8 +197,8 @@ def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size:
 
 def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]:
     """
-    Strategy 1: Fetch latest tweets with simple stopping logic.
-    Stops after finding 10 consecutive existing tweets in a row.
+    Strategy 1: Fetch latest tweets with proper stopping logic.
+    Stops after finding 10 consecutive existing tweets in a row (latest mode).
     
     Args:
         page: Playwright page object
@@ -392,7 +236,9 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
         saved_count = 0
         consecutive_existing = 0
         scroll_count = 0
-        max_consecutive_existing = 10
+        max_consecutive_existing = config.max_consecutive_existing_tweets  # Use config value (10)
+        
+        print(f"📊 Latest mode: will stop after {max_consecutive_existing} consecutive existing tweets")
         
         while saved_count < max_tweets and consecutive_existing < max_consecutive_existing:
             scroll_count += 1
@@ -420,6 +266,12 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
                     # Check if we already processed this tweet in this session
                     if any(t.get('tweet_id') == tweet_id for t in tweets_collected):
                         continue
+                    
+                    # Check if tweet exists in database (for latest mode stopping logic)
+                    exists_in_db = fetcher_db.check_if_tweet_exists(username, tweet_id)
+                    if exists_in_db:
+                        print(f"  ⏭️ Existing tweet: {tweet_id}")
+                        continue  # Skip existing tweets but don't count toward consecutive existing
                     
                     # Extract content
                     content = fetcher_parsers.extract_full_tweet_content(article)
@@ -462,7 +314,7 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
                     if saved:
                         saved_count += 1
                         tweets_saved_this_scroll += 1
-                        consecutive_existing = 0  # Reset counter
+                        consecutive_existing = 0  # Reset counter on new tweet
                         tweets_collected.append(tweet_data)
                         print(f"  💾 Saved [{saved_count}] {post_analysis['post_type']}: {tweet_id}")
                     else:
@@ -472,19 +324,21 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
                     print(f"  ❌ Error processing tweet: {e}")
                     continue
             
-            # Check consecutive existing logic
+            # Check consecutive existing logic for latest mode
             if tweets_saved_this_scroll == 0:
                 consecutive_existing += 1
                 print(f"  📊 No new tweets saved this scroll ({consecutive_existing}/{max_consecutive_existing})")
             else:
                 print(f"  ✅ Saved {tweets_saved_this_scroll} new tweets this scroll")
+                # Reset consecutive counter when we find new tweets
+                consecutive_existing = 0
             
             # Check if we should stop
             if saved_count >= max_tweets:
                 print(f"  ✅ Completed: Reached target of {max_tweets} tweets")
                 break
             elif consecutive_existing >= max_consecutive_existing:
-                print(f"  🛑 Stopped: Found {max_consecutive_existing} consecutive existing tweets")
+                print(f"  🛑 Stopped: Found {max_consecutive_existing} consecutive scrolls with no new tweets (latest mode)")
                 break
             
             # Scroll for more content
@@ -593,7 +447,7 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
                 if remaining_tweets > 0:
                     print(f"\n🔄 PHASE 2: Resuming from oldest timestamp ({remaining_tweets} tweets remaining)")
                     
-                    if resume_positioning(page, username, oldest_timestamp):
+                    if resume_manager.resume_positioning(page, username, oldest_timestamp):
                         # Wait for tweets to load after resume positioning
                         try:
                             page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
@@ -727,201 +581,6 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
     return total_saved, len(handles)
 
 
-def _get_tweet_info_from_db(tweet_id: str):
-    """
-    Helper function to get tweet information from database.
-    
-    Args:
-        tweet_id: The tweet ID to look up
-        
-    Returns:
-        tuple: (username, tweet_url) if found, (None, None) if not found
-        
-    Raises:
-        Exception: If database error occurs
-    """
-    conn = sqlite3.connect(DB_PATH, timeout=10.0)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute("SELECT username, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,))
-    row = cur.fetchone()
-    conn.close()
-    
-    if not row:
-        return None, None
-    
-    return row['username'], row['tweet_url']
-
-
-def _extract_and_update_tweet(page, tweet_id: str, username: str, tweet_url: str) -> bool:
-    """
-    Helper function to extract tweet data and update database.
-    Consolidates extraction logic used in refetch operations.
-    
-    Args:
-        page: Playwright page instance
-        tweet_id: The tweet ID
-        username: The username 
-        tweet_url: The tweet URL
-        
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        # Load the tweet page
-        print(f"🌐 Loading tweet page...")
-        try:
-            page.goto(tweet_url, wait_until="domcontentloaded", timeout=60000)
-            scroller.delay(2.0, 3.0)
-        except Exception as e:
-            print(f"⚠️ Page load warning: {e}")
-        
-        # Extract tweet data
-        tweet_data = fetcher_parsers.extract_tweet_with_quoted_content(page, tweet_id, username, tweet_url)
-        
-        if not tweet_data:
-            print(f"❌ Failed to extract tweet data")
-            return False
-        
-        # Update database
-        success = fetcher_db.update_tweet_in_database(tweet_id, tweet_data)
-        
-        if success:
-            print(f"✅ Successfully updated tweet {tweet_id}")
-        else:
-            print(f"❌ Failed to update tweet {tweet_id} in database")
-            
-        return success
-        
-    except Exception as e:
-        print(f"❌ Error during tweet extraction: {e}")
-        return False
-
-
-def refetch_single_tweet(tweet_id: str) -> bool:
-    """
-    Re-fetch a specific tweet by ID, extracting complete content including quoted tweets.
-    
-    Args:
-        tweet_id: The tweet ID to refetch
-        
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print(f"🔄 REFETCH MODE: Re-fetching tweet ID {tweet_id}")
-    
-    # Get tweet info from database
-    try:
-        username, tweet_url = _get_tweet_info_from_db(tweet_id)
-        
-        if not username:
-            print(f"❌ Tweet ID {tweet_id} not found in database. Cannot refetch.")
-            return False
-        
-        print(f"📍 Found tweet from @{username}")
-        print(f"🔗 URL: {tweet_url}")
-        
-    except Exception as e:
-        print(f"❌ Database error: {e}")
-        return False
-    
-    # Use shared browser setup and extraction logic
-    try:
-        with sync_playwright() as p:
-            browser, context, page = SessionManager().create_browser_context(p)
-            
-            # Monitor network requests for media URLs (videos and images)
-            media_urls = media_monitor.setup_monitoring(page)
-            
-            # Navigate to tweet page
-            try:
-                page.goto(tweet_url, wait_until="networkidle", timeout=30000)
-                print(f"📄 Page loaded: {tweet_url}")
-            except Exception as e:
-                print(f"⚠️ Page load warning: {e}")
-            
-            # Extract tweet data
-            tweet_data = fetcher_parsers.extract_tweet_with_quoted_content(page, tweet_id, username, tweet_url)
-            
-            if not tweet_data:
-                print(f"❌ Failed to extract tweet data")
-                context.close()
-                browser.close()
-                return False
-            
-            # Add captured media URLs to tweet data
-            if media_urls:
-                print(f"📹 Found {len(media_urls)} media URLs via network monitoring")
-                # Combine media URLs with existing media_links
-                existing_media = tweet_data.get('media_links', '')
-                existing_urls = existing_media.split(',') if existing_media else []
-                combined_urls = list(set(existing_urls + media_urls))  # Remove duplicates
-                tweet_data['media_links'] = ','.join([url for url in combined_urls if url.strip()])
-                tweet_data['media_count'] = len([u for u in combined_urls if u.strip()])
-            
-            # Update database with combined data
-            success = fetcher_db.update_tweet_in_database(tweet_id, tweet_data)
-            
-            if success:
-                print(f"✅ Successfully updated tweet {tweet_id}")
-            else:
-                print(f"❌ Failed to update tweet {tweet_id} in database")
-            
-            SessionManager().cleanup_session(browser, context)
-            
-            return success
-            
-    except Exception as e:
-        print(f"❌ Error during refetch: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def refetch_account_all(username: str, max_tweets: int = None) -> bool:
-    """
-    Delete all existing data for an account and refetch all tweets from scratch.
-    
-    Args:
-        username: The username to refetch (without @)
-        max_tweets: Maximum number of tweets to fetch (None for unlimited)
-        
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    username = username.lstrip('@').strip()
-    print(f"🔄 REFETCH ALL MODE: Cleaning and refetching @{username}")
-    
-    try:
-        # Delete existing data for the account
-        deleted_counts = fetcher_db.delete_account_data(username)
-        print(f"🗑️  Deleted {deleted_counts['tweets']} tweets and {deleted_counts['analyses']} analyses")
-        
-        # Handle unlimited case
-        if max_tweets is None:
-            max_tweets_display = "unlimited"
-            max_tweets_param = float('inf')
-        else:
-            max_tweets_display = str(max_tweets)
-            max_tweets_param = max_tweets
-        
-        # Fetch fresh data using the same pattern as main function
-        print(f"🚀 Starting fresh fetch for @{username} (max: {max_tweets_display})")
-        with sync_playwright() as p:
-            total_fetched, accounts_processed = run_fetch_session(p, [username], max_tweets_param, False)
-        
-        if total_fetched > 0:
-            print(f"✅ Successfully refetched {total_fetched} tweets for @{username}")
-            return True
-        else:
-            print(f"❌ No tweets fetched for @{username}")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Error during account refetch: {e}")
-        return False
-
-
 def main():
     # Setup logging and get configuration
     setup_logging()
@@ -940,13 +599,13 @@ def main():
     # Handle refetch mode for specific tweet
     if args.refetch:
         tweet_id = args.refetch.strip()
-        success = refetch_single_tweet(tweet_id)
+        success = refetch_manager.refetch_single_tweet(tweet_id)
         return  # Exit after refetch
 
     # Handle refetch-all mode for entire account
     if args.refetch_all:
         username = args.refetch_all.strip()
-        success = refetch_account_all(username, args.max)
+        success = refetch_manager.refetch_account_all(username, args.max)
         return  # Exit after refetch-all
 
     max_tweets = args.max

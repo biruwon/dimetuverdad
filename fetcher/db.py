@@ -78,7 +78,7 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
                 return False
             # perform update (minimal fields)
             c.execute("""UPDATE tweets SET content = ?, post_type = ?, original_author = ?, original_tweet_id = ?,
-                        media_links = ?, media_count = ?, media_types = ?,
+                        media_links = ?, media_count = ?,
                         engagement_likes = ?, engagement_retweets = ?, engagement_replies = ?,
                         external_links = ?, original_content = ?, is_pinned = ?
                         WHERE tweet_id = ?""", (
@@ -88,7 +88,6 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
                 tweet_data.get('original_tweet_id'),
                 tweet_data.get('media_links'),
                 tweet_data.get('media_count', 0),
-                tweet_data.get('media_types'),
                 tweet_data.get('engagement_likes', 0),
                 tweet_data.get('engagement_retweets', 0),
                 tweet_data.get('engagement_replies', 0),
@@ -101,10 +100,10 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
             return True
         # insert
         c.execute("""INSERT INTO tweets (tweet_id, content, username, tweet_url, tweet_timestamp, post_type,
-                        media_links, media_count, media_types,
+                        media_links, media_count,
                         engagement_likes, engagement_retweets, engagement_replies,
                         external_links, original_content, is_pinned)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
             tweet_data['tweet_id'],
             tweet_data.get('content'),
             tweet_data.get('username'),
@@ -113,7 +112,6 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
             tweet_data.get('post_type', 'original'),
             tweet_data.get('media_links'),
             tweet_data.get('media_count', 0),
-            tweet_data.get('media_types'),
             tweet_data.get('engagement_likes', 0),
             tweet_data.get('engagement_retweets', 0),
             tweet_data.get('engagement_replies', 0),
