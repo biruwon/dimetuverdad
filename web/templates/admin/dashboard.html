@@ -55,10 +55,10 @@
                     <small class="opacity-75">dimetuverdad Admin Dashboard</small>
                 </div>
                 <div>
-                    <a href="{{ url_for('index') }}" class="btn btn-light me-2">
+                    <a href="{{ url_for('main.index') }}" class="btn btn-light me-2">
                         <i class="fas fa-home me-1"></i>Inicio
                     </a>
-                    <a href="{{ url_for('admin_logout') }}" class="btn btn-outline-light">
+                    <a href="{{ url_for('admin.admin_logout') }}" class="btn btn-outline-light">
                         <i class="fas fa-sign-out-alt me-1"></i>Salir
                     </a>
                 </div>
@@ -110,7 +110,7 @@
                         </h5>
                     </div>
                     <div class="card-body">
-                        <form method="POST" action="{{ url_for('admin_reanalyze') }}" class="mb-3">
+                        <form method="POST" action="{{ url_for('admin.admin_reanalyze') }}" class="mb-3">
                             <div class="input-group mb-2">
                                 <select name="category" class="form-select" required>
                                     <option value="">Seleccionar categoría para reanalizar...</option>
@@ -126,7 +126,7 @@
                             <small class="text-muted">Reanaliza todos los tweets actualmente clasificados en esta categoría</small>
                         </form>
 
-                        <form method="POST" action="{{ url_for('admin_reanalyze') }}">
+                        <form method="POST" action="{{ url_for('admin.admin_reanalyze') }}">
                             <div class="input-group mb-2">
                                 <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
                                 <input type="hidden" name="action" value="user">
@@ -137,7 +137,7 @@
                             <small class="text-muted">Reanaliza todos los tweets del usuario especificado</small>
                         </form>
 
-                        <form method="POST" action="{{ url_for('admin_fetch') }}" class="mb-3">
+                        <form method="POST" action="{{ url_for('admin.admin_fetch') }}" class="mb-3">
                             <div class="input-group mb-2">
                                 <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
                                 <input type="hidden" name="action" value="fetch_only">
@@ -148,7 +148,7 @@
                             <small class="text-muted">Obtiene tweets del usuario sin análisis automático</small>
                         </form>
 
-                        <form method="POST" action="{{ url_for('admin_fetch') }}" class="mb-3">
+                        <form method="POST" action="{{ url_for('admin.admin_fetch') }}" class="mb-3">
                             <div class="input-group mb-2">
                                 <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
                                 <input type="hidden" name="action" value="fetch_and_analyze">
@@ -172,7 +172,7 @@
                     </div>
                     <div class="card-body">
                         <div class="d-grid gap-2">
-                            <a href="{{ url_for('export_csv') }}" class="btn btn-outline-success" target="_blank">
+                            <a href="{{ url_for('admin.export_csv') }}" class="btn btn-outline-success" target="_blank">
                                 <i class="fas fa-file-csv me-2"></i>Exportar como CSV
                             </a>
                             <small class="text-muted">Formato CSV para Excel, Google Sheets, etc.</small>
@@ -181,7 +181,7 @@
                         <hr>
                         
                         <div class="d-grid gap-2">
-                            <a href="{{ url_for('export_json') }}" class="btn btn-outline-success" target="_blank">
+                            <a href="{{ url_for('admin.export_json') }}" class="btn btn-outline-success" target="_blank">
                                 <i class="fas fa-file-code me-2"></i>Exportar como JSON
                             </a>
                             <small class="text-muted">Formato JSON completo con todos los metadatos.</small>
@@ -205,7 +205,7 @@
                     <div class="card-body">
                         {% for category in categories %}
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <a href="{{ url_for('admin_view_category', category_name=category.category) }}" class="text-decoration-none" title="Ver todos los tweets de esta categoría">
+                                <a href="{{ url_for('admin.admin_view_category', category_name=category.category) }}" class="text-decoration-none" title="Ver todos los tweets de esta categoría">
                                     <span class="badge category-badge bg-{{ 
                                         'danger' if category.category == 'hate_speech' else
                                         'warning' if category.category == 'disinformation' else
@@ -237,7 +237,7 @@
                     </div>
                     <div class="card-body recent-activity">
                         {% for analysis in recent_analyses %}
-                            <div class="border-bottom py-2 hover-bg-light" style="cursor: pointer;" onclick="window.open('{{ url_for('admin_view_user_category', username=analysis.username, category=analysis.category) }}', '_blank')">
+                            <div class="border-bottom py-2 hover-bg-light" style="cursor: pointer;" onclick="window.open('{{ url_for('admin.admin_view_user_category', username=analysis.username, category=analysis.category) }}', '_blank')">
                                 <div class="row align-items-center">
                                     <div class="col-md-2">
                                         <small class="text-muted">{{ analysis.analysis_timestamp[:16].replace('T', ' ') }}</small>
@@ -256,7 +256,7 @@
                                         </span>
                                     </div>
                                     <div class="col-md-2">
-                                        <a href="{{ url_for('user_page', username=analysis.username) }}" class="text-decoration-none" onclick="event.stopPropagation();">
+                                        <a href="{{ url_for('main.user_page', username=analysis.username) }}" class="text-decoration-none" onclick="event.stopPropagation();">
                                             <strong>@{{ analysis.username }}</strong> <i class="fas fa-external-link-alt small"></i>
                                         </a>
                                     </div>

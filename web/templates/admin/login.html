@@ -45,7 +45,7 @@
                             {% endif %}
                         {% endwith %}
                         
-                        <form method="POST" action="{{ url_for('admin_login') }}">
+                        <form method="POST" action="{{ url_for('admin.admin_login') }}">
                             <div class="mb-4">
                                 <div class="input-group input-group-lg">
                                     <span class="input-group-text">
@@ -60,7 +60,7 @@
                         </form>
                         
                         <hr class="my-4">
-                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
                             <i class="fas fa-arrow-left me-2"></i>Volver al inicio
                         </a>
                     </div>

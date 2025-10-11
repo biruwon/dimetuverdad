@@ -14,7 +14,7 @@ import sys
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from web.app import app as flask_app
+from web.app import create_app
 from config import ADMIN_TOKEN
 
 def init_test_db(db_path: str):
@@ -116,6 +116,7 @@ def app():
         'DB_CHECK_SAME_THREAD': False
     }
 
+    flask_app = create_app()
     flask_app.config.update(test_config)
 
     # Initialize test database

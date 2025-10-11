@@ -89,19 +89,6 @@ class ConnectionPool:
             except Empty:
                 break
 
-# Global connection pool (deprecated - use thread-local instead)
-_connection_pool = None
-_pool_lock = threading.Lock()
-
-def get_connection_pool() -> ConnectionPool:
-    """Get the global connection pool (singleton pattern)."""
-    global _connection_pool
-    if _connection_pool is None:
-        with _pool_lock:
-            if _connection_pool is None:
-                _connection_pool = ConnectionPool()
-    return _connection_pool
-
 def get_thread_local_connection_pool() -> ConnectionPool:
     """Get a thread-local connection pool."""
     if not hasattr(_local, 'connection_pool'):

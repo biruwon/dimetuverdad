@@ -12,7 +12,6 @@ Top priority:
 - [M] Fetch new tweets only
 - [L] Blog/instagram explanining how disinformation works easier to understand
 - [L] Detect topic of the day/week: which accounts promote it, real data, what do they target
-- DB snapshots when project it's almost ready
 - Cover the project with unit/integrations tests
 
 - [M] **Pattern refinement**: Review and improve pattern matching rules based on analysis results
@@ -34,14 +33,6 @@ Top priority:
 ### Analysis Engine Improvements
 - [M] **Optimize LLM response times**: Current analysis takes 30-60 seconds per tweet with LLM. Investigate model quantization or alternative models
 - [M] **Implement batch processing**: Process multiple tweets simultaneously to improve throughput
-
-### Database & Performance
-- [M] **Analysis result caching**: Cache LLM results to avoid re-analysis of identical content
-- [M] **Incremental analysis**: Only analyze new tweets instead of full database scans
-
-### Web Interface Enhancements
-- [M] **Advanced filtering**: Add date range and analysis method filters
-- [M] **User feedback system**: Allow users to flag incorrect classifications for model improvement
 
 ### Category System Improvements
 - [M] **Category validation**: Validate new categories (nationalism, anti_government, historical_revisionism, political_general) with larger datasets
@@ -68,9 +59,6 @@ Top priority:
 
 ### Technical Debt
 - [M] **Memory optimization**: Reduce memory usage during large batch analysis
-
-### Data Quality Issues
-<!-- URL expansion TODO skipped as requested -->
 
 ### Analysis Accuracy
 - [L] **Sarcasm detection**: Improve detection of ironic/sarcastic content

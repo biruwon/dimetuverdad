@@ -69,8 +69,9 @@ analyze_twitter(){
 web(){
   ensure_venv
   echo "Starting web application on port 5000..."
-  cd "$ROOT_DIR/web"
-  "$PY" "$ROOT_DIR/web/app.py"
+  cd "$ROOT_DIR"
+  export PYTHONPATH="$ROOT_DIR:${PYTHONPATH:-}"
+  "$PY" -m web.app
 }
 
 test_analyzer_integration(){

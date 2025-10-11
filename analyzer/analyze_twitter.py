@@ -445,7 +445,7 @@ def create_analyzer(config: Optional[AnalyzerConfig] = None, verbose: bool = Fal
 
 def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) -> Optional[ContentAnalysis]:
     """Reanalyze a single tweet and return the result."""
-    from utils.database import get_tweet_data, delete_existing_analysis
+    from utils.database import get_tweet_data
 
     # Use provided analyzer or create default one
     if analyzer is None:

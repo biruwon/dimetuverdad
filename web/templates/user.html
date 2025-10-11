@@ -309,10 +309,10 @@
             </a>
             <div class="navbar-nav ms-auto">
                 {% if session.admin_authenticated %}
-                    <a href="{{ url_for('admin_dashboard') }}" class="nav-link text-success me-3">
+                    <a href="{{ url_for('admin.admin_dashboard') }}" class="nav-link text-success me-3">
                         <i class="fas fa-shield-alt me-1"></i>Admin Panel
                     </a>
-                    <a href="{{ url_for('admin_logout') }}" class="nav-link text-muted me-3">
+                    <a href="{{ url_for('admin.admin_logout') }}" class="nav-link text-muted me-3">
                         <i class="fas fa-sign-out-alt me-1"></i>Logout
                     </a>
                 {% endif %}
@@ -551,7 +551,7 @@
                                 <h6 class="text-warning mb-2">
                                     <i class="fas fa-shield-alt me-1"></i>Admin Controls
                                 </h6>
-                                <a href="{{ url_for('admin_edit_analysis', tweet_id=tweet.tweet_id, from=request.url) }}" class="btn btn-sm btn-warning">
+                                <a href="{{ url_for('admin.admin_edit_analysis', tweet_id=tweet.tweet_id, from=request.url) }}" class="btn btn-sm btn-warning">
                                     <i class="fas fa-edit me-1"></i>Editar Análisis
                                 </a>
                             </div>
@@ -810,7 +810,7 @@
                                                 <button type="submit" class="btn btn-primary btn-sm flex-fill">
                                                     <i class="fas fa-search me-1"></i>Aplicar
                                                 </button>
-                                                <a href="{{ url_for('user_page', username=username) }}{% if current_category %}?category={{ current_category }}{% endif %}" class="btn btn-outline-secondary btn-sm">
+                                                <a href="{{ url_for('main.user_page', username=username) }}{% if current_category %}?category={{ current_category }}{% endif %}" class="btn btn-outline-secondary btn-sm">
                                                     <i class="fas fa-times me-1"></i>Limpiar
                                                 </a>
                                             </div>

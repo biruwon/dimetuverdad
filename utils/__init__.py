@@ -12,7 +12,7 @@ from .paths import *
 
 __all__ = [
     # Database utilities
-    'get_db_connection', 'get_tweet_data', 'delete_existing_analysis',
+    'get_db_connection', 'get_tweet_data',
 
     # Path utilities
     'get_project_root', 'get_db_path',
