@@ -154,18 +154,6 @@ The system detects 6 categories with specific priority order:
 
 ## Testing & Validation
 
-### Comprehensive Test Suite
-```bash
-# Quick test (2 cases per category, ~1 minute)
-./run_in_venv.sh test-analyzer-integration --quick
-
-# Full validation (all cases, ~6 minutes)
-./run_in_venv.sh test-analyzer-integration --full
-
-# Pattern-only testing (fastest)
-./run_in_venv.sh test-analyzer-integration --patterns-only
-```
-
 ### Individual Content Testing
 ```bash
 # Fast pattern analysis
@@ -243,20 +231,15 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 - **COPILOT CANNOT** defer testing to a later time or session
 
 **MANDATORY Workflow Example**:
-```bash
-# 1. Make ANY code changes to ANY file
-# 2. IMMEDIATELY (not later) run tests
-./run_in_venv.sh test-all
-
-# 3a. If tests pass → Can continue or commit
-# 3b. If tests fail → MUST fix them NOW before any other work
-
-# 4. Common targeted test commands (run IMMEDIATELY after specific changes)
-source venv/bin/activate && python -m pytest analyzer/tests/test_analyzer.py -v         # After analyzer changes
-source venv/bin/activate && python -m pytest fetcher/tests/test_fetch_tweets.py -v     # After any fetcher changes
+```bash      
+# After analyzer changes
+source venv/bin/activate && python -m pytest analyzer/tests/test_analyzer.py -v         
+# After any fetcher changes
 source venv/bin/activate && python -m pytest fetcher/tests/ -v                     
 # After analyzer integration changes
-./run_in_venv.sh test-all                                                               # Before any commit (mandatory)
+./run_in_venv.sh test-analyzer-integration --quick                                                     
+# Before any commit (mandatory)
+./run_in_venv.sh test-all  
 ```
 
 ## Performance Considerations

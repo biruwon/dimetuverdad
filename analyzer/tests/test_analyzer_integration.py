@@ -33,6 +33,7 @@ from utils import paths
 
 from typing import Dict, Any
 from analyzer.analyzer import Analyzer
+from analyzer.config import AnalyzerConfig
 from analyzer.categories import Categories
 
 class TestAnalyzerIntegration:
@@ -40,7 +41,8 @@ class TestAnalyzerIntegration:
     
     def __init__(self, save_to_db: bool = False):
         print("🚀 Initializing Enhanced Analyzer...")
-        self.analyzer = Analyzer(model_priority="fast")
+        config = AnalyzerConfig(model_priority="balanced")
+        self.analyzer = Analyzer(config=config)
         self.save_to_db = save_to_db
     
     def get_essential_pattern_tests(self) -> Dict[str, Dict]:

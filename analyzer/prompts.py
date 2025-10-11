@@ -182,6 +182,7 @@ Responde SOLO con el nombre de la categoría más apropiada:"""
             Formatted analysis prompt for Gemini following standardized format
         """
         media_type = "video" if is_video else "imagen"
+        categories = EnhancedPromptGenerator.build_category_list()
         
         prompt_parts = [
             f'TEXTO DEL POST ANALIZADO: "{text_content}"',
@@ -192,18 +193,23 @@ Responde SOLO con el nombre de la categoría más apropiada:"""
             "2. ¿Qué texto o elementos gráficos indican sesgo político, especialmente de extrema derecha?",
             "3. ¿Se mencionan datos, estadísticas o hechos específicos? Evalúalos por veracidad y contexto",
             "4. ¿Cómo se relacionan el contenido visual y textual para crear una narrativa política?",
-            "5. ¿Qué categorías problemáticas se detectan: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action?",
+            "5. ¿Qué categorías problemáticas se detectan?",
             "6. Si se mencionan hechos o datos, ¿son verificables y se presentan en contexto correcto?",
             "7. ¿Cómo contribuye la combinación de imagen/video + texto a narrativas problemáticas?",
             "",
+            f"CATEGORÍAS DISPONIBLES: {categories}",
+            "",
             "INSTRUCCIONES DE FORMATO:",
+            "- PRIMERO indica la CATEGORÍA más apropiada (una sola palabra)",
+            "- LUEGO escribe la EXPLICACIÓN (2-3 oraciones claras)",
             "- Responde SOLO con texto plano en español, sin markdown ni formato especial",
             "- NO uses negritas (**), títulos (##), listas numeradas, tablas, o símbolos",
-            "- Escribe 2-3 oraciones claras y directas explicando los elementos detectados",
             "- Evalúa cualquier dato o hecho mencionado por su veracidad y contexto",
-            "- Como si le explicaras a una persona que no conoce el tema",
+            "- Si NO hay elementos problemáticos, usa 'general'",
             "",
-            "EXPLICACIÓN:"
+            "FORMATO REQUERIDO:",
+            "CATEGORÍA: [categoría]",
+            "EXPLICACIÓN: [tu explicación aquí]"
         ]
         
         return "\n".join(prompt_parts)

@@ -6,7 +6,7 @@ Top priority:
 
 - [L] Edited recent posts, how will affect fetching? And show the original
 - [M] Disinformation/political retrieval to get up to date data/checks
-- [L] Analyze images and videos, not just text
+- [L] Improve DB: backups, better db and remove unused fields
 - [L] Allow people to submit account to analyze or post to analyze
 - [M] Improve LLM explanation
 - [M] Fetch new tweets only

@@ -16,7 +16,8 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from analyzer.analyzer import Analyzer, save_content_analysis, ContentAnalysis, create_analyzer
+from analyzer.analyzer import Analyzer, ContentAnalysis, create_analyzer, reanalyze_tweet
+from analyzer.config import AnalyzerConfig
 from analyzer.categories import Categories
 from utils import database, paths
 
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = paths.get_db_path()
 
-def save_failed_analysis(tweet_id: str, tweet_url: str, username: str, content: str, 
+def save_failed_analysis(analyzer: Analyzer, tweet_id: str, tweet_url: str, username: str, content: str, 
                         error_message: str, media_urls: list = None):
     """
     Save failed analysis attempt to database for debugging.
@@ -60,8 +61,8 @@ def save_failed_analysis(tweet_id: str, tweet_url: str, username: str, content: 
             analysis_json=f'{{"error": "{error_message[:500]}", "media_urls": {len(media_urls or [])}}}'
         )
         
-        # Save to database
-        save_content_analysis(failed_analysis)
+        # Save to database using analyzer instance
+        analyzer.save_analysis(failed_analysis)
         logger.info(f"Saved failed analysis for tweet {tweet_id}: {error_message[:100]}")
         
     except Exception as save_error:
@@ -86,8 +87,8 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
         print(f"🎯 Reanalyzing specific tweet: {tweet_id}")
         print("🚀 Initializing Analyzer...")
         try:
-            from .analyzer import reanalyze_tweet
-            analyzer_instance = create_analyzer(use_llm=True, verbose=False)
+            config = AnalyzerConfig(use_llm=True, verbose=False)
+            analyzer_instance = create_analyzer(config=config, verbose=False)
             print("✅ Analyzer ready!")
             
             result = reanalyze_tweet(tweet_id, analyzer=analyzer_instance)
@@ -110,7 +111,8 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     # Initialize analyzer for bulk processing
     print("🚀 Initializing Analyzer...")
     try:
-        analyzer_instance = create_analyzer(use_llm=True, verbose=False)  # Always use LLM for better explanations
+        config = AnalyzerConfig(use_llm=True, verbose=False)
+        analyzer_instance = create_analyzer(config=config, verbose=False)  # Always use LLM for better explanations
         print("✅ Analyzer ready!")
     except Exception as e:
         print(f"❌ Error initializing analyzer: {e}")
@@ -244,7 +246,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
             )
             
             # Save to database
-            save_content_analysis(analysis)
+            analyzer_instance.save_analysis(analysis)
             
             results.append(result)
             
@@ -286,6 +288,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
             
             # Save failed analysis to database for debugging
             save_failed_analysis(
+                analyzer=analyzer_instance,
                 tweet_id=tweet_id,
                 tweet_url=tweet_url,
                 username=tweet_username,
