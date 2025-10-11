@@ -442,6 +442,8 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 
 **MANDATORY REQUIREMENT**: Whenever database schema changes are made, the `scripts/init_database.py` script MUST be updated to reflect the new schema.
 
+**MANDATORY CONFIRMATION REQUIREMENT**: Before executing `scripts/init_database.py --force` or any database initialization command, you MUST ask the user for explicit confirmation. This command destroys and recreates the entire database, potentially losing all existing data.
+
 ### Database Schema Update Rules:
 1. **SCHEMA CHANGES REQUIRE INIT SCRIPT UPDATE**: Any modification to database table structures, new columns, or schema alterations must be reflected in `scripts/init_database.py`
    - Adding new columns to existing tables
@@ -465,6 +467,15 @@ When working on this codebase, prioritize understanding the multi-stage analysis
    - The database connection uses `sqlite3.Row` factory for named column access
    - Use `row['column_name']` instead of `row[index]` to prevent indexing errors
    - This makes code robust against SQL query changes and schema modifications
+
+### Database Initialization Confirmation Workflow:
+1. **ALWAYS ASK FIRST**: Never execute `init_database.py --force` without explicit user confirmation
+2. **Explain Consequences**: Inform user that this command will destroy and recreate the database, potentially losing all existing data
+3. **Wait for Confirmation**: Only proceed after user explicitly confirms they want to continue
+4. **Backup Recommendation**: Suggest backing up the database before proceeding if it contains important data
+5. **Confirmation Prompt**: Use format: "This will recreate the database from scratch and delete all existing data. Are you sure you want to proceed?"
+
+**VIOLATION CONSEQUENCES**: Executing database initialization without confirmation can result in permanent data loss. Always confirm with the user before running destructive database operations.
 
 ### Database Update Workflow:
 1. **Make Schema Changes**: Update table structures in source code

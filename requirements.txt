@@ -1,5 +1,6 @@
 # Core web framework
 Flask==2.3.3
+Flask-Caching>=2.0.0
 
 # Machine learning and NLP
 torch>=2.0.0

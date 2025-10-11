@@ -1,0 +1,337 @@
+"""
+Test Admin Functionality
+Comprehensive testing for admin-specific features and operations.
+"""
+
+import pytest
+from unittest.mock import patch, Mock, call
+from web.tests.conftest import TestHelpers, MockRow
+
+
+class TestAdminEditAnalysis:
+    """Test admin edit analysis functionality."""
+
+    def test_edit_analysis_requires_auth(self, client):
+        """Test edit analysis requires admin authentication."""
+        response = client.get('/admin/edit-analysis/1234567890')
+        assert response.status_code == 302  # Redirect to login
+
+    def test_edit_analysis_get_existing_tweet(self, admin_client, mock_database, sample_tweet_data):
+        """Test GET request for editing existing tweet analysis."""
+        # Mock database to return tweet data
+        mock_database.execute.return_value.fetchone.return_value = (
+            sample_tweet_data['content'],
+            sample_tweet_data['username'],
+            sample_tweet_data['tweet_timestamp'],
+            sample_tweet_data['category'],
+            sample_tweet_data['llm_explanation'],
+            sample_tweet_data['tweet_url'],
+            None  # original_content
+        )
+
+        response = admin_client.get('/admin/edit-analysis/1234567890')
+        assert response.status_code == 200
+        assert sample_tweet_data['content'].encode('utf-8') in response.data
+        assert sample_tweet_data['username'].encode('utf-8') in response.data
+
+    def test_edit_analysis_get_nonexistent_tweet(self, admin_client, mock_database):
+        """Test GET request for editing non-existent tweet."""
+        mock_database.execute.return_value.fetchone.return_value = None
+
+        response = admin_client.get('/admin/edit-analysis/9999999999')
+        assert response.status_code == 302  # Redirect to dashboard
+
+    def test_edit_analysis_manual_update(self, admin_client, mock_database):
+        """Test manual update of tweet analysis."""
+        # Mock the database operations
+        mock_database.execute.return_value.rowcount = 0  # No existing analysis
+        mock_database.total_changes = 1
+
+        response = admin_client.post('/admin/edit-analysis/1234567890',
+                                   data={
+                                       'action': 'update',
+                                       'category': 'hate_speech',
+                                       'explanation': 'Updated analysis'
+                                   },
+                                   follow_redirects=False)
+
+        assert response.status_code == 302  # Redirect after successful update
+        # Verify database operations were called
+        assert mock_database.execute.called
+        assert mock_database.commit.called
+
+    def test_edit_analysis_reanalyze_action(self, admin_client, mock_database, sample_tweet_data):
+        """Test reanalyze action."""
+        with patch('web.app.get_tweet_data') as mock_get_tweet, \
+             patch('web.app.reanalyze_tweet') as mock_reanalyze:
+
+            mock_get_tweet.return_value = sample_tweet_data
+            mock_reanalyze.return_value = Mock(category='disinformation', explanation='Reanalyzed content')
+
+            response = admin_client.post('/admin/edit-analysis/1234567890',
+                                       data={'action': 'reanalyze'},
+                                       follow_redirects=False)
+
+            assert response.status_code == 302  # Redirect after action
+            mock_reanalyze.assert_called_once_with('1234567890')
+
+    def test_edit_analysis_refresh_action(self, admin_client, mock_database, sample_tweet_data):
+        """Test refresh action."""
+        with patch('web.app.get_tweet_data') as mock_get_tweet, \
+             patch('web.app.refetch_tweet') as mock_refetch:
+
+            mock_get_tweet.return_value = sample_tweet_data
+            mock_refetch.return_value = True
+
+            response = admin_client.post('/admin/edit-analysis/1234567890',
+                                       data={'action': 'refresh'},
+                                       follow_redirects=False)
+
+            assert response.status_code == 302
+            mock_refetch.assert_called_once_with('1234567890')
+
+    def test_edit_analysis_refresh_and_reanalyze(self, admin_client, mock_database, sample_tweet_data):
+        """Test refresh and reanalyze combined action."""
+        with patch('web.app.get_tweet_data') as mock_get_tweet, \
+             patch('web.app.refetch_tweet') as mock_refetch, \
+             patch('web.app.reanalyze_tweet') as mock_reanalyze:
+
+            mock_get_tweet.return_value = sample_tweet_data
+            mock_refetch.return_value = True
+            mock_reanalyze.return_value = Mock(category='conspiracy_theory')
+
+            response = admin_client.post('/admin/edit-analysis/1234567890',
+                                       data={'action': 'refresh_and_reanalyze'},
+                                       follow_redirects=False)
+
+            assert response.status_code == 302
+            mock_refetch.assert_called_once_with('1234567890')
+            mock_reanalyze.assert_called_once_with('1234567890')
+
+
+class TestAdminCategoryViews:
+    """Test admin category view functionality."""
+
+    def test_category_view_requires_auth(self, client):
+        """Test category view requires admin authentication."""
+        response = client.get('/admin/category/hate_speech')
+        assert response.status_code == 302
+
+    def test_category_view_existing_category(self, admin_client, mock_database):
+        """Test viewing existing category."""
+        # Mock category data
+        mock_database.execute.side_effect = [
+            Mock(fetchone=Mock(return_value=[(1,)])),  # Category exists check
+            Mock(fetchone=Mock(return_value=(100,))),  # Total count
+            Mock(fetchall=Mock(return_value=[
+                MockRow({
+                    'tweet_url': 'https://twitter.com/user1/status/123',
+                    'content': 'Test content',
+                    'username': 'user1',
+                    'tweet_timestamp': '2024-01-01 12:00:00',
+                    'tweet_id': '123',
+                    'category': 'hate_speech',
+                    'llm_explanation': 'Test explanation',
+                    'analysis_method': 'pattern',
+                    'analysis_timestamp': '2024-01-01 12:00:00',
+                    'is_deleted': False,
+                    'is_edited': False,
+                    'post_type': 'original'
+                })
+            ])),  # Recent analyses
+            Mock(fetchone=Mock(return_value=(50, 5, 30, 20))),  # Category stats
+            Mock(fetchall=Mock(return_value=[
+                MockRow({'username': 'user1', 'tweet_count': 25}),
+                MockRow({'username': 'user2', 'tweet_count': 15})
+            ]))  # Top users
+        ]
+
+        response = admin_client.get('/admin/category/hate_speech')
+        assert response.status_code == 200
+        assert 'hate_speech'.encode('utf-8') in response.data
+
+    def test_category_view_nonexistent_category(self, admin_client, mock_database):
+        """Test viewing non-existent category."""
+        mock_database.execute.return_value.fetchone.return_value = [0]  # No tweets in category
+
+        response = admin_client.get('/admin/category/nonexistent')
+        assert response.status_code == 302  # Redirect to dashboard
+
+    def test_category_view_pagination(self, admin_client, mock_database):
+        """Test category view pagination."""
+        mock_database.execute.side_effect = [
+            Mock(fetchone=Mock(return_value=[(1,)])),  # Category exists
+            Mock(fetchone=Mock(return_value=(100,))),  # Total count
+            Mock(fetchall=Mock(return_value=[])),  # Empty results for page 2
+            Mock(fetchone=Mock(return_value=(50, 5, 30, 20))),  # Category stats
+            Mock(fetchall=Mock(return_value=[]))  # Top users
+        ]
+
+        response = admin_client.get('/admin/category/hate_speech?page=2')
+        assert response.status_code == 200
+
+
+class TestAdminQuickEdit:
+    """Test admin quick edit functionality."""
+
+    def test_quick_edit_requires_auth(self, client):
+        """Test quick edit requires admin authentication."""
+        response = client.post('/admin/quick-edit-category/1234567890',
+                             data={'category': 'general'})
+        assert response.status_code == 302
+
+    def test_quick_edit_success(self, admin_client, mock_database):
+        """Test successful quick category edit."""
+        # Mock existing analysis
+        mock_database.execute.side_effect = [
+            Mock(fetchone=Mock(return_value=('1234567890',))),  # Existing analysis found
+            Mock(rowcount=1),  # Update successful
+        ]
+
+        response = admin_client.post('/admin/quick-edit-category/1234567890',
+                                   data={'category': 'disinformation'},
+                                   follow_redirects=False)
+
+        assert response.status_code == 302  # Redirect after successful edit
+
+    def test_quick_edit_create_new_analysis(self, admin_client, mock_database):
+        """Test quick edit creates new analysis if none exists."""
+        # Mock no existing analysis
+        mock_database.execute.side_effect = [
+            Mock(fetchone=Mock(return_value=None)),  # No existing analysis
+            Mock(rowcount=1),  # Insert successful
+        ]
+
+        response = admin_client.post('/admin/quick-edit-category/1234567890',
+                                   data={'category': 'conspiracy_theory'},
+                                   follow_redirects=False)
+
+        assert response.status_code == 302  # Redirect after successful creation
+
+    def test_quick_edit_missing_category(self, admin_client):
+        """Test quick edit with missing category."""
+        response = admin_client.post('/admin/quick-edit-category/1234567890',
+                                   data={},  # No category provided
+                                   follow_redirects=False)
+
+        assert response.status_code == 302  # Redirect with error
+
+
+class TestAdminExport:
+    """Test admin export functionality."""
+
+    def test_export_csv_requires_auth(self, client):
+        """Test CSV export requires admin authentication."""
+        response = client.get('/admin/export/csv')
+        assert response.status_code == 302
+
+    def test_export_csv_success(self, admin_client, mock_database):
+        """Test successful CSV export."""
+        # Mock export data
+        mock_cursor = Mock()
+        mock_cursor.fetchall.return_value = [
+            MockRow({
+                'tweet_id': '1234567890',
+                'username': 'testuser',
+                'category': 'general',
+                'llm_explanation': 'Test explanation',
+                'analysis_method': 'pattern',
+                'analysis_timestamp': '2024-01-01 12:00:00',
+                'tweet_content': 'Test content',
+                'tweet_url': 'https://twitter.com/test/status/123',
+                'tweet_timestamp': '2024-01-01 12:00:00'
+            })
+        ]
+        mock_database.cursor.return_value = mock_cursor
+
+        response = admin_client.get('/admin/export/csv')
+        assert response.status_code == 200
+        assert 'text/csv' in response.content_type
+        assert 'attachment' in response.headers.get('Content-Disposition', '')
+        assert b'Tweet ID,Username,Category' in response.data
+
+    def test_export_json_success(self, admin_client, mock_database):
+        """Test successful JSON export."""
+        # Mock export data
+        mock_cursor = Mock()
+        mock_cursor.fetchall.return_value = [
+            MockRow({
+                'tweet_id': '1234567890',
+                'username': 'testuser',
+                'category': 'general',
+                'llm_explanation': 'Test explanation',
+                'analysis_method': 'pattern',
+                'analysis_timestamp': '2024-01-01 12:00:00',
+                'tweet_content': 'Test content',
+                'tweet_url': 'https://twitter.com/test/status/123',
+                'tweet_timestamp': '2024-01-01 12:00:00',
+                'categories_detected': None
+            })
+        ]
+        mock_database.cursor.return_value = mock_cursor
+
+        response = admin_client.get('/admin/export/json')
+        assert response.status_code == 200
+        assert 'application/json' in response.content_type
+        assert 'attachment' in response.headers.get('Content-Disposition', '')
+
+        data = response.get_json()
+        assert 'data' in data
+        assert len(data['data']) == 1
+        assert data['data'][0]['tweet_id'] == '1234567890'
+
+
+class TestAdminReanalyzeSingle:
+    """Test single tweet reanalysis functionality."""
+
+    def test_reanalyze_single_requires_auth(self, client):
+        """Test single reanalysis requires admin authentication."""
+        response = client.post('/admin/reanalyze-single/1234567890')
+        assert response.status_code == 302
+
+    def test_reanalyze_single_success(self, admin_client, mock_database, sample_tweet_data):
+        """Test successful single tweet reanalysis."""
+        with patch('web.app.get_tweet_data') as mock_get_tweet, \
+             patch('web.app.reanalyze_tweet') as mock_reanalyze:
+
+            mock_get_tweet.return_value = sample_tweet_data
+            mock_reanalyze.return_value = Mock(category='hate_speech', explanation='Updated analysis')
+
+            response = admin_client.post('/admin/reanalyze-single/1234567890',
+                                       follow_redirects=False)
+
+            assert response.status_code == 302  # Redirect to user page
+
+    def test_reanalyze_single_no_tweet(self, admin_client):
+        """Test reanalysis of non-existent tweet."""
+        with patch('web.app.get_tweet_data') as mock_get_tweet:
+            mock_get_tweet.return_value = None
+
+            response = admin_client.post('/admin/reanalyze-single/9999999999',
+                                       follow_redirects=False)
+
+            assert response.status_code == 302  # Redirect with error
+
+    def test_reanalyze_single_analysis_failure(self, admin_client, mock_database, sample_tweet_data):
+        """Test reanalysis when analysis fails."""
+        with patch('web.app.get_tweet_data') as mock_get_tweet, \
+             patch('web.app.reanalyze_tweet') as mock_reanalyze:
+
+            mock_get_tweet.return_value = sample_tweet_data
+            mock_reanalyze.return_value = None  # Analysis failed
+
+            response = admin_client.post('/admin/reanalyze-single/1234567890',
+                                       follow_redirects=False)
+
+            assert response.status_code == 302  # Redirect with error
+
+
+class TestAdminUserCategory:
+    """Test admin user category view functionality."""
+
+    def test_user_category_redirect(self, admin_client):
+        """Test user category view redirects to user page."""
+        response = admin_client.get('/admin/user-category/testuser/hate_speech')
+        assert response.status_code == 302
+        assert '/user/testuser' in response.headers.get('Location', '')
+        assert 'category=hate_speech' in response.headers.get('Location', '')

@@ -32,6 +32,7 @@ def create_fresh_database():
     print("🏗️  Creating fresh database schema...")
     
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row  # Enable row factory for dict-like access
     c = conn.cursor()
     
     try:
@@ -141,6 +142,23 @@ def create_fresh_database():
             )
         ''')
         
+        # User feedback table for model improvement
+        print("  📝 Creating user_feedback table...")
+        c.execute('''
+            CREATE TABLE user_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tweet_id TEXT NOT NULL,
+                feedback_type TEXT NOT NULL,  -- 'correction', 'flag', 'improvement'
+                original_category TEXT,
+                corrected_category TEXT,
+                user_comment TEXT,
+                user_ip TEXT,  -- For rate limiting and analytics
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                
+                FOREIGN KEY (tweet_id) REFERENCES tweets (tweet_id)
+            )
+        ''')
+        
         # Performance indexes
         print("  📝 Creating indexes...")
         indexes = [
@@ -156,7 +174,10 @@ def create_fresh_database():
             ('idx_content_analyses_timestamp', 'content_analyses', 'analysis_timestamp'),
             ('idx_content_analyses_method', 'content_analyses', 'analysis_method'),
             ('idx_content_analyses_multimodal', 'content_analyses', 'multimodal_analysis'),
-            ('idx_edit_history_tweet', 'edit_history', 'tweet_id')
+            ('idx_edit_history_tweet', 'edit_history', 'tweet_id'),
+            ('idx_user_feedback_tweet', 'user_feedback', 'tweet_id'),
+            ('idx_user_feedback_type', 'user_feedback', 'feedback_type'),
+            ('idx_user_feedback_submitted', 'user_feedback', 'submitted_at')
         ]
         
         for idx_name, table, columns in indexes:
@@ -184,13 +205,14 @@ def verify_schema():
     print("🔍 Verifying database schema...")
     
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row  # Enable row factory for dict-like access
     c = conn.cursor()
     
     try:
         # Check tables exist
         c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = [row['name'] for row in c.fetchall()]
-        expected_tables = ['accounts', 'tweets', 'content_analyses', 'edit_history']
+        expected_tables = ['accounts', 'tweets', 'content_analyses', 'edit_history', 'user_feedback']
         
         print(f"  📋 Tables found: {tables}")
         for table in expected_tables:
