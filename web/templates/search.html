@@ -221,15 +221,6 @@
         .metric-value {
             font-weight: 600;
         }
-        .confidence-high {
-            color: #d73027;
-        }
-        .confidence-medium {
-            color: #ff9800;
-        }
-        .confidence-low {
-            color: #4caf50;
-        }
         .actions {
             display: flex;
             gap: 10px;
@@ -334,12 +325,6 @@
                 </div>
 
                 <div class="metrics">
-                    <div class="metric">
-                        <span class="metric-label">Confidence:</span>
-                        <span class="metric-value {% if result.confidence > 0.8 %}confidence-high{% elif result.confidence > 0.6 %}confidence-medium{% else %}confidence-low{% endif %}">
-                            {{ (result.confidence * 100) | round(1) }}%
-                        </span>
-                    </div>
                     <div class="metric">
                         <span class="metric-label">Far-right Score:</span>
                         <span class="metric-value">{{ (result.far_right_score * 100) | round(1) }}%</span>

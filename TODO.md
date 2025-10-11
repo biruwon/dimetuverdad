@@ -40,7 +40,7 @@ Top priority:
 - [M] **Incremental analysis**: Only analyze new tweets instead of full database scans
 
 ### Web Interface Enhancements
-- [M] **Advanced filtering**: Add date range, confidence level, and analysis method filters
+- [M] **Advanced filtering**: Add date range and analysis method filters
 - [M] **User feedback system**: Allow users to flag incorrect classifications for model improvement
 
 ### Category System Improvements

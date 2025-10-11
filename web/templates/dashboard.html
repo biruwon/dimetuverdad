@@ -263,7 +263,6 @@
                     {{ item.llm_explanation[:200] }}{% if item.llm_explanation|length > 200 %}...{% endif %}
                 </div>
                 <div style="margin-top: 10px; font-size: 0.8em; color: #666;">
-                    Confidence: {{ (item.confidence * 100) | round(1) }}% | 
                     <a href="{{ item.tweet_url }}" target="_blank" style="color: #1a73e8;">View Tweet</a>
                 </div>
             </div>

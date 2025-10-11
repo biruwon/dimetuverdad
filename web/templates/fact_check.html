@@ -170,15 +170,6 @@
         .metric-value {
             font-weight: 600;
         }
-        .confidence-high {
-            color: #d73027;
-        }
-        .confidence-medium {
-            color: #ff9800;
-        }
-        .confidence-low {
-            color: #4caf50;
-        }
         .actions {
             display: flex;
             gap: 10px;
@@ -262,10 +253,6 @@
 
             <div class="metrics">
                 <div class="metric">
-                    <span class="metric-label">Confidence:</span>
-                    <span class="metric-value confidence-high">{{ (item.confidence * 100) | round(1) }}%</span>
-                </div>
-                <div class="metric">
                     <span class="metric-label">Far-right Score:</span>
                     <span class="metric-value">{{ (item.far_right_score * 100) | round(1) }}%</span>
                 </div>
@@ -330,10 +317,6 @@
                 </div>
 
                 <div class="metrics">
-                    <div class="metric">
-                        <span class="metric-label">Confidence:</span>
-                        <span class="metric-value confidence-high">{{ (item.confidence * 100) | round(1) }}%</span>
-                    </div>
                     <div class="metric">
                         <span class="metric-label">Far-right Score:</span>
                         <span class="metric-value">{{ (item.far_right_score * 100) | round(1) }}%</span>
@@ -403,10 +386,6 @@
                 </div>
 
                 <div class="metrics">
-                    <div class="metric">
-                        <span class="metric-label">Confidence:</span>
-                        <span class="metric-value confidence-medium">{{ (item.confidence * 100) | round(1) }}%</span>
-                    </div>
                     <div class="metric">
                         <span class="metric-label">Far-right Score:</span>
                         <span class="metric-value">{{ (item.far_right_score * 100) | round(1) }}%</span>

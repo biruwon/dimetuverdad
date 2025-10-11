@@ -107,7 +107,6 @@ def create_fresh_database():
                 categories_detected TEXT,     -- JSON array of all detected categories
                 llm_explanation TEXT,
                 analysis_method TEXT DEFAULT "pattern", -- "pattern", "llm", or "gemini"
-                confidence REAL DEFAULT 1.0,
                 analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 analysis_json TEXT,
                 

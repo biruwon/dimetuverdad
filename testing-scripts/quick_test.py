@@ -162,7 +162,6 @@ def analyze_single_text(analyzer, text, json_output=False):
             output = {
                 'content': text,
                 'category': result.category,
-                'confidence': getattr(result, 'confidence', None),
                 'method_used': getattr(result, 'method_used', 'unknown'),
                 'explanation': result.explanation if hasattr(result, 'explanation') else None
             }

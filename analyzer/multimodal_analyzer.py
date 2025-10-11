@@ -110,7 +110,7 @@ class MultimodalAnalyzer:
             # Analyze first media item (can be extended for multiple)
             primary_media_url = media_urls[0]
 
-            media_analysis_result, confidence = self.gemini_analyzer.analyze_multimodal_content(
+            media_analysis_result = self.gemini_analyzer.analyze_multimodal_content(
                 [primary_media_url], text_context
             )
 
@@ -148,8 +148,7 @@ class MultimodalAnalyzer:
 
             media_analysis = {
                 'description': explanation,
-                'category': category,
-                'confidence': confidence
+                'category': category
             }
 
             if self.verbose:

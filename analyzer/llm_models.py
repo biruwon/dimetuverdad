@@ -1044,8 +1044,7 @@ class EnhancedLLMPipeline:
             print(f"🔍 Fast LLM category result: {detected_category}")
             
             return {
-                "llm_categories": [detected_category],
-                "llm_confidence": 0.8,  # Default confidence for Ollama
+                "llm_categories": [detected_category]
             }
                 
         except Exception as e:

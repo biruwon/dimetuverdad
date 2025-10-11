@@ -36,7 +36,7 @@ Web Interface (web/app.py)
    - `PatternAnalyzer` combines far-right detection + topic classification + disinformation claims in single pass
    - 13 content categories from hate_speech to political_general
    - **Eliminates redundant processing** between topic classification and extremism detection
-   - Returns `AnalysisResult` with categories, pattern matches, confidence scores
+   - Returns `AnalysisResult` with categories, pattern matches
 
 3. **`llm_models.py`** - LLM integration layer
    - `EnhancedLLMPipeline` with Ollama integration (default: `gpt-oss:20b`)
