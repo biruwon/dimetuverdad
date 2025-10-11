@@ -259,7 +259,7 @@ def get_db_connection():
 
 def get_analyzer():
     """Get initialized EnhancedAnalyzer instance."""
-    from analyzer.analyzer import create_analyzer  # Local import
+    from analyzer.analyze_twitter import create_analyzer  # Local import
     return create_analyzer()
 
 def get_tweet_data(tweet_id):
@@ -272,7 +272,7 @@ def delete_existing_analysis(tweet_id):
 
 def reanalyze_tweet(tweet_id):
     """Reanalyze a single tweet and return the result."""
-    from analyzer.analyzer import reanalyze_tweet as analyzer_reanalyze_tweet  # Local import
+    from analyzer.analyze_twitter import reanalyze_tweet as analyzer_reanalyze_tweet  # Local import
     return analyzer_reanalyze_tweet(tweet_id)
 
 def refetch_tweet(tweet_id):
@@ -638,15 +638,13 @@ def admin_reanalyze():
         
         def run_analysis_background():
             try:
-                cmd = ["./run_in_venv.sh", "analyze-db", "--force-reanalyze"]
-                result = subprocess.run(cmd, cwd=base_dir, check=True, capture_output=True, text=True, timeout=300)
+                cmd = ["./run_in_venv.sh", "analyze-twitter", "--force-reanalyze"]
+                result = subprocess.run(cmd, cwd=base_dir, check=True, timeout=300)
                 app.logger.info(f"Background analysis completed successfully")
             except subprocess.TimeoutExpired:
                 app.logger.error("Background analysis timed out after 5 minutes")
             except subprocess.CalledProcessError as e:
                 app.logger.error(f"Analysis subprocess failed: {e}")
-                app.logger.error(f"Stdout: {e.stdout}")
-                app.logger.error(f"Stderr: {e.stderr}")
             except Exception as e:
                 app.logger.error(f"Unexpected error in background analysis: {str(e)}")
         
@@ -715,8 +713,8 @@ def admin_reanalyze():
         
         def run_user_analysis():
             try:
-                cmd = ["./run_in_venv.sh", "analyze-db", "--username", username, "--force-reanalyze"]
-                result = subprocess.run(cmd, cwd=base_dir, check=True, capture_output=True, text=True, timeout=180)
+                cmd = ["./run_in_venv.sh", "analyze-twitter", "--username", username, "--force-reanalyze"]
+                result = subprocess.run(cmd, cwd=base_dir, check=True, timeout=180)
                 app.logger.info(f"User analysis completed for @{username}")
             except subprocess.TimeoutExpired:
                 app.logger.error(f"User analysis timed out for @{username}")

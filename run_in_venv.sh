@@ -3,7 +3,7 @@
 # Usage:
 #   ./run_in_venv.sh install           # create venv and install requirements + playwright browsers
 #   ./run_in_venv.sh fetch             # run fetch_tweets.py (open browser, requires X creds in .env)
-#   ./run_in_venv.sh analyze-db        # run analysis querying posts from DB
+#   ./run_in_venv.sh analyze-twitter        # run analysis querying posts from DB
 #   ./run_in_venv.sh analyze-default   # run analysis on embedded default posts (fast)
 #   ./run_in_venv.sh web               # start web application on port 5000
 #   ./run_in_venv.sh test-analyzer-integration  # run analyzer integration tests
@@ -11,7 +11,7 @@
 #   ./run_in_venv.sh test-all                   # run all test files in project
 #   ./run_in_venv.sh compare-models    # run model comparison benchmarks
 #   ./run_in_venv.sh benchmarks        # run performance benchmarks
-#   ./run_in_venv.sh full              # run fetch then analyze-db
+#   ./run_in_venv.sh full              # run fetch then analyze-twitter
 
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -59,11 +59,11 @@ fetch(){
   exec "$PY" -u "$ROOT_DIR/fetcher/fetch_tweets.py" "$@" 2>&1 | tee -a "$LOG_FILE"
 }
 
-analyze_db(){
+analyze_twitter(){
   ensure_venv
   echo "Starting database analysis..."
   cd "$ROOT_DIR"
-  "$PY" -m analyzer.analyze_db_tweets "$@"
+  "$PY" -m analyzer.analyze_twitter "$@"
 }
 
 web(){
@@ -76,7 +76,7 @@ web(){
 test_analyzer_integration(){
   ensure_venv
   echo "Running analyzer integration tests..."
-  "$PY" "$ROOT_DIR/analyzer/tests/test_analyzer_integration.py" "$@"
+  "$PY" "$ROOT_DIR/analyzer/tests/test_analyze_twitter_integration.py" "$@"
 }
 
 test_fetch_integration(){
@@ -117,9 +117,9 @@ case "${1-}" in
     shift
     fetch "$@"
     ;;
-  analyze-db)
+  analyze-twitter)
     shift
-    analyze_db "$@"
+    analyze_twitter "$@"
     ;;
   web)
     web
@@ -149,7 +149,7 @@ case "${1-}" in
   full)
     install || true
     fetch
-    analyze_db
+    analyze_twitter
     ;;
   *)
     echo "Usage: $0 COMMAND [ARGS...]"
@@ -157,7 +157,7 @@ case "${1-}" in
     echo "Commands:"
     echo "  install           Create venv and install requirements + playwright browsers"
     echo "  fetch             Run fetch_tweets.py (requires X credentials in .env)"
-    echo "  analyze-db        Run analysis on posts from database"
+    echo "  analyze-twitter        Run analysis on posts from database"
     echo "  web               Start web application on port 5000"
     echo "  test-analyzer-integration  Run analyzer integration tests"
     echo "  test-fetch-integration     Run fetch integration tests"
@@ -165,14 +165,14 @@ case "${1-}" in
     echo "  init-db           Initialize/reset database schema"
     echo "  compare-models    Run model comparison benchmarks"
     echo "  benchmarks        Run performance benchmarks"
-    echo "  full              Run install, fetch, then analyze-db"
+    echo "  full              Run install, fetch, then analyze-twitter"
     echo ""
     echo "Examples:"
     echo "  $0 install"
     echo "  $0 test-analyzer-integration --quick"
     echo "  $0 test-fetch-integration"
     echo "  $0 test-all"
-    echo "  $0 analyze-db --username Vox_es --limit 10"
+    echo "  $0 analyze-twitter --username Vox_es --limit 10"
     exit 1
     ;;
 esac

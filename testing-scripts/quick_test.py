@@ -7,7 +7,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from analyzer.analyzer import Analyzer
+from analyzer.analyze_twitter import Analyzer
+from analyzer.config import AnalyzerConfig
 from analyzer.pattern_analyzer import PatternAnalyzer
 from analyzer.categories import Categories
 import time
@@ -95,7 +96,8 @@ def interactive_mode(use_llm=False, json_output=False):
     
     # Initialize analyzer once and keep it loaded
     try:
-        analyzer = Analyzer(use_llm=use_llm)
+        config = AnalyzerConfig(use_llm=use_llm)
+        analyzer = Analyzer(config=config)
         print("✅ Models loaded and ready!")
     except Exception as e:
         print(f"❌ Error initializing analyzer: {e}")
@@ -133,7 +135,8 @@ def analyze_text(text, use_llm=False, json_output=False):
     """Analyze a single text input."""
     try:
         # Initialize analyzer with verbose output by default
-        analyzer = Analyzer(use_llm=use_llm)
+        config = AnalyzerConfig(use_llm=use_llm)
+        analyzer = Analyzer(config=config)
         
         # Show mode info
         mode = "LLM + Patterns" if use_llm else "Patterns Only"

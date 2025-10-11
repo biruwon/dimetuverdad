@@ -4,7 +4,8 @@ Database operations for content analysis storage and retrieval.
 
 import sqlite3
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
+from datetime import datetime
 from .models import ContentAnalysis
 from .constants import DatabaseConstants
 
@@ -196,34 +197,199 @@ class ContentAnalysisRepository:
             print(f"❌ Error getting analysis count: {e}")
             return 0
 
-    def delete_analysis(self, tweet_id: str) -> bool:
+    def save_failed_analysis(self, tweet_id: str, tweet_url: str, username: str, content: str, 
+                           error_message: str, media_urls: Optional[List[str]] = None) -> None:
         """
-        Delete analysis by tweet ID.
-
+        Save failed analysis attempt to database for debugging.
+        
         Args:
-            tweet_id: Twitter tweet ID to delete
+            tweet_id: ID of the tweet that failed analysis
+            tweet_url: URL of the tweet
+            username: Username of the tweet author
+            content: Tweet content
+            error_message: Error message from the failed analysis
+            media_urls: List of media URLs if any
+        """
+        try:
+            # Create a ContentAnalysis object for failed analysis
+            failed_analysis = ContentAnalysis(
+                tweet_id=tweet_id,
+                tweet_url=tweet_url,
+                username=username,
+                tweet_content=content,
+                analysis_timestamp=datetime.now().isoformat(),
+                category="ERROR",
+                categories_detected=["ERROR"],
+                llm_explanation=f"Analysis failed: {error_message}",
+                analysis_method="error",
+                media_urls=media_urls or [],
+                media_analysis="",
+                media_type="",
+                multimodal_analysis=bool(media_urls),
+                pattern_matches=[],
+                topic_classification={},
+                analysis_json=f'{{"error": "{error_message[:500]}", "media_urls": {len(media_urls or [])}}}'
+            )
+            
+            # Save to database
+            self.save(failed_analysis)
+            print(f"Saved failed analysis for tweet {tweet_id}: {error_message[:100]}")
+            
+        except Exception as save_error:
+            print(f"Failed to save error analysis for tweet {tweet_id}: {save_error}")
 
+    def get_tweets_for_analysis(self, username: Optional[str] = None, max_tweets: Optional[int] = None, 
+                               force_reanalyze: bool = False) -> List[Tuple[str, str, str, str, str, str]]:
+        """
+        Get tweets from database that need analysis.
+        
+        Args:
+            username: Specific username to analyze (None for all)
+            max_tweets: Maximum number of tweets to return (None for all)
+            force_reanalyze: If True, return all tweets (including already analyzed)
+            
+        Returns:
+            List of tuples: (tweet_id, tweet_url, username, content, media_links, original_content)
+        """
+        try:
+            conn = sqlite3.connect(self.db_path, timeout=self.timeout)
+            cursor = conn.cursor()
+            
+            # Build query - exclude already analyzed tweets unless force_reanalyze is True
+            # Also skip RT posts where the original content has already been analyzed
+            if force_reanalyze:
+                query = """
+                    SELECT t.tweet_id, t.tweet_url, t.username, t.content, t.media_links, t.original_content FROM tweets t
+                """
+                params = []
+                if username:
+                    query += " WHERE t.username = ?"
+                    params.append(username)
+            else:
+                query = """
+                    SELECT t.tweet_id, t.tweet_url, t.username, t.content, t.media_links, t.original_content FROM tweets t 
+                    LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id 
+                    WHERE ca.tweet_id IS NULL
+                    AND NOT (
+                        t.post_type IN ('repost_other', 'repost_own') 
+                        AND t.rt_original_analyzed = 1
+                    )
+                """
+                params = []
+                if username:
+                    query += " AND t.username = ?"
+                    params.append(username)
+            
+            query += " ORDER BY t.tweet_id DESC"
+            
+            if max_tweets:
+                query += " LIMIT ?"
+                params.append(max_tweets)
+            
+            cursor.execute(query, params)
+            tweets = cursor.fetchall()
+            conn.close()
+            
+            return tweets
+            
+        except Exception as e:
+            print(f"❌ Error retrieving tweets for analysis: {e}")
+            return []
+
+    def get_tweet_data(self, tweet_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get tweet data by tweet ID.
+        
+        Args:
+            tweet_id: Twitter tweet ID
+            
+        Returns:
+            Dictionary with tweet data or None if not found
+        """
+        try:
+            conn = sqlite3.connect(self.db_path, timeout=self.timeout)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT tweet_id, tweet_url, username, content, media_links, original_content 
+                FROM tweets 
+                WHERE tweet_id = ?
+            """, (tweet_id,))
+            
+            row = cursor.fetchone()
+            conn.close()
+            
+            if row:
+                return {
+                    'tweet_id': row['tweet_id'],
+                    'tweet_url': row['tweet_url'],
+                    'username': row['username'],
+                    'content': row['content'],
+                    'media_links': row['media_links'],
+                    'original_content': row['original_content']
+                }
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error retrieving tweet data for {tweet_id}: {e}")
+            return None
+
+    def delete_existing_analysis(self, tweet_id: str) -> bool:
+        """
+        Delete existing analysis for a tweet (used for reanalysis).
+        
+        Args:
+            tweet_id: Twitter tweet ID
+            
         Returns:
             True if deletion successful, False otherwise
         """
         try:
             conn = sqlite3.connect(self.db_path, timeout=self.timeout)
             cursor = conn.cursor()
-
-            cursor.execute(f'''
-            DELETE FROM {DatabaseConstants.TABLE_NAME}
-            WHERE tweet_id = ?
-            ''', (tweet_id,))
-
-            deleted = cursor.rowcount > 0
+            
+            cursor.execute(f'DELETE FROM {DatabaseConstants.TABLE_NAME} WHERE tweet_id = ?', (tweet_id,))
+            
             conn.commit()
             conn.close()
-
-            return deleted
-
+            
+            return cursor.rowcount > 0
+            
         except Exception as e:
             print(f"❌ Error deleting analysis for tweet {tweet_id}: {e}")
             return False
+
+    def get_analysis_count_by_username(self, username: Optional[str] = None) -> int:
+        """
+        Get count of analyses, optionally filtered by username.
+        
+        Args:
+            username: Username to filter by (None for all)
+            
+        Returns:
+            Count of analyses
+        """
+        try:
+            conn = sqlite3.connect(self.db_path, timeout=self.timeout)
+            cursor = conn.cursor()
+            
+            query = f'SELECT COUNT(*) FROM {DatabaseConstants.TABLE_NAME}'
+            params = []
+            
+            if username:
+                query += " WHERE username = ?"
+                params.append(username)
+            
+            cursor.execute(query, params)
+            count = cursor.fetchone()[0]
+            conn.close()
+            
+            return count
+            
+        except Exception as e:
+            print(f"❌ Error getting analysis count: {e}")
+            return 0
 
     def _row_to_content_analysis(self, row) -> ContentAnalysis:
         """

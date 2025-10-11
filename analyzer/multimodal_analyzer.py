@@ -110,7 +110,7 @@ class MultimodalAnalyzer:
             # Analyze first media item (can be extended for multiple)
             primary_media_url = media_urls[0]
 
-            media_analysis_result = self.gemini_analyzer.analyze_multimodal_content(
+            media_analysis_result, analysis_time = self.gemini_analyzer.analyze_multimodal_content(
                 [primary_media_url], text_context
             )
 

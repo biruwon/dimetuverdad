@@ -85,13 +85,13 @@ ollama pull gpt-oss:20b
 ### Analysis Execution
 ```bash
 # Analyze all unanalyzed tweets (LLM always enabled)
-./run_in_venv.sh analyze-db
+./run_in_venv.sh analyze-twitter
 
 # Force reanalyze when prompts change
-./run_in_venv.sh analyze-db --force-reanalyze --limit 10
+./run_in_venv.sh analyze-twitter --force-reanalyze --limit 10
 
 # Analyze specific user
-./run_in_venv.sh analyze-db --username Santi_ABASCAL
+./run_in_venv.sh analyze-twitter --username Santi_ABASCAL
 ```
 
 ### Web Interface
@@ -327,7 +327,7 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 
 **PROJECT RUNNER USAGE**: 
 - Web app: `./run_in_venv.sh web`
-- Analysis: `./run_in_venv.sh analyze-db`
+- Analysis: `./run_in_venv.sh analyze-twitter`
 - Fetch tweets: `./run_in_venv.sh fetch`
 - Install: `./run_in_venv.sh install`
 

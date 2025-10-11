@@ -19,7 +19,7 @@ project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from analyzer.analyzer import Analyzer
+from analyzer.analyze_twitter import Analyzer
 from analyzer.config import AnalyzerConfig
 from analyzer.models import ContentAnalysis
 from analyzer.repository import ContentAnalysisRepository
@@ -451,8 +451,8 @@ class TestDatabaseFunctions(unittest.TestCase):
         """Set up temporary database for testing."""
         self.db_fd, self.db_path = tempfile.mkstemp()
         # Override the DB_PATH for testing
-        import analyzer.analyzer
-        analyzer.analyzer.DB_PATH = self.db_path
+        import analyzer.repository
+        analyzer.repository.DB_PATH = self.db_path
 
     def tearDown(self):
         """Clean up temporary database."""

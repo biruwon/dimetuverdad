@@ -32,7 +32,7 @@ if str(project_root) not in sys.path:
 from utils import paths
 
 from typing import Dict, Any
-from analyzer.analyzer import Analyzer
+from analyzer.analyze_twitter import Analyzer
 from analyzer.config import AnalyzerConfig
 from analyzer.categories import Categories
 

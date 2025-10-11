@@ -285,7 +285,7 @@ if __name__ == "__main__":
             print("\n🎉 Database initialization completed successfully!")
             print("\nNext steps:")
             print("  1. Run: python fetch_tweets.py --max 10")
-            print("  2. Run: python analyze_db_tweets.py") 
+            print("  2. Run: python -m analyzer.analyze_twitter") 
             print("  3. Start web interface: cd web && python app.py")
         else:
             print("\n❌ Database verification failed!")

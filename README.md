@@ -16,7 +16,7 @@ A comprehensive AI-powered system for detecting and analyzing far-right discours
 
 ### Core Components
 
-1. **Enhanced Analyzer** (`analyzer.py`)
+1. **Enhanced Analyzer** (`analyzer/analyze_twitter.py`)
    - Main orchestration engine combining all analysis components
    - Multi-stage content analysis pipeline
    - Smart LLM fallback for ambiguous content
@@ -218,7 +218,7 @@ docker-compose exec dimetuverdad ./run_in_venv.sh fetch
 docker-compose exec dimetuverdad ./run_in_venv.sh fetch --latest
 
 # Run analysis on collected data
-docker-compose exec dimetuverdad ./run_in_venv.sh analyze-db
+docker-compose exec dimetuverdad ./run_in_venv.sh analyze-twitter
 ```
 
 ### Service Architecture
@@ -445,22 +445,22 @@ Analyze collected tweets from the database:
 
 ```bash
 # Analyze all unanalyzed tweets
-./run_in_venv.sh analyze-db
+./run_in_venv.sh analyze-twitter
 
 # Analyze tweets from specific user
-./run_in_venv.sh analyze-db --username Santi_ABASCAL
+./run_in_venv.sh analyze-twitter --username Santi_ABASCAL
 
 # Force reanalyze existing analyses (useful when prompts change)
-./run_in_venv.sh analyze-db --force-reanalyze --limit 10
+./run_in_venv.sh analyze-twitter --force-reanalyze --limit 10
 
 # Analyze specific tweet by ID
-./run_in_venv.sh analyze-db --tweet-id 1975540692899537249
+./run_in_venv.sh analyze-twitter --tweet-id 1975540692899537249
 
 # Limit number of tweets to process
-./run_in_venv.sh analyze-db --limit 50
+./run_in_venv.sh analyze-twitter --limit 50
 
 # Reanalyze all tweets from a specific user (force reanalysis)
-./run_in_venv.sh analyze-db --username Santi_ABASCAL --force-reanalyze
+./run_in_venv.sh analyze-twitter --username Santi_ABASCAL --force-reanalyze
 ```
 
 ### Database Management
@@ -600,19 +600,19 @@ Recent comprehensive test suite results:
 
 ```bash
 # Analyze all unanalyzed tweets
-./run_in_venv.sh analyze-db
+./run_in_venv.sh analyze-twitter
 
 # Analyze specific user's tweets
-./run_in_venv.sh analyze-db --username Santi_ABASCAL
+./run_in_venv.sh analyze-twitter --username Santi_ABASCAL
 
 # Force reanalyze with updated prompts
-./run_in_venv.sh analyze-db --username Santi_ABASCAL --force-reanalyze
+./run_in_venv.sh analyze-twitter --username Santi_ABASCAL --force-reanalyze
 
 # Analyze specific tweet
-./run_in_venv.sh analyze-db --tweet-id 1975540692899537249
+./run_in_venv.sh analyze-twitter --tweet-id 1975540692899537249
 
 # Limit analysis (useful for testing)
-./run_in_venv.sh analyze-db --limit 10
+./run_in_venv.sh analyze-twitter --limit 10
 ```
 
 ### Testing Commands
@@ -716,7 +716,7 @@ dimetuverdad/
 ├── .env                        # Configuration (create manually)
 ├── accounts.db                 # SQLite database (auto-created)
 │
-├── analyzer.py        # Main analysis orchestrator
+├── analyze_twitter.py         # Main analysis orchestrator and database operations
 ├── far_right_patterns.py       # Pattern detection engine  
 ├── llm_models.py              # LLM integration & management
 ├── topic_classifier.py        # Political topic classification
@@ -733,14 +733,15 @@ dimetuverdad/
 │   └── init_database.py       # Database initialization
 │
 ├── analyzer/                  # Analyzer package
-│   ├── analyzer.py           # Main analysis orchestrator
+│   ├── analyze_twitter.py    # Main analysis orchestrator and database operations
 │   ├── categories.py         # Category definitions
 │   ├── llm_models.py         # LLM integration
 │   ├── pattern_analyzer.py   # Pattern detection
 │   ├── prompts.py            # LLM prompts
+│   ├── repository.py         # Database operations
 │   └── tests/                # Analyzer-specific tests
-│       ├── test_analyzer.py  # Unit tests for analyzer components
-│       └── test_analyzer_integration.py # Integration tests
+│       ├── test_analyze_twitter.py        # Unit tests for analyzer components
+│       └── test_analyze_twitter_integration.py # Integration tests
 │
 ├── fetcher/                  # Data collection package
 │   ├── fetch_tweets.py       # Twitter data collection

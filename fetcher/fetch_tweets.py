@@ -104,6 +104,31 @@ def random_scroll_pattern(page, deep_scroll=False):
     
     human_delay(1.5, 4.0)
 
+def setup_media_url_monitoring(page):
+    """
+    Set up network request monitoring to capture media URLs (videos and images).
+    
+    Args:
+        page: Playwright page object
+        
+    Returns:
+        list: Media URLs list that will be populated during page interaction
+    """
+    media_urls = []
+    
+    def handle_request(request):
+        url = request.url
+        # Look for media-related URLs (videos and images)
+        if any(ext in url.lower() for ext in ['.mp4', '.m3u8', '.webm', '.mov', '.jpg', '.jpeg', '.png', '.gif', '.webp']) or \
+           any(keyword in url.lower() for keyword in ['video.twimg.com', 'pbs.twimg.com', 'mediadelivery']):
+            if url not in media_urls:
+                media_urls.append(url)
+                media_type = "video" if any(ext in url.lower() for ext in ['.mp4', '.m3u8', '.webm', '.mov']) else "image"
+                print(f"📸 Captured {media_type} URL during fetch: {url[:100]}...")
+    
+    page.on("request", handle_request)
+    return media_urls
+
 def login_and_save_session(page, username, password):
     """Login with better anti-detection measures."""
     
@@ -192,22 +217,10 @@ def collect_tweets_from_page(page, username: str, max_tweets: int, resume_from_l
     max_consecutive_empty = 15  # Stop after 15 consecutive failed scrolls
     last_height = 0
     tweets_found_this_cycle = 0
-    last_tweet_count = 0
     saved_count = 0  # Track actually saved tweets
     
     # Monitor network requests for video URLs during collection
-    video_urls = []
-    
-    def handle_request(request):
-        url = request.url
-        # Look for video-related URLs
-        if any(ext in url.lower() for ext in ['.mp4', '.m3u8', '.webm', '.mov']) or \
-           any(keyword in url.lower() for keyword in ['video.twimg.com', 'pbs.twimg.com', 'mediadelivery']):
-            if url not in video_urls:
-                video_urls.append(url)
-                print(f"🎥 Captured video URL during fetch: {url[:100]}...")
-    
-    page.on("request", handle_request)
+    video_urls = setup_media_url_monitoring(page)
     
     if max_tweets == float('inf'):
         print(f"🔍 Collecting unlimited tweets...")
@@ -1251,19 +1264,8 @@ def refetch_single_tweet(tweet_id: str) -> bool:
         with sync_playwright() as p:
             browser, context, page = _setup_browser_context(p)
             
-            # Monitor network requests for video URLs
-            video_urls = []
-            
-            def handle_request(request):
-                url = request.url
-                # Look for video-related URLs
-                if any(ext in url.lower() for ext in ['.mp4', '.m3u8', '.webm', '.mov']) or \
-                   any(keyword in url.lower() for keyword in ['video.twimg.com', 'pbs.twimg.com', 'mediadelivery']):
-                    if url not in video_urls:
-                        video_urls.append(url)
-                        print(f"🎥 Captured video URL: {url[:100]}...")
-            
-            page.on("request", handle_request)
+            # Monitor network requests for media URLs (videos and images)
+            media_urls = setup_media_url_monitoring(page)
             
             # Navigate to tweet page
             try:
@@ -1281,13 +1283,13 @@ def refetch_single_tweet(tweet_id: str) -> bool:
                 browser.close()
                 return False
             
-            # Add captured video URLs to tweet data
-            if video_urls:
-                print(f"📹 Found {len(video_urls)} video URLs via network monitoring")
-                # Combine video URLs with existing media_links
+            # Add captured media URLs to tweet data
+            if media_urls:
+                print(f"📹 Found {len(media_urls)} media URLs via network monitoring")
+                # Combine media URLs with existing media_links
                 existing_media = tweet_data.get('media_links', '')
                 existing_urls = existing_media.split(',') if existing_media else []
-                combined_urls = list(set(existing_urls + video_urls))  # Remove duplicates
+                combined_urls = list(set(existing_urls + media_urls))  # Remove duplicates
                 tweet_data['media_links'] = ','.join([url for url in combined_urls if url.strip()])
                 tweet_data['media_count'] = len([u for u in combined_urls if u.strip()])
             

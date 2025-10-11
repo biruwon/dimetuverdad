@@ -28,7 +28,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent))
 
-from analyzer.analyzer import Analyzer
+from analyzer.analyze_twitter import Analyzer
 
 class PerformanceBenchmarks:
     """Run performance benchmarks for the dimetuverdad system."""
