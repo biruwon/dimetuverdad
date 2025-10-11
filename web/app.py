@@ -619,6 +619,71 @@ def admin_dashboard():
                          categories=[dict(row) for row in categories],
                          recent_analyses=[dict(row) for row in recent_analyses])
 
+@app.route('/admin/fetch', methods=['POST'])
+@admin_required
+@rate_limit(max_requests=5, window_seconds=300)  # 5 requests per 5 minutes
+@handle_db_errors
+@validate_input('username')
+def admin_fetch():
+    """Fetch tweets from a user, optionally with analysis."""
+    username = request.form.get('username')
+    action = request.form.get('action', 'fetch_and_analyze')  # Default to fetch and analyze
+    
+    if not username:
+        flash('Nombre de usuario requerido para fetch', 'error')
+        return redirect(url_for('admin_dashboard'))
+        
+    import subprocess
+    import threading
+    from pathlib import Path
+    
+    base_dir = Path(__file__).parent.parent
+    
+    def run_user_fetch():
+        try:
+            # Check if user exists in database
+            conn = get_db_connection()
+            user_exists = conn.execute("""
+                SELECT COUNT(*) FROM tweets WHERE username = ?
+            """, (username,)).fetchone()[0] > 0
+            conn.close()
+            
+            # Choose fetch strategy based on user existence
+            if user_exists:
+                # User exists, fetch latest content
+                cmd = ["./run_in_venv.sh", "fetch", "--user", username, "--latest"]
+                strategy = "latest content"
+            else:
+                # User doesn't exist, fetch all history
+                cmd = ["./run_in_venv.sh", "fetch", "--refetch-all", username]
+                strategy = "complete history"
+            
+            result = subprocess.run(cmd, cwd=base_dir, check=True, timeout=600)  # 10 minute timeout for fetch
+            app.logger.info(f"User fetch completed for @{username} ({strategy})")
+            
+            # Only trigger analysis if action is fetch_and_analyze
+            if action == 'fetch_and_analyze':
+                analysis_cmd = ["./run_in_venv.sh", "analyze-twitter", "--username", username]
+                analysis_result = subprocess.run(analysis_cmd, cwd=base_dir, check=True, timeout=300)
+                app.logger.info(f"Analysis completed for @{username} after fetch")
+            
+        except subprocess.TimeoutExpired:
+            app.logger.error(f"Fetch/analysis timed out for @{username}")
+        except subprocess.CalledProcessError as e:
+            app.logger.error(f"Fetch/analysis failed for @{username}: {e}")
+        except Exception as e:
+            app.logger.error(f"Unexpected error in fetch/analysis for @{username}: {str(e)}")
+    
+    thread = threading.Thread(target=run_user_fetch, daemon=True)
+    thread.start()
+    
+    if action == 'fetch_only':
+        flash(f'Fetch de usuario "@{username}" iniciado (solo datos)', 'success')
+    else:
+        flash(f'Fetch de usuario "@{username}" iniciado (con análisis automático)', 'success')
+    
+    return redirect(url_for('admin_dashboard'))
+
 @app.route('/admin/reanalyze', methods=['POST'])
 @admin_required
 @rate_limit(max_requests=5, window_seconds=300)  # 5 requests per 5 minutes
@@ -628,31 +693,7 @@ def admin_reanalyze():
     """Trigger reanalysis of tweets."""
     action = request.form.get('action')
     
-    if action == 'all':
-        # Reanalyze all tweets with background subprocess
-        import subprocess
-        import threading
-        from pathlib import Path
-        
-        base_dir = Path(__file__).parent.parent
-        
-        def run_analysis_background():
-            try:
-                cmd = ["./run_in_venv.sh", "analyze-twitter", "--force-reanalyze"]
-                result = subprocess.run(cmd, cwd=base_dir, check=True, timeout=300)
-                app.logger.info(f"Background analysis completed successfully")
-            except subprocess.TimeoutExpired:
-                app.logger.error("Background analysis timed out after 5 minutes")
-            except subprocess.CalledProcessError as e:
-                app.logger.error(f"Analysis subprocess failed: {e}")
-            except Exception as e:
-                app.logger.error(f"Unexpected error in background analysis: {str(e)}")
-        
-        thread = threading.Thread(target=run_analysis_background, daemon=True)
-        thread.start()
-        flash('Reanálisis de TODOS los tweets iniciado (sin límite)', 'success')
-    
-    elif action == 'category':
+    if action == 'category':
         category = request.form.get('category')
         if not category:
             flash('Categoría requerida para reanálisis', 'error')
@@ -728,7 +769,7 @@ def admin_reanalyze():
         flash(f'Reanálisis de usuario "@{username}" iniciado', 'success')
     
     else:
-        flash('Acción de reanálisis no válida', 'error')
+        flash('Acción no válida', 'error')
     
     return redirect(url_for('admin_dashboard'))
 
@@ -1324,6 +1365,26 @@ def get_tweet_versions(tweet_id):
         
     except Exception as e:
         app.logger.error(f"Error getting tweet versions for {tweet_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/usernames')
+@admin_required
+@rate_limit(max_requests=30, window_seconds=60)  # 30 requests per minute for username API
+def get_usernames():
+    """API endpoint to get all usernames for autocomplete."""
+    try:
+        conn = get_db_connection()
+        usernames = conn.execute("""
+            SELECT DISTINCT username 
+            FROM tweets 
+            ORDER BY username
+        """).fetchall()
+        conn.close()
+        
+        return jsonify([row[0] for row in usernames])
+        
+    except Exception as e:
+        app.logger.error(f"Error getting usernames: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/admin/export/csv')

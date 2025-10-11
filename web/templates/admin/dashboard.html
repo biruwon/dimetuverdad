@@ -106,17 +106,10 @@
                 <div class="card admin-card">
                     <div class="card-header bg-primary text-white">
                         <h5 class="mb-0">
-                            <i class="fas fa-sync-alt me-2"></i>Herramientas de Reanálisis
+                            <i class="fas fa-sync-alt me-2"></i>Herramientas
                         </h5>
                     </div>
                     <div class="card-body">
-                        <form method="POST" action="{{ url_for('admin_reanalyze') }}" class="mb-3">
-                            <input type="hidden" name="action" value="all">
-                            <button type="submit" class="btn reanalyze-btn text-white w-100 mb-2" onclick="return confirm('⚠️ ADVERTENCIA: Esto reanalizar TODOS los tweets.\n\n• Puede tomar 30-60 minutos\n• Utilizará recursos del sistema\n• Las categorizaciones actuales se perderán\n\n¿Estás seguro de continuar?')">
-                                <i class="fas fa-globe me-2"></i>Reanalizar Todos los Tweets
-                            </button>
-                        </form>
-
                         <form method="POST" action="{{ url_for('admin_reanalyze') }}" class="mb-3">
                             <div class="input-group mb-2">
                                 <select name="category" class="form-select" required>
@@ -135,13 +128,35 @@
 
                         <form method="POST" action="{{ url_for('admin_reanalyze') }}">
                             <div class="input-group mb-2">
-                                <input type="text" name="username" class="form-control" placeholder="Nombre de usuario (sin @)" required>
+                                <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
                                 <input type="hidden" name="action" value="user">
                                 <button type="submit" class="btn btn-outline-primary" onclick="return confirm('Esto reanalizar TODOS los tweets del usuario especificado.\n¿Continuar?')">
                                     <i class="fas fa-user me-1"></i>Reanalizar Usuario
                                 </button>
                             </div>
                             <small class="text-muted">Reanaliza todos los tweets del usuario especificado</small>
+                        </form>
+
+                        <form method="POST" action="{{ url_for('admin_fetch') }}" class="mb-3">
+                            <div class="input-group mb-2">
+                                <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
+                                <input type="hidden" name="action" value="fetch_only">
+                                <button type="submit" class="btn btn-outline-secondary" onclick="return confirm('Esto obtendrá tweets del usuario especificado SIN analizarlos.\n\n• Si el usuario ya existe: obtendrá solo contenido nuevo\n• Si es nuevo: obtendrá todo el historial disponible\n\n¿Continuar?')">
+                                    <i class="fas fa-download me-1"></i>Obtener Solo Datos
+                                </button>
+                            </div>
+                            <small class="text-muted">Obtiene tweets del usuario sin análisis automático</small>
+                        </form>
+
+                        <form method="POST" action="{{ url_for('admin_fetch') }}" class="mb-3">
+                            <div class="input-group mb-2">
+                                <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
+                                <input type="hidden" name="action" value="fetch_and_analyze">
+                                <button type="submit" class="btn btn-outline-primary" onclick="return confirm('Esto obtendrá tweets del usuario especificado Y los analizará automáticamente.\n\n• Si el usuario ya existe: obtendrá solo contenido nuevo\n• Si es nuevo: obtendrá todo el historial disponible\n• Se analizarán automáticamente los tweets obtenidos\n\n¿Continuar?')">
+                                    <i class="fas fa-user-plus me-1"></i>Obtener y Analizar
+                                </button>
+                            </div>
+                            <small class="text-muted">Obtiene tweets del usuario y los analiza automáticamente</small>
                         </form>
                     </div>
                 </div>
@@ -152,12 +167,10 @@
                 <div class="card admin-card">
                     <div class="card-header bg-success text-white">
                         <h5 class="mb-0">
-                            <i class="fas fa-download me-2"></i>Exportar Datos
+                            <i class="fas fa-download me-2"></i>Obtener Datos
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p class="text-muted mb-3">Exportar todos los resultados de análisis para análisis externo o respaldo.</p>
-                        
                         <div class="d-grid gap-2">
                             <a href="{{ url_for('export_csv') }}" class="btn btn-outline-success" target="_blank">
                                 <i class="fas fa-file-csv me-2"></i>Exportar como CSV
@@ -263,7 +276,29 @@
         </div>
     </div>
 
+    <!-- Username autocomplete datalist -->
+    <datalist id="usernames-list">
+    </datalist>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script>
+        // Load usernames for autocomplete
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/api/usernames')
+                .then(response => response.json())
+                .then(usernames => {
+                    const datalist = document.getElementById('usernames-list');
+                    usernames.forEach(username => {
+                        const option = document.createElement('option');
+                        option.value = username;
+                        datalist.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading usernames for autocomplete:', error);
+                });
+        });
+    </script>
 </body>
 </html>

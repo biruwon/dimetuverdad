@@ -206,8 +206,8 @@ def test_collect_tweets_from_page_immediate_save():
         orig = fetcher_db.DB_PATH
         fetcher_db.DB_PATH = path
 
-        # Mock the entire collect_tweets_from_page function to avoid real execution
-        with patch.object(fetch_tweets, 'collect_tweets_from_page') as mock_collect:
+        # Mock the collector's collect_tweets_from_page method
+        with patch.object(fetch_tweets.collector, 'collect_tweets_from_page') as mock_collect:
             # Set up the mock to return test data and verify it was called with conn
             mock_collect.return_value = [
                 {'tweet_id': '1', 'content': 'one', 'username': 'user'},
@@ -215,7 +215,7 @@ def test_collect_tweets_from_page_immediate_save():
             ]
             
             # Call the mocked function
-            tweets = fetch_tweets.collect_tweets_from_page(
+            tweets = fetch_tweets.collector.collect_tweets_from_page(
                 None, 'user', max_tweets=2, resume_from_last=False, 
                 oldest_timestamp=None, profile_pic_url=None, conn=conn
             )
@@ -254,14 +254,14 @@ def test_collect_tweets_from_page_skips_duplicates():
         with patch.object(fetcher_db, 'save_tweet') as mock_save:
             mock_save.side_effect = [False, True]  # First call (duplicate) returns False, second returns True
             
-            # Mock collect_tweets_from_page to simulate finding 2 tweets but only saving 1 new one
-            with patch.object(fetch_tweets, 'collect_tweets_from_page') as mock_collect:
+            # Mock collector's collect_tweets_from_page to simulate finding 2 tweets but only saving 1 new one
+            with patch.object(fetch_tweets.collector, 'collect_tweets_from_page') as mock_collect:
                 mock_collect.return_value = [
                     {'tweet_id': '1', 'content': 'existing content', 'username': 'user'},
                     {'tweet_id': '2', 'content': 'new content', 'username': 'user'}
                 ]
                 
-                tweets = fetch_tweets.collect_tweets_from_page(
+                tweets = fetch_tweets.collector.collect_tweets_from_page(
                     None, 'user', max_tweets=2, resume_from_last=True, 
                     oldest_timestamp=None, profile_pic_url=None, conn=conn
                 )
@@ -286,7 +286,7 @@ def test_fetch_tweets_with_database_connection():
 
         # Mock the entire fetch_tweets function to avoid real execution
         with patch.object(fetch_tweets, 'fetch_tweets') as mock_fetch, \
-             patch.object(fetch_tweets, 'collect_tweets_from_page') as mock_collect:
+             patch.object(fetch_tweets.collector, 'collect_tweets_from_page') as mock_collect:
             
             mock_collect.return_value = []
             mock_fetch.return_value = []
@@ -347,7 +347,7 @@ def test_save_tweet_integration():
 def test_fetch_tweets_skips_pinned_by_post_analysis():
     """Test that fetch_tweets skips pinned posts correctly - using mocks only"""
     # Mock the entire function chain to avoid real execution
-    with patch.object(fetch_tweets, 'collect_tweets_from_page') as mock_collect, \
+    with patch.object(fetch_tweets.collector, 'collect_tweets_from_page') as mock_collect, \
          patch.object(fetcher_parsers, 'analyze_post_type') as mock_analyze:
         
         # Set up mocks
@@ -361,7 +361,7 @@ def test_fetch_tweets_skips_pinned_by_post_analysis():
             {'tweet_id': '2', 'content': 'two', 'username': 'user'}  # Only second tweet returned
         ]
         
-        tweets = fetch_tweets.collect_tweets_from_page(
+        tweets = fetch_tweets.collector.collect_tweets_from_page(
             None, 'user', max_tweets=2, resume_from_last=False, 
             oldest_timestamp=None, profile_pic_url=None, conn=None
         )
@@ -375,7 +375,7 @@ def test_fetch_tweets_skips_pinned_by_post_analysis():
 def test_fetch_tweets_updates_existing_rows():
     """Test that fetch_tweets updates existing tweets when content changes - using mocks only"""
     # Mock the database operations to simulate update logic
-    with patch.object(fetch_tweets, 'collect_tweets_from_page') as mock_collect, \
+    with patch.object(fetch_tweets.collector, 'collect_tweets_from_page') as mock_collect, \
          patch.object(fetcher_db, 'save_tweet') as mock_save:
         
         # Mock save_tweet to return True (indicating an update occurred)
@@ -386,7 +386,7 @@ def test_fetch_tweets_updates_existing_rows():
             {'tweet_id': '10', 'content': 'new content', 'username': 'user', 'post_type': 'original'}
         ]
         
-        tweets = fetch_tweets.collect_tweets_from_page(
+        tweets = fetch_tweets.collector.collect_tweets_from_page(
             None, 'user', max_tweets=1, resume_from_last=True, 
             oldest_timestamp=None, profile_pic_url=None, conn=None
         )
@@ -481,7 +481,7 @@ class TestRefetchSingleTweet:
                     return None
 
             monkeypatch.setattr(fetch_tweets, 'sync_playwright', MockPlaywrightContext)
-            monkeypatch.setattr(fetch_tweets, 'human_delay', lambda *args: None)
+            monkeypatch.setattr(fetch_tweets.scroller, 'delay', lambda *args: None)
 
             # Mock extraction to return valid data
             def fake_extract(page, tweet_id, username, tweet_url):

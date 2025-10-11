@@ -80,43 +80,6 @@ def test_get_connection(temp_db):
     assert isinstance(conn, sqlite3.Connection)
     conn.close()
 
-
-# ===== TWEET TIMESTAMP TESTS =====
-
-def test_get_last_tweet_timestamp_no_tweets(temp_db):
-    """Test getting last tweet timestamp when no tweets exist"""
-    result = db.get_last_tweet_timestamp('testuser')
-    assert result is None
-
-
-def test_get_last_tweet_timestamp_with_tweets(temp_db):
-    """Test getting last tweet timestamp with existing tweets"""
-    conn = get_test_connection(temp_db)
-    c = conn.cursor()
-
-    # Insert test tweets
-    c.execute("INSERT INTO tweets (tweet_id, username, tweet_timestamp) VALUES (?, ?, ?)",
-              ('1', 'testuser', '2024-01-01T10:00:00Z'))
-    c.execute("INSERT INTO tweets (tweet_id, username, tweet_timestamp) VALUES (?, ?, ?)",
-              ('2', 'testuser', '2024-01-02T10:00:00Z'))
-    c.execute("INSERT INTO tweets (tweet_id, username, tweet_timestamp) VALUES (?, ?, ?)",
-              ('3', 'otheruser', '2024-01-03T10:00:00Z'))
-    conn.commit()
-    conn.close()
-
-    # Test getting latest for testuser
-    result = db.get_last_tweet_timestamp('testuser')
-    assert result == '2024-01-02T10:00:00Z'
-
-    # Test getting latest for otheruser
-    result = db.get_last_tweet_timestamp('otheruser')
-    assert result == '2024-01-03T10:00:00Z'
-
-    # Test non-existent user
-    result = db.get_last_tweet_timestamp('nonexistent')
-    assert result is None
-
-
 # ===== SAVE TWEET TESTS =====
 
 def test_save_tweet_new_tweet(temp_db):
@@ -250,55 +213,6 @@ def test_save_tweet_invalid_tweet_id(temp_db):
     assert result is False
 
     conn.close()
-
-
-# ===== ENHANCED TWEET TESTS =====
-
-def test_save_enhanced_tweet_success(temp_db, capsys):
-    """Test saving enhanced tweet successfully"""
-    conn = get_test_connection(temp_db)
-
-    tweet_data = {
-        'tweet_id': '123',
-        'content': 'Hello world',
-        'username': 'testuser',
-        'tweet_url': 'https://twitter.com/testuser/status/123',
-        'tweet_timestamp': '2024-01-01T10:00:00Z'
-    }
-
-    result = db.save_enhanced_tweet(conn, tweet_data)
-    assert result is True
-
-    # Check output
-    captured = capsys.readouterr()
-    assert '✅ Saved/Updated tweet: 123' in captured.out
-
-    conn.close()
-
-
-def test_save_enhanced_tweet_duplicate(temp_db, capsys):
-    """Test saving duplicate enhanced tweet"""
-    conn = get_test_connection(temp_db)
-
-    tweet_data = {
-        'tweet_id': '123',
-        'content': 'Hello world',
-        'username': 'testuser'
-    }
-
-    # Save first time
-    db.save_enhanced_tweet(conn, tweet_data)
-
-    # Save again
-    result = db.save_enhanced_tweet(conn, tweet_data)
-    assert result is False
-
-    # Check output
-    captured = capsys.readouterr()
-    assert '⏭️ Not saved (duplicate/unchanged): 123' in captured.out
-
-    conn.close()
-
 
 # ===== TWEET EXISTENCE CHECKS =====
 

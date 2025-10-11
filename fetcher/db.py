@@ -54,19 +54,6 @@ def delete_account_data(username: str) -> Dict[str, int]:
     finally:
         conn.close()
 
-
-def get_last_tweet_timestamp(username: str) -> Optional[str]:
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT tweet_timestamp FROM tweets WHERE username = ? ORDER BY tweet_timestamp DESC LIMIT 1", (username,))
-        row = cur.fetchone()
-        conn.close()
-        return row[0] if row else None
-    except Exception:
-        return None
-
-
 def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
     """Simplified save/update function for tests and main logic."""
     c = conn.cursor()
@@ -138,21 +125,6 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
         return True
     except Exception:
         return False
-
-
-def save_enhanced_tweet(conn, tweet_data: Dict) -> bool:
-    """Save tweet with enhanced data structure - simplified for current schema."""
-    try:
-        saved = save_tweet(conn, tweet_data)
-        if saved:
-            print(f"  ✅ Saved/Updated tweet: {tweet_data.get('tweet_id')}")
-        else:
-            print(f"  ⏭️ Not saved (duplicate/unchanged): {tweet_data.get('tweet_id')}")
-        return saved
-    except Exception as e:
-        print(f"  ❌ Error saving tweet via fetcher_db: {e}")
-        return False
-
 
 def check_if_tweet_exists(username: str, tweet_id: str) -> bool:
     """Check if a tweet already exists in the database."""
