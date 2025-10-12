@@ -11,7 +11,7 @@ from retrieval.api import RetrievalAPI, RetrievalConfig, VerificationRequest, cr
 from retrieval.core.claim_extractor import ClaimExtractor
 from retrieval.core.models import VerificationResult, EvidenceSource, VerificationVerdict
 from retrieval.verification.credibility_scorer import CredibilityScorer
-from retrieval.verification.temporal_verifier import TemporalVerifier
+from retrieval.verification.claim_verifier import ClaimVerifier
 
 
 class TestRetrievalAPI:
@@ -247,9 +247,23 @@ if __name__ == "__main__":
     scored = scorer.score_sources_batch(sources)
     print(f"Scored {len(scored)} sources")
 
-    # Test temporal verification
-    verifier = TemporalVerifier()
-    is_verified, explanation, date = verifier.verify_temporal_claim("El evento ocurrió el 15/03/2023")
-    print(f"Temporal verification: {is_verified}")
+    # Test temporal verification through main verifier
+    from retrieval.verification.claim_verifier import VerificationContext
+    temporal_verifier = ClaimVerifier()
+    context = VerificationContext(
+        original_text="El evento ocurrió el 15/03/2023",
+        content_category="general"
+    )
+    import asyncio
+    async def test_temporal():
+        report = await temporal_verifier.verify_content(context)
+        print(f"Temporal verification through main verifier: {len(report.claims_verified)} claims processed")
+        return report
+
+    # Run the async test
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    report = loop.run_until_complete(test_temporal())
+    loop.close()
 
     print("Basic tests completed successfully!")

@@ -12,9 +12,8 @@ from retrieval.core.models import VerificationResult, EvidenceSource, Verificati
 from retrieval.core.claim_extractor import ClaimExtractor, Claim
 from retrieval.core.evidence_aggregator import EvidenceAggregator
 from retrieval.core.query_builder import QueryBuilder
-from retrieval.verification.multi_source_verifier import MultiSourceVerifier, VerificationContext, VerificationReport
+from retrieval.verification.claim_verifier import ClaimVerifier, VerificationContext, VerificationReport
 from retrieval.verification.credibility_scorer import CredibilityScorer
-from .verification.temporal_verifier import TemporalVerifier
 from .sources.web_scrapers import WebScraperManager
 from retrieval.sources.statistical_apis import StatisticalAPIManager
 from retrieval.sources.web_scrapers import WebScraperManager
@@ -70,7 +69,6 @@ class RetrievalAPI:
         self.evidence_aggregator = EvidenceAggregator()
         self.query_builder = QueryBuilder()
         self.credibility_scorer = CredibilityScorer()
-        self.temporal_verifier = TemporalVerifier()
         self.web_scraper_manager = WebScraperManager() if self.config.enable_web_search else None
 
         # Initialize optional components
@@ -83,7 +81,7 @@ class RetrievalAPI:
             self.web_scraper = WebScraperManager()
 
         # Initialize main verifier
-        self.multi_source_verifier = MultiSourceVerifier(
+        self.multi_source_verifier = ClaimVerifier(
             max_workers=self.config.max_parallel_requests
         )
 
@@ -245,16 +243,6 @@ class RetrievalAPI:
         # Aggregate evidence
         result = self.evidence_aggregator.aggregate_evidence(claim, scored_sources)
 
-        # Add temporal verification if applicable
-        if claim_type in ['temporal', 'event']:
-            is_verified, explanation, verified_date = self.temporal_verifier.verify_temporal_claim(
-                claim_text
-            )
-            if not is_verified:
-                if result.verdict == VerificationVerdict.VERIFIED:
-                    result.verdict = VerificationVerdict.QUESTIONABLE
-                    result.explanation += f" Sin embargo, {explanation}"
-
         return result
 
     async def analyze_with_verification(self, content: str, analyzer_result: Dict[str, Any]) -> AnalysisResult:
@@ -302,7 +290,6 @@ class RetrievalAPI:
             "evidence_aggregator": "operational",
             "query_builder": "operational",
             "credibility_scorer": "operational",
-            "temporal_verifier": "operational",
             "multi_source_verifier": "operational",
             "analyzer_hooks": "operational"
         }

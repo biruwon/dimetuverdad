@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 import re
 
+from .http_client import HttpClient, create_http_client
+
 
 @dataclass
 class StatisticalDataPoint:
@@ -35,10 +37,7 @@ class INEClient:
     BASE_URL = "https://servicios.ine.es/wstempus/js/ES"
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (compatible; EvidenceVerifier/1.0)'
-        })
+        self.http_client = HttpClient(language="es")
 
     def search_population_data(self, year: Optional[int] = None) -> List[StatisticalDataPoint]:
         """
@@ -63,7 +62,7 @@ class INEClient:
                 'det': '2'    # Detailed data
             }
 
-            response = self.session.get(url, params=params, timeout=10)
+            response = self.http_client.get(url, params=params, timeout=10)
             response.raise_for_status()
 
             data = response.json()
@@ -144,10 +143,7 @@ class EurostatClient:
     BASE_URL = "https://ec.europa.eu/eurostat/api/dissemination"
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (compatible; EvidenceVerifier/1.0)'
-        })
+        self.http_client = create_http_client()
 
     def search_economic_indicators(self, indicator_code: str = "GDP",
                                  year: Optional[int] = None) -> List[StatisticalDataPoint]:
@@ -180,7 +176,7 @@ class EurostatClient:
             if year:
                 params['time'] = str(year)
 
-            response = self.session.get(url, params=params, timeout=15)
+            response = self.http_client.get(url, params=params, timeout=15)
             response.raise_for_status()
 
             data = response.json()
@@ -253,7 +249,7 @@ class EurostatClient:
             if year:
                 params['time'] = str(year)
 
-            response = self.session.get(url, params=params, timeout=15)
+            response = self.http_client.get(url, params=params, timeout=15)
             response.raise_for_status()
 
             data = response.json()
@@ -359,10 +355,7 @@ class WHOClient:
     BASE_URL = "https://ghoapi.azureedge.net/api"
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (compatible; EvidenceVerifier/1.0)'
-        })
+        self.http_client = create_http_client()
 
     def search_health_indicators(self, indicator_code: str = "WHOSIS",
                                year: Optional[int] = None) -> List[StatisticalDataPoint]:
@@ -389,7 +382,7 @@ class WHOClient:
                 '$top': '5'  # Limit results
             }
 
-            response = self.session.get(url, params=params, timeout=10)
+            response = self.http_client.get(url, params=params, timeout=10)
             response.raise_for_status()
 
             data = response.json()
@@ -457,10 +450,7 @@ class WorldBankClient:
     BASE_URL = "https://api.worldbank.org/v2"
 
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (compatible; EvidenceVerifier/1.0)'
-        })
+        self.http_client = create_http_client()
 
     def search_development_indicators(self, indicator_code: str = "NY.GDP.MKTP.CD",
                                     country_code: str = "ESP",
@@ -487,7 +477,7 @@ class WorldBankClient:
                 'date': year if year else '2010:2023'  # Date range
             }
 
-            response = self.session.get(url, params=params, timeout=10)
+            response = self.http_client.get(url, params=params, timeout=10)
             response.raise_for_status()
 
             data = response.json()

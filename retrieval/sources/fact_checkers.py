@@ -13,6 +13,8 @@ import logging
 import json
 from bs4 import BeautifulSoup
 
+from .http_client import HttpClient, create_http_client
+
 
 @dataclass
 class FactCheckResult:
@@ -41,16 +43,7 @@ class FactCheckerClient:
         self.base_url = base_url
         self.name = name
         self.language = language
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (compatible; EvidenceVerifier/1.0)',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': f'{language};q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-        })
-        self.logger = logging.getLogger(__name__)
+        self.http_client = create_http_client()
 
     def search_claims(self, query: str, max_results: int = 5) -> List[FactCheckResult]:
         """
@@ -100,7 +93,7 @@ class MalditaClient(FactCheckerClient):
             search_url = f"{self.base_url}/"
             params = {'s': query}
 
-            response = self.session.get(search_url, params=params, timeout=10)
+            response = self.http_client.get(search_url, params=params, timeout=10)
             response.raise_for_status()
 
             # Parse search results (simplified - would need actual HTML parsing)
@@ -265,7 +258,7 @@ class NewtralClient(FactCheckerClient):
             search_url = f"{self.base_url}/"
             params = {'s': query}
 
-            response = self.session.get(search_url, params=params, timeout=10)
+            response = self.http_client.get(search_url, params=params, timeout=10)
             response.raise_for_status()
 
             results = self._parse_newtral_results(response.text, query, max_results)
@@ -536,7 +529,7 @@ class SnopesClient(FactCheckerClient):
             search_url = f"{self.base_url}/"
             params = {'s': query}
 
-            response = self.session.get(search_url, params=params, timeout=10)
+            response = self.http_client.get(search_url, params=params, timeout=10)
             response.raise_for_status()
 
             results = self._parse_snopes_results(response.text, query, max_results)

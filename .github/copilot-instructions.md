@@ -193,7 +193,7 @@ python quick_test.py --llm "Complex content requiring deep analysis"
    - Database schema changes → **IMMEDIATELY** run all database tests (`source venv/bin/activate && python -m pytest fetcher/tests/test_db.py fetcher/tests/test_fetch_tweets.py -v`)
    - Cross-module changes → **IMMEDIATELY** run `./run_in_venv.sh test-all`
    
-   **CRITICAL**: Always run targeted tests IMMEDIATELY after changes (faster feedback), then full test suite before commit
+   **CRITICAL**: Always run targeted tests IMMEDIATELY after changes (faster feedback)
 
 3. **Test Failure Resolution**:
    - Read error messages carefully - they often indicate the exact issue
@@ -211,11 +211,11 @@ python quick_test.py --llm "Complex content requiring deep analysis"
      - After refactoring that touches multiple files
      - When changing core interfaces or data structures
      - After fixing test failures (to ensure no regressions)
-   - **Integration tests**: Run only on major refactors or before committing (not during regular development)
+   - **Integration tests**: Run only on major refactors(not during regular development)
      - `test-analyzer-integration` - Slow, comprehensive analyzer testing (requires LLM models)
      - `test-fetch-integration` - Requires Twitter credentials, slow (live API calls)
      - `test-retrieval-integration` - Slow retrieval integration tests (mocked, < 30 seconds)
-   - **Example workflow**: Change `gemini_multimodal.py` → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_gemini_multimodal.py -v` (30s) → If passes, run full suite before commit
+   - **Example workflow**: Change `gemini_multimodal.py` → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_gemini_multimodal.py -v` (30s)
 
 5. **Test Success Criteria**:
    - All relevant tests must pass (100% pass rate for affected modules)
@@ -251,24 +251,8 @@ source venv/bin/activate && python -m pytest analyzer/tests/ -v
 source venv/bin/activate && python -m pytest fetcher/tests/ -v       
 # After any retrieval changes
 source venv/bin/activate && python -m pytest retrieval/tests/ -v                   
-# Before any commit (mandatory)
-./run_in_venv.sh test-all
-./run_in_venv.sh test-integration
+
 ```
-
-### Testing Workflow Commands
-
-**Fast Feedback Tests (Run During Development)**:
-- `test-retrieval-integration` - Fast retrieval integration tests (< 30 seconds, mocked)
-- Module-specific tests: `python -m pytest analyzer/tests/test_analyzer.py -v`
-
-**Slow Integration Tests (Run Before Commit)**:
-- `test-analyzer-integration` - Comprehensive analyzer testing with LLM models (2-5 minutes)
-- `test-fetch-integration` - Live Twitter API testing (requires credentials, slow)
-
-**Full Test Suite**:
-- `test-all` - All unit tests excluding slow integration tests (fast feedback loop)
-- Run before commits to ensure no regressions
 
 ## Performance Considerations
 
@@ -333,7 +317,7 @@ ollama pull gpt-oss:20b  # Re-download model if corrupted
 - **Force reanalyze workflow**: Essential when prompt engineering or model parameters change
 - **Terminal output formatting**: Uses emoji indicators (🚫, ❌, 🕵️, ⚡, 📢, ✅) for categories
 - **Analysis method tracking**: Every result tagged as either `"pattern"` or `"llm"` in database
-- **No backward compatibility**: Never add legacy compatibility code or deprecated methods - always refactor existing code to use new patterns directly
+- **No backward compatibility**: Never add legacy compatibility code, deprecated methods, or wrapper classes - always refactor existing code to use new patterns directly and immediately remove old code
 - **Sensitive content handling**: Reference detection patterns abstractly (e.g., "hate speech detection logic") without displaying raw examples or prompts
 
 When working on this codebase, prioritize understanding the multi-stage analysis pipeline and always test with both pattern-only and LLM-enhanced modes to ensure comprehensive coverage.

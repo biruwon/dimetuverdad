@@ -9,7 +9,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 
 from ..core.models import VerificationResult, EvidenceSource, VerificationVerdict
-from ..verification.multi_source_verifier import VerificationReport
+from ..verification.claim_verifier import VerificationReport
 from ..sources.fact_checkers import FactCheckResult
 from ..sources.web_scrapers import ScrapedContent
 

@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 
 from ..core.models import VerificationResult, VerificationVerdict
-from ..verification.multi_source_verifier import MultiSourceVerifier, VerificationContext, VerificationReport
+from ..verification.claim_verifier import ClaimVerifier, VerificationContext, VerificationReport
 
 
 @dataclass
@@ -37,8 +37,8 @@ class AnalyzerHooks:
     Provides conditional triggering and result verification.
     """
 
-    def __init__(self, verifier: Optional[MultiSourceVerifier] = None):
-        self.verifier = verifier or MultiSourceVerifier()
+    def __init__(self, verifier: Optional[ClaimVerifier] = None):
+        self.verifier = verifier or ClaimVerifier()
         self.logger = logging.getLogger(__name__)
 
         # Default trigger configuration
@@ -268,7 +268,7 @@ class AnalyzerHooks:
         }
 
 
-def create_analyzer_hooks(verifier: Optional[MultiSourceVerifier] = None) -> AnalyzerHooks:
+def create_analyzer_hooks(verifier: Optional[ClaimVerifier] = None) -> AnalyzerHooks:
     """
     Factory function to create analyzer hooks with proper configuration.
 

@@ -15,6 +15,8 @@ import json
 import feedparser
 from bs4 import BeautifulSoup
 
+from .http_client import HttpClient, create_http_client
+
 
 @dataclass
 class ScrapedContent:
@@ -43,13 +45,7 @@ class NewsScraper:
         self.base_url = base_url
         self.name = name
         self.language = language
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (compatible; EvidenceVerifier/1.0)',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': f'{language};q=0.9,en;q=0.8',
-        })
-        self.logger = logging.getLogger(__name__)
+        self.http_client = create_http_client()
 
     def search_articles(self, query: str, max_results: int = 5) -> List[ScrapedContent]:
         """
@@ -67,7 +63,7 @@ class NewsScraper:
     def _extract_article_content(self, url: str) -> Optional[str]:
         """Extract main content from an article URL."""
         try:
-            response = self.session.get(url, timeout=10)
+            response = self.http_client.get(url, timeout=10)
             response.raise_for_status()
 
             # This is a simplified content extraction
@@ -296,7 +292,7 @@ class WikipediaScraper(NewsScraper):
                 'srprop': 'title|snippet|timestamp'
             }
 
-            response = self.session.get(search_url, params=params, timeout=10)
+            response = self.http_client.get(search_url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
 
@@ -342,7 +338,7 @@ class WikipediaScraper(NewsScraper):
     def _extract_article_content(self, url: str) -> Optional[str]:
         """Extract main content from Wikipedia article."""
         try:
-            response = self.session.get(url, timeout=10)
+            response = self.http_client.get(url, timeout=10)
             response.raise_for_status()
 
             # Parse the HTML
@@ -544,9 +540,9 @@ def scrape_article_content(url: str) -> Optional[str]:
             return scraper._extract_article_content(url)
 
     # Fallback to generic extraction
-    session = requests.Session()
+    http_client = create_http_client()
     try:
-        response = session.get(url, timeout=10)
+        response = http_client.get(url, timeout=10)
         response.raise_for_status()
 
         # Simple content extraction
