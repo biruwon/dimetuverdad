@@ -4,12 +4,11 @@
 
 Top priority:
 
-- Find limits of gemini and just use it for pattern+ollama detected. What about media?
 - [L] Edited recent posts, how will affect fetching? And show the original
 - [M] Disinformation/political retrieval to get up to date data/checks
 - [L] Allow people to submit account to analyze or post to analyze
 - [M] Improve LLM explanation
-- [M] Automate fetcher between new accounts vs latest∫
+- [M] Automate fetcher between new accounts vs latest
 - [L] Blog/instagram explanining how disinformation works easier to understand
 - [L] Detect topic of the day/week: which accounts promote it, real data, what do they target
 

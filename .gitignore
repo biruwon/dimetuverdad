@@ -28,3 +28,6 @@ x_session.json
 scripts/model_comparison_*.json
 scripts/test_results.json
 scripts/performance_benchmarks_*.json
+
+# Tests
+.coverage

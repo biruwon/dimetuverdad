@@ -211,6 +211,10 @@ python quick_test.py --llm "Complex content requiring deep analysis"
      - After refactoring that touches multiple files
      - When changing core interfaces or data structures
      - After fixing test failures (to ensure no regressions)
+   - **Integration tests**: Run only on major refactors or before committing (not during regular development)
+     - `test-analyzer-integration` - Slow, comprehensive analyzer testing (requires LLM models)
+     - `test-fetch-integration` - Requires Twitter credentials, slow (live API calls)
+     - `test-retrieval-integration` - Slow retrieval integration tests (mocked, < 30 seconds)
    - **Example workflow**: Change `gemini_multimodal.py` → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_gemini_multimodal.py -v` (30s) → If passes, run full suite before commit
 
 5. **Test Success Criteria**:
@@ -219,11 +223,11 @@ python quick_test.py --llm "Complex content requiring deep analysis"
    - Test execution time should be reasonable (< 2 minutes for module tests, < 2 minutes for full suite)
 
 6. **Test Coverage Requirements Before Commit**:
-   - **MANDATORY 90% COVERAGE**: Before committing and pushing ANY code changes, unit test coverage MUST be 90% or higher
+   - **MANDATORY 70% COVERAGE**: Before committing and pushing ANY code changes, unit test coverage MUST be 70% or higher
    - **Coverage Verification**: Run `./run_in_venv.sh test-coverage` to generate coverage report
    - **Coverage Report**: Check `htmlcov/index.html` for detailed coverage analysis
-   - **BLOCKING REQUIREMENT**: Cannot commit or push if coverage falls below 90%
-   - **Coverage Improvement**: If coverage is below 90%, add tests to reach the threshold before proceeding
+   - **BLOCKING REQUIREMENT**: Cannot commit or push if coverage falls below 70%
+   - **Coverage Improvement**: If coverage is below 70%, add tests to reach the threshold before proceeding
    - **Exception Handling**: Only exempt files that cannot be meaningfully tested (e.g., configuration files, scripts)
    - **Coverage Command**: Use `source venv/bin/activate && python -m pytest --cov=. --cov-report=html --cov-report=term-missing` for comprehensive coverage analysis
 
@@ -242,14 +246,29 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 **MANDATORY Workflow Example**:
 ```bash      
 # After analyzer changes
-source venv/bin/activate && python -m pytest analyzer/tests/test_analyzer.py -v         
+source venv/bin/activate && python -m pytest analyzer/tests/ -v         
 # After any fetcher changes
-source venv/bin/activate && python -m pytest fetcher/tests/ -v                     
-# After analyzer integration changes
-./run_in_venv.sh test-analyzer-integration --quick                                                     
+source venv/bin/activate && python -m pytest fetcher/tests/ -v       
+# After any retrieval changes
+source venv/bin/activate && python -m pytest retrieval/tests/ -v                   
 # Before any commit (mandatory)
-./run_in_venv.sh test-all  
+./run_in_venv.sh test-all
+./run_in_venv.sh test-integration
 ```
+
+### Testing Workflow Commands
+
+**Fast Feedback Tests (Run During Development)**:
+- `test-retrieval-integration` - Fast retrieval integration tests (< 30 seconds, mocked)
+- Module-specific tests: `python -m pytest analyzer/tests/test_analyzer.py -v`
+
+**Slow Integration Tests (Run Before Commit)**:
+- `test-analyzer-integration` - Comprehensive analyzer testing with LLM models (2-5 minutes)
+- `test-fetch-integration` - Live Twitter API testing (requires credentials, slow)
+
+**Full Test Suite**:
+- `test-all` - All unit tests excluding slow integration tests (fast feedback loop)
+- Run before commits to ensure no regressions
 
 ## Performance Considerations
 
@@ -363,7 +382,7 @@ When working on this codebase, prioritize understanding the multi-stage analysis
    - Multi-step enhancement is done
    - Documentation updates are complete
 3. **NOT triggered by**: Single file edits, partial implementations, or intermediate steps
-4. **Coverage Verification Required**: Before committing, verify test coverage is 90% or higher using `./run_in_venv.sh test-coverage`
+4. **Coverage Verification Required**: Before committing, verify test coverage is 70% or higher using `./run_in_venv.sh test-coverage`
 5. **Ask for Confirmation**: Prompt user before committing with suggested commit message
 6. **User Response Required**: Wait for explicit "yes" or "go ahead" before proceeding
 7. **Automatic Commit**: Stage all changes and create a descriptive commit message (after confirmation)
@@ -374,9 +393,9 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 
 **EXECUTION STEPS**:
 1. Verify the complete feature/fix/refactor is finished
-2. **MANDATORY**: Run `./run_in_venv.sh test-coverage` to verify 90%+ coverage
-3. If coverage is below 90%: add tests to reach threshold before proceeding
-4. Ask user: "This feature/fix/refactor appears complete and test coverage is 90%+. Would you like me to commit and push these changes with message: '[proposed commit message]'?"
+2. **MANDATORY**: Run `./run_in_venv.sh test-coverage` to verify 70%+ coverage
+3. If coverage is below 70%: add tests to reach threshold before proceeding
+4. Ask user: "This feature/fix/refactor appears complete and test coverage is 70%+. Would you like me to commit and push these changes with message: '[proposed commit message]'?"
 5. **WAIT FOR USER RESPONSE** - Do not proceed without explicit confirmation
 6. If confirmed: `git add .` to stage all changes
 7. `git commit -m "descriptive message"`

@@ -228,7 +228,6 @@ def _create_test_database_schema(db_path: str):
                 post_url TEXT,                   -- Platform-agnostic post URL
                 author_username TEXT,            -- Platform-agnostic author identifier
                 platform TEXT DEFAULT 'twitter', -- Multi-platform support
-                source_id TEXT,                  -- Reference to platform_sources table
                 post_content TEXT,               -- Platform-agnostic content
                 category TEXT,                   -- Primary category (backward compatibility)
                 categories_detected TEXT,        -- JSON array of all detected categories

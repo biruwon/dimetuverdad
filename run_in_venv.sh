@@ -8,7 +8,9 @@
 #   ./run_in_venv.sh web               # start web application on port 5000
 #   ./run_in_venv.sh test-analyzer-integration  # run analyzer integration tests
 #   ./run_in_venv.sh test-fetch-integration       # run fetch integration tests
-#   ./run_in_venv.sh test-all                   # run all test files in project
+#   ./run_in_venv.sh test-retrieval-integration   # run retrieval integration tests
+#   ./run_in_venv.sh test-integration             # run all integration tests
+#   ./run_in_venv.sh test-all                     # run all test files in project
 #   ./run_in_venv.sh compare-models    # run model comparison benchmarks
 #   ./run_in_venv.sh benchmarks        # run performance benchmarks
 #   ./run_in_venv.sh full              # run fetch then analyze-twitter
@@ -86,6 +88,23 @@ test_fetch_integration(){
   "$PY" "$ROOT_DIR/fetcher/tests/test_fetch_integration.py" --live-fetch
 }
 
+test_retrieval_integration(){
+  ensure_venv
+  echo "Running retrieval integration tests..."
+  "$PY" -m pytest "$ROOT_DIR/retrieval/tests/test_retrieval_integration.py" -v "$@"
+}
+
+test_integration(){
+  ensure_venv
+  echo "Running all integration tests (retrieval, analyzer, fetch)..."
+  echo "Running retrieval integration tests..."
+  "$PY" -m pytest "$ROOT_DIR/retrieval/tests/test_retrieval_integration.py" -v "$@"
+  echo "Running analyzer integration tests..."
+  "$PY" "$ROOT_DIR/analyzer/tests/test_analyze_twitter_integration.py" "$@"
+  echo "Running fetch integration tests..."
+  "$PY" "$ROOT_DIR/fetcher/tests/test_fetch_integration.py" --live-fetch
+}
+
 test_all(){
   ensure_venv
   echo "Running all test files in the project..."
@@ -138,6 +157,14 @@ case "${1-}" in
   test-fetch-integration)
     test_fetch_integration
     ;;
+  test-retrieval-integration)
+    shift
+    test_retrieval_integration "$@"
+    ;;
+  test-integration)
+    shift
+    test_integration "$@"
+    ;;
   test-all)
     test_all
     ;;
@@ -172,6 +199,8 @@ case "${1-}" in
     echo "  web               Start web application on port 5000"
     echo "  test-analyzer-integration  Run analyzer integration tests"
     echo "  test-fetch-integration     Run fetch integration tests"
+    echo "  test-retrieval-integration Run retrieval integration tests"
+    echo "  test-integration           Run all integration tests"
     echo "  test-all                   Run all test files in project"
     echo "  init-db           Initialize/reset database schema"
     echo "  compare-models    Run model comparison benchmarks"
@@ -183,6 +212,8 @@ case "${1-}" in
     echo "  $0 install"
     echo "  $0 test-analyzer-integration --quick"
     echo "  $0 test-fetch-integration"
+    echo "  $0 test-retrieval-integration"
+    echo "  $0 test-integration"
     echo "  $0 test-all"
     echo "  $0 analyze-twitter --username Vox_es --limit 10"
     echo "  $0 backup-db list"

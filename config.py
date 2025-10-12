@@ -108,11 +108,12 @@ ANALYSIS_CATEGORIES = [
 ]
 
 # =============================================================================
-# EXPORT SETTINGS
+# WEB SCRAPING SETTINGS
 # =============================================================================
 
-# Export filename template
-EXPORT_FILENAME_TEMPLATE = 'dimetuverdad_analysis_{timestamp}'
+# Web scraping settings
+WEB_SCRAPE_MAX_RESULTS = int(os.environ.get('WEB_SCRAPE_MAX_RESULTS', '5'))
+WEB_SCRAPE_TIMEOUT = int(os.environ.get('WEB_SCRAPE_TIMEOUT', '10'))
 
 # =============================================================================
 # UTILITY FUNCTIONS
