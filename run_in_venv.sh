@@ -110,6 +110,12 @@ benchmarks(){
   "$PY" "$ROOT_DIR/scripts/performance_benchmarks.py" "$@"
 }
 
+backup_db(){
+  ensure_venv
+  echo "Running database backup script..."
+  "$PY" "$ROOT_DIR/scripts/backup_db.py" "$@"
+}
+
 case "${1-}" in
   install)
     install
@@ -147,6 +153,10 @@ case "${1-}" in
     shift
     benchmarks "$@"
     ;;
+  backup-db)
+    shift
+    backup_db "$@"
+    ;;
   full)
     install || true
     fetch
@@ -166,6 +176,7 @@ case "${1-}" in
     echo "  init-db           Initialize/reset database schema"
     echo "  compare-models    Run model comparison benchmarks"
     echo "  benchmarks        Run performance benchmarks"
+    echo "  backup-db         Create/list/cleanup database backups"
     echo "  full              Run install, fetch, then analyze-twitter"
     echo ""
     echo "Examples:"
@@ -174,6 +185,7 @@ case "${1-}" in
     echo "  $0 test-fetch-integration"
     echo "  $0 test-all"
     echo "  $0 analyze-twitter --username Vox_es --limit 10"
+    echo "  $0 backup-db list"
     exit 1
     ;;
 esac

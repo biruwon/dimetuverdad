@@ -4,15 +4,14 @@
 
 Top priority:
 
+- Find limits of gemini and just use it for pattern+ollama detected. What about media?
 - [L] Edited recent posts, how will affect fetching? And show the original
 - [M] Disinformation/political retrieval to get up to date data/checks
-- [L] Improve DB: backups, better db and remove unused fields
 - [L] Allow people to submit account to analyze or post to analyze
 - [M] Improve LLM explanation
-- [M] Fetch new tweets only
+- [M] Automate fetcher between new accounts vs latest∫
 - [L] Blog/instagram explanining how disinformation works easier to understand
 - [L] Detect topic of the day/week: which accounts promote it, real data, what do they target
-- Cover the project with unit/integrations tests
 
 - [M] **Pattern refinement**: Review and improve pattern matching rules based on analysis results
 - [L] **A/B testing framework**: Compare different LLM models and prompting strategies

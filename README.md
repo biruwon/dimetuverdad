@@ -471,7 +471,31 @@ Analyze collected tweets from the database:
 
 # Initialize database (safe, won't overwrite existing data)
 ./run_in_venv.sh init-db
+
+# Create timestamped database backup
+./run_in_venv.sh backup-db
+
+# List existing database backups
+./run_in_venv.sh backup-db list
+
+# Clean up old backups (keep last 10)
+./run_in_venv.sh backup-db cleanup
 ```
+
+#### Database Backup System
+
+The project includes an automated backup system for the SQLite database:
+
+- **Automatic Timestamping**: Backups include date and time in filename (e.g., `accounts_20251012_122943.db`)
+- **Backup Directory**: All backups stored in `./backups/` (gitignored)
+- **Automatic Cleanup**: Keeps last 10 backups, removes older ones
+- **File Size Display**: Shows backup size in MB for verification
+- **Safe Operation**: Uses `shutil.copy2()` to preserve file metadata
+
+**Backup Commands**:
+- `./run_in_venv.sh backup-db` - Create new backup
+- `./run_in_venv.sh backup-db list` - List all backups with sizes
+- `./run_in_venv.sh backup-db cleanup` - Remove old backups (keeps 10 most recent)
 
 ### Web Interface
 
@@ -642,6 +666,11 @@ Recent comprehensive test suite results:
 
 # Model comparison
 ./run_in_venv.sh compare-models --quick
+
+# Database backup operations
+./run_in_venv.sh backup-db              # Create backup
+./run_in_venv.sh backup-db list         # List backups
+./run_in_venv.sh backup-db cleanup      # Clean old backups
 ```
 
 ## 🧪 Development & Testing

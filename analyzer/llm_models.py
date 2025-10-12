@@ -476,7 +476,7 @@ class LLMModelConfig:
             if priority == "speed":
                 return cls.MODELS["flan-t5-small"]  # Fastest proven model (4s vs 11s+)
             elif priority == "quality":
-                return cls.MODELS["gemma-7b"] 
+                return cls.MODELS["gpt-oss-20b"]  # Use available high-quality model
             else:  # balanced
                 return cls.MODELS["gpt-oss-20b"]  # Original model is best overall (46s vs 2min+)
         

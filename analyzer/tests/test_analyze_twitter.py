@@ -19,7 +19,9 @@ project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from analyzer.analyze_twitter import Analyzer
+from analyzer.analyze_twitter import (
+    Analyzer, analyze_tweets_from_db, create_analyzer, reanalyze_tweet, main
+)
 from analyzer.config import AnalyzerConfig
 from analyzer.models import ContentAnalysis
 from analyzer.repository import ContentAnalysisRepository
@@ -749,9 +751,281 @@ class TestAnalyzerMultimodal(unittest.TestCase):
         self.assertEqual(result, "image")
 
 
-if __name__ == '__main__':
-    # Set up test environment
-    os.environ.setdefault('PYTHONPATH', str(project_root))
+class TestCLIFunctions(unittest.TestCase):
+    """Test CLI functions and main execution paths."""
 
-    # Run tests
-    unittest.main(verbosity=2)
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('builtins.print')
+    def test_analyze_tweets_from_db_specific_tweet_success(self, mock_print, mock_create_analyzer):
+        """Test analyzing a specific tweet by ID successfully."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_create_analyzer
+
+        mock_result = Mock()
+        mock_result.category = Categories.HATE_SPEECH
+        mock_result.llm_explanation = "Hate speech detected"
+        mock_result.analysis_method = "llm"
+
+        with patch('analyzer.analyze_twitter.reanalyze_tweet', return_value=mock_result):
+            analyze_tweets_from_db(tweet_id='123456789')
+
+        mock_create_analyzer.assert_called_once()
+
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('builtins.print')
+    def test_analyze_tweets_from_db_specific_tweet_not_found(self, mock_print, mock_create_analyzer):
+        """Test analyzing a specific tweet that doesn't exist."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_create_analyzer
+
+        with patch('analyzer.analyze_twitter.reanalyze_tweet', return_value=None):
+            analyze_tweets_from_db(tweet_id='123456789')
+
+        mock_create_analyzer.assert_called_once()
+
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('builtins.print')
+    def test_analyze_tweets_from_db_no_tweets(self, mock_print, mock_create_analyzer):
+        """Test when no tweets are available for analysis."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_analyzer
+        mock_analyzer.repository.get_tweets_for_analysis.return_value = []
+        mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
+
+        analyze_tweets_from_db()
+
+        mock_create_analyzer.assert_called_once()
+
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('builtins.print')
+    def test_analyze_tweets_from_db_with_tweets(self, mock_print, mock_create_analyzer):
+        """Test analyzing tweets from database."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_analyzer
+
+        # Mock tweets data
+        tweets = [
+            ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
+        ]
+        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
+        mock_analyzer.repository.get_analysis_count_by_author.return_value = 5
+
+        # Mock analysis result
+        mock_result = Mock()
+        mock_result.category = Categories.HATE_SPEECH
+        mock_result.llm_explanation = "Hate speech detected"
+        mock_result.analysis_method = "llm"
+        mock_result.multimodal_analysis = False
+        mock_analyzer.analyze_content.return_value = mock_result
+
+        analyze_tweets_from_db(max_tweets=1)
+
+        mock_create_analyzer.assert_called_once()
+        mock_analyzer.analyze_content.assert_called_once()
+        mock_analyzer.save_analysis.assert_called_once()
+
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('builtins.print')
+    def test_analyze_tweets_from_db_with_media(self, mock_print, mock_create_analyzer):
+        """Test analyzing tweets with media content."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_analyzer
+
+        tweets = [
+            ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', 'url1.jpg,url2.jpg', '')
+        ]
+        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
+        mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
+
+        mock_result = Mock()
+        mock_result.category = Categories.GENERAL
+        mock_result.llm_explanation = "Normal content"
+        mock_result.analysis_method = "multimodal"
+        mock_result.multimodal_analysis = True
+        mock_result.media_type = "image"
+        mock_analyzer.analyze_content.return_value = mock_result
+
+        analyze_tweets_from_db(max_tweets=1)
+
+        # Verify media URLs were parsed correctly
+        call_args = mock_analyzer.analyze_content.call_args
+        assert call_args[1]['media_urls'] == ['url1.jpg', 'url2.jpg']
+
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('builtins.print')
+    def test_analyze_tweets_from_db_with_quoted_content(self, mock_print, mock_create_analyzer):
+        """Test analyzing tweets with quoted content."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_analyzer
+
+        tweets = [
+            ('123', 'https://twitter.com/test/status/123', 'testuser', 'Main content', '', 'Quoted content')
+        ]
+        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
+        mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
+
+        mock_result = Mock()
+        mock_result.category = Categories.GENERAL
+        mock_result.llm_explanation = "Normal content"
+        mock_result.analysis_method = "llm"
+        mock_analyzer.analyze_content.return_value = mock_result
+
+        analyze_tweets_from_db(max_tweets=1)
+
+        # Verify quoted content was combined
+        call_args = mock_analyzer.analyze_content.call_args
+        expected_content = "Main content\n\n[Contenido citado]: Quoted content"
+        assert call_args[1]['content'] == expected_content
+
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('builtins.print')
+    def test_analyze_tweets_from_db_analysis_error(self, mock_print, mock_create_analyzer):
+        """Test handling of analysis errors."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_analyzer
+
+        tweets = [
+            ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
+        ]
+        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
+        mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
+
+        mock_analyzer.analyze_content.side_effect = Exception("Analysis failed")
+
+        analyze_tweets_from_db(max_tweets=1)
+
+        # Should save failed analysis
+        mock_analyzer.repository.save_failed_analysis.assert_called_once()
+
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('builtins.print')
+    def test_analyze_tweets_from_db_force_reanalyze(self, mock_print, mock_create_analyzer):
+        """Test force reanalysis of tweets."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_analyzer
+
+        tweets = [
+            ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
+        ]
+        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
+        mock_analyzer.repository.get_analysis_count_by_author.return_value = 10
+
+        mock_result = Mock()
+        mock_result.category = Categories.GENERAL
+        mock_result.llm_explanation = "Reanalyzed content"
+        mock_result.analysis_method = "llm"
+        mock_analyzer.analyze_content.return_value = mock_result
+
+        analyze_tweets_from_db(force_reanalyze=True, max_tweets=1)
+
+        mock_create_analyzer.assert_called_once()
+        mock_analyzer.analyze_content.assert_called_once()
+        mock_analyzer.save_analysis.assert_called_once()
+
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('builtins.print')
+    def test_analyze_tweets_from_db_username_filter(self, mock_print, mock_create_analyzer):
+        """Test filtering tweets by username."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_analyzer
+
+        tweets = [
+            ('123', 'https://twitter.com/test/status/123', 'specificuser', 'Test content', '', '')
+        ]
+        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
+        mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
+
+        mock_result = Mock()
+        mock_result.category = Categories.GENERAL
+        mock_analyzer.analyze_content.return_value = mock_result
+
+        analyze_tweets_from_db(username='specificuser', max_tweets=1)
+
+        mock_analyzer.repository.get_tweets_for_analysis.assert_called_once_with(
+            username='specificuser',
+            max_tweets=1,
+            force_reanalyze=False
+        )
+
+
+class TestUtilityFunctions(unittest.TestCase):
+    """Test utility functions."""
+
+    @patch('analyzer.analyze_twitter.Analyzer')
+    def test_create_analyzer_function(self, mock_analyzer_class):
+        """Test the create_analyzer utility function."""
+        from analyzer.config import AnalyzerConfig
+        config = AnalyzerConfig(use_llm=False, model_priority="fast")
+        create_analyzer(config=config, verbose=True)
+        mock_analyzer_class.assert_called_once_with(config=config, verbose=True)
+
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    def test_reanalyze_tweet_success(self, mock_create_analyzer):
+        """Test successful tweet reanalysis."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_create_analyzer
+
+        mock_tweet_data = {
+            'tweet_id': '123',
+            'username': 'testuser',
+            'content': 'Test content',
+            'media_links': 'url1.jpg,url2.jpg'
+        }
+        mock_analyzer.repository.get_tweet_data.return_value = mock_tweet_data
+
+        mock_analysis_result = Mock()
+        mock_analyzer.analyze_content.return_value = mock_analysis_result
+
+        result = reanalyze_tweet('123', analyzer=mock_analyzer)
+
+        assert result == mock_analysis_result
+        mock_analyzer.repository.get_tweet_data.assert_called_once_with('123')
+        mock_analyzer.repository.delete_existing_analysis.assert_called_once_with('123')
+        mock_analyzer.analyze_content.assert_called_once()
+        mock_analyzer.save_analysis.assert_called_once_with(mock_analysis_result)
+
+    @patch('analyzer.analyze_twitter.create_analyzer')
+    def test_reanalyze_tweet_not_found(self, mock_create_analyzer):
+        """Test reanalysis when tweet is not found."""
+        mock_analyzer = Mock()
+        mock_create_analyzer.return_value = mock_create_analyzer
+        mock_analyzer.repository.get_tweet_data.return_value = None
+
+        result = reanalyze_tweet('123', analyzer=mock_analyzer)
+        assert result is None
+
+    @patch('analyzer.analyze_twitter.analyze_tweets_from_db')
+    @patch('sys.argv', ['analyze_twitter.py', '--username', 'testuser', '--limit', '5'])
+    def test_main_with_args(self, mock_analyze):
+        """Test main function with command line arguments."""
+        main()
+        mock_analyze.assert_called_once_with(
+            username='testuser',
+            max_tweets=5,
+            force_reanalyze=False,
+            tweet_id=None
+        )
+
+    @patch('analyzer.analyze_twitter.analyze_tweets_from_db')
+    @patch('sys.argv', ['analyze_twitter.py'])
+    def test_main_no_args(self, mock_analyze):
+        """Test main function with no arguments."""
+        main()
+        mock_analyze.assert_called_once_with(
+            username=None,
+            max_tweets=None,
+            force_reanalyze=False,
+            tweet_id=None
+        )
+
+    @patch('analyzer.analyze_twitter.analyze_tweets_from_db')
+    @patch('sys.argv', ['analyze_twitter.py', '--force-reanalyze', '--tweet-id', '123'])
+    def test_main_force_reanalyze_with_tweet_id(self, mock_analyze):
+        """Test main function with force reanalyze and tweet ID."""
+        main()
+        mock_analyze.assert_called_once_with(
+            username=None,
+            max_tweets=None,
+            force_reanalyze=True,
+            tweet_id='123'
+        )

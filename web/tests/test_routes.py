@@ -219,14 +219,14 @@ class TestAdminRoutes:
 
         # Mock get_category_breakdown query
         mock_cursor.fetchall.side_effect = [
-            [  # categories
-                MockRow({'category': 'general', 'count': 50}),
-                MockRow({'category': 'hate_speech', 'count': 30})
-            ],
-            [  # recent analyses
+            [  # recent analyses (first query in admin_dashboard)
                 MockRow({'analysis_timestamp': '2024-01-01', 'category': 'general',
                          'analysis_method': 'pattern', 'username': 'user1',
                          'content_preview': 'Test content...'})
+            ],
+            [  # categories (second query in admin_dashboard)
+                MockRow({'category': 'general', 'count': 50}),
+                MockRow({'category': 'hate_speech', 'count': 30})
             ]
         ]
 

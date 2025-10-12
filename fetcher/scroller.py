@@ -165,18 +165,15 @@ class Scroller:
             logger.warning("Could not check page height")
             return last_height
 
-    def aggressive_scroll(self, page, consecutive_empty: int) -> None:
+    def scroll(self, page, deep_scroll: bool = False) -> None:
         """
-        Use aggressive scrolling when we're not finding tweets.
+        Scroll the page using the appropriate scrolling pattern.
 
         Args:
             page: Playwright page object
-            consecutive_empty: Number of consecutive empty scrolls
+            deep_scroll: Whether to use aggressive scrolling for older content
         """
-        logger.info(f"Using aggressive scrolling (attempt {consecutive_empty})")
-        scroll_amount = int(2000 + random.random() * 1000)
-        page.evaluate(f"window.scrollBy(0, {scroll_amount})")
-        self.delay(3.0, 5.0)
+        self.random_scroll_pattern(page, deep_scroll)
 
 # Global scroller instance
 scroller = Scroller()

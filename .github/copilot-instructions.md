@@ -218,6 +218,15 @@ python quick_test.py --llm "Complex content requiring deep analysis"
    - No new warnings or deprecation notices
    - Test execution time should be reasonable (< 2 minutes for module tests, < 2 minutes for full suite)
 
+6. **Test Coverage Requirements Before Commit**:
+   - **MANDATORY 90% COVERAGE**: Before committing and pushing ANY code changes, unit test coverage MUST be 90% or higher
+   - **Coverage Verification**: Run `./run_in_venv.sh test-coverage` to generate coverage report
+   - **Coverage Report**: Check `htmlcov/index.html` for detailed coverage analysis
+   - **BLOCKING REQUIREMENT**: Cannot commit or push if coverage falls below 90%
+   - **Coverage Improvement**: If coverage is below 90%, add tests to reach the threshold before proceeding
+   - **Exception Handling**: Only exempt files that cannot be meaningfully tested (e.g., configuration files, scripts)
+   - **Coverage Command**: Use `source venv/bin/activate && python -m pytest --cov=. --cov-report=html --cov-report=term-missing` for comprehensive coverage analysis
+
 **SEVERE VIOLATION CONSEQUENCES**: 
 - Code changes without IMMEDIATE testing WILL cause integration issues, break the pipeline, and create technical debt
 - **WORKFLOW VIOLATION**: Not testing immediately after code changes violates core development practices
@@ -354,22 +363,25 @@ When working on this codebase, prioritize understanding the multi-stage analysis
    - Multi-step enhancement is done
    - Documentation updates are complete
 3. **NOT triggered by**: Single file edits, partial implementations, or intermediate steps
-4. **Ask for Confirmation**: Prompt user before committing with suggested commit message
-5. **User Response Required**: Wait for explicit "yes" or "go ahead" before proceeding
-6. **Automatic Commit**: Stage all changes and create a descriptive commit message (after confirmation)
-7. **Automatic Push**: Push directly to the main branch without user intervention (after confirmation)
-8. **Commit Message Format**: Use format: `feat: [brief description]`, `fix: [description]`, or `refactor: [description]`
-9. **Include All Related Files**: Stage and commit all files modified during the complete work session
-10. **Push Immediately**: Execute `git push origin main` after successful commit
+4. **Coverage Verification Required**: Before committing, verify test coverage is 90% or higher using `./run_in_venv.sh test-coverage`
+5. **Ask for Confirmation**: Prompt user before committing with suggested commit message
+6. **User Response Required**: Wait for explicit "yes" or "go ahead" before proceeding
+7. **Automatic Commit**: Stage all changes and create a descriptive commit message (after confirmation)
+8. **Automatic Push**: Push directly to the main branch without user intervention (after confirmation)
+9. **Commit Message Format**: Use format: `feat: [brief description]`, `fix: [description]`, or `refactor: [description]`
+10. **Include All Related Files**: Stage and commit all files modified during the complete work session
+11. **Push Immediately**: Execute `git push origin main` after successful commit
 
 **EXECUTION STEPS**:
 1. Verify the complete feature/fix/refactor is finished
-2. Ask user: "This feature/fix/refactor appears complete. Would you like me to commit and push these changes with message: '[proposed commit message]'?"
-3. **WAIT FOR USER RESPONSE** - Do not proceed without explicit confirmation
-4. If confirmed: `git add .` to stage all changes
-5. `git commit -m "descriptive message"`
-6. `git push origin main`
-7. Confirm successful push with brief status message
+2. **MANDATORY**: Run `./run_in_venv.sh test-coverage` to verify 90%+ coverage
+3. If coverage is below 90%: add tests to reach threshold before proceeding
+4. Ask user: "This feature/fix/refactor appears complete and test coverage is 90%+. Would you like me to commit and push these changes with message: '[proposed commit message]'?"
+5. **WAIT FOR USER RESPONSE** - Do not proceed without explicit confirmation
+6. If confirmed: `git add .` to stage all changes
+7. `git commit -m "descriptive message"`
+8. `git push origin main`
+9. Confirm successful push with brief status message
 
 **VIOLATION CONSEQUENCES**: Never commit or push without user confirmation. This is a critical workflow requirement to prevent unwanted changes.
 

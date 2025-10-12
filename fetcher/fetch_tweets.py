@@ -329,7 +329,7 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
                 break
             
             # Scroll for more content
-            scroller.scroll(page, deep_scroll=False)
+            scroller.random_scroll_pattern(page, deep_scroll=False)
             scroller.delay(1.0, 2.0)
         
         print(f"📊 Latest tweets collection complete: {saved_count} new tweets saved")
@@ -361,7 +361,11 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
     all_collected_tweets = []
     
     # Initialize database connection
-    conn = fetcher_db.init_db()
+    try:
+        conn = fetcher_db.init_db()
+    except Exception as e:
+        print(f"❌ Database connection failed: {e}")
+        return []
     
     try:
         # Get oldest tweet timestamp for continuing from where we left off
@@ -512,7 +516,12 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
     # Use shared browser setup helper to consolidate browser configuration
     browser, context, page = SessionManager().create_browser_context(p, save_session=True)
     
-    conn = fetcher_db.init_db()
+    try:
+        conn = fetcher_db.init_db()
+    except Exception as e:
+        print(f"❌ Database connection failed: {e}")
+        SessionManager().cleanup_session(browser, context)
+        return 0, 0
     # Fetch tweets for each handle in a single browser session
     total_saved = 0
     for handle in handles:
