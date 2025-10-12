@@ -8,6 +8,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 from utils import paths
+# Import repository interfaces
+from repositories import get_tweet_repository, get_account_repository
 
 DB_PATH = str(paths.get_db_path())
 
@@ -25,34 +27,40 @@ def delete_account_data(username: str) -> Dict[str, int]:
     Returns:
         Dict with counts of deleted records: {'tweets': count, 'analyses': count}
     """
-    conn = get_connection()
-    cur = conn.cursor()
-    
     try:
-        # Count existing records before deletion
-        cur.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,))
-        tweets_count = cur.fetchone()[0]
+        # Use standardized repositories
+        tweet_repo = get_tweet_repository()
+        account_repo = get_account_repository()
         
+        # Get counts before deletion
+        tweets = tweet_repo.get_tweets_by_username(username)
+        tweets_count = len(tweets)
+        
+        # For analyses count, we need to use direct access since content analysis repo might not have username filtering
+        # This is a specialized operation that may need to stay direct for now
+        conn = get_connection()
+        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM content_analyses WHERE username = ?", (username,))
         analyses_count = cur.fetchone()[0]
+        conn.close()
         
-        # Delete from content_analyses first (may have foreign key constraints)
+        # Delete tweets using repository
+        deleted_tweets = tweet_repo.delete_tweets_by_username(username)
+        
+        # Delete analyses using direct access (for now)
+        conn = get_connection()
+        cur = conn.cursor()
         cur.execute("DELETE FROM content_analyses WHERE username = ?", (username,))
-        
-        # Delete from tweets table
-        cur.execute("DELETE FROM tweets WHERE username = ?", (username,))
-        
         conn.commit()
-        print(f"✅ Deleted {tweets_count} tweets and {analyses_count} analyses for @{username}")
+        conn.close()
         
-        return {'tweets': tweets_count, 'analyses': analyses_count}
+        print(f"✅ Deleted {deleted_tweets} tweets and {analyses_count} analyses for @{username}")
+        
+        return {'tweets': deleted_tweets, 'analyses': analyses_count}
         
     except Exception as e:
-        conn.rollback()
         print(f"❌ Error deleting data for @{username}: {e}")
         raise
-    finally:
-        conn.close()
 
 def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
     """Simplified save/update function for tests and main logic."""

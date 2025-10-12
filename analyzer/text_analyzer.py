@@ -86,10 +86,10 @@ class TextAnalyzer:
         categories_detected = pattern_result.categories if pattern_result else [category]
 
         return ContentAnalysis(
-            tweet_id=tweet_id,
-            tweet_url=tweet_url,
-            username=username,
-            tweet_content=content,
+            post_id=tweet_id,
+            post_url=tweet_url,
+            author_username=username,
+            post_content=content,
             analysis_timestamp=datetime.now().isoformat(),
             category=category,
             categories_detected=categories_detected,

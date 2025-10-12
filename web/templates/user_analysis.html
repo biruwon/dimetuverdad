@@ -157,24 +157,6 @@
             background: #e8f0fe;
             color: #1a73e8;
         }
-        .priority-badge {
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 0.8em;
-            font-weight: 600;
-        }
-        .priority-high {
-            background: #fce8e6;
-            color: #d73027;
-        }
-        .priority-medium {
-            background: #fff3cd;
-            color: #856404;
-        }
-        .priority-low {
-            background: #e8f5e8;
-            color: #2e7d32;
-        }
         .timestamp {
             color: #666;
             font-size: 0.8em;
@@ -275,7 +257,6 @@
         </div>
         <div>
             <a href="/" class="btn btn-secondary">← Dashboard</a>
-            <a href="/search?q=@{{ username }}" class="btn btn-secondary">Search User</a>
         </div>
     </div>
 
@@ -331,7 +312,6 @@
                         {% if analysis.subcategory %}
                         <span class="category-badge subcategory-badge">{{ analysis.subcategory }}</span>
                         {% endif %}
-                        <span class="priority-badge priority-{{ analysis.fact_check_priority }}">{{ analysis.fact_check_priority.title() }}</span>
                     </div>
                 </div>
 
@@ -354,9 +334,6 @@
 
                 <div class="actions">
                     <a href="{{ analysis.tweet_url }}" target="_blank" class="btn btn-small">View Original Tweet</a>
-                    {% if analysis.fact_check_priority in ['high', 'medium'] %}
-                    <a href="/fact-check" class="btn btn-small btn-outline">Add to Fact-Check Queue</a>
-                    {% endif %}
                 </div>
             </div>
             {% endfor %}

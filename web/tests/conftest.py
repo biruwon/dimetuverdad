@@ -6,7 +6,6 @@ Comprehensive testing for Flask application routes, templates, and functionality
 import pytest
 import tempfile
 import os
-import sqlite3
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
@@ -16,118 +15,40 @@ sys.path.insert(0, str(project_root))
 
 from web.app import create_app
 from config import ADMIN_TOKEN
-
-def init_test_db(db_path: str):
-    """Initialize test database with minimal schema."""
-    # Remove existing test database
-    if os.path.exists(db_path):
-        os.remove(db_path)
-
-    # Create fresh database
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-
-    try:
-        # Create minimal tables for testing
-        c.execute('''
-            CREATE TABLE accounts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                profile_pic_url TEXT,
-                last_scraped TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        c.execute('''
-            CREATE TABLE tweets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tweet_id TEXT UNIQUE NOT NULL,
-                tweet_url TEXT NOT NULL,
-                username TEXT NOT NULL,
-                content TEXT NOT NULL,
-                post_type TEXT DEFAULT 'original',
-                media_links TEXT,
-                media_count INTEGER DEFAULT 0,
-                hashtags TEXT,
-                mentions TEXT,
-                tweet_timestamp TEXT,
-                scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (username) REFERENCES accounts (username)
-            )
-        ''')
-
-        c.execute('''
-            CREATE TABLE content_analyses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tweet_id TEXT NOT NULL,
-                tweet_url TEXT,
-                username TEXT,
-                tweet_content TEXT,
-                category TEXT,
-                categories_detected TEXT,
-                llm_explanation TEXT,
-                analysis_method TEXT DEFAULT "pattern",
-                analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                analysis_json TEXT,
-                pattern_matches TEXT,
-                topic_classification TEXT,
-                media_urls TEXT,
-                media_analysis TEXT,
-                media_type TEXT,
-                multimodal_analysis BOOLEAN DEFAULT FALSE,
-                FOREIGN KEY (tweet_id) REFERENCES tweets (tweet_id),
-                FOREIGN KEY (username) REFERENCES accounts (username),
-                UNIQUE(tweet_id)
-            )
-        ''')
-
-        # Create indexes
-        c.execute('CREATE INDEX idx_tweets_username ON tweets(username)')
-        c.execute('CREATE INDEX idx_tweets_timestamp ON tweets(scraped_at)')
-        c.execute('CREATE INDEX idx_analyses_tweet ON content_analyses(tweet_id)')
-        c.execute('CREATE INDEX idx_analyses_category ON content_analyses(category)')
-        c.execute('CREATE INDEX idx_analyses_username ON content_analyses(username)')
-
-        conn.commit()
-
-    except Exception as e:
-        conn.rollback()
-        raise e
-    finally:
-        conn.close()
+from utils.database import init_test_database, cleanup_test_databases
 
 
 @pytest.fixture
 def app():
     """Create and configure a test app instance."""
-    # Create temporary database for testing
-    db_fd, db_path = tempfile.mkstemp()
+    # Set testing environment
+    os.environ['DIMETUVERDAD_ENV'] = 'testing'
 
-    # Configure test app
-    test_config = {
-        'TESTING': True,
-        'DATABASE_PATH': db_path,
-        'SECRET_KEY': 'test-secret-key',
-        'ADMIN_TOKEN': 'test-admin-token',
-        'CACHE_TYPE': 'SimpleCache',
-        'CACHE_DEFAULT_TIMEOUT': 300,
-        'DB_TIMEOUT': 30.0,
-        'DB_CHECK_SAME_THREAD': False
-    }
+    try:
+        # Initialize test database
+        test_db_path = init_test_database(fixtures=False)
 
-    flask_app = create_app()
-    flask_app.config.update(test_config)
+        # Configure test app
+        test_config = {
+            'TESTING': True,
+            'DATABASE_PATH': test_db_path,
+            'SECRET_KEY': 'test-secret-key',
+            'ADMIN_TOKEN': 'test-admin-token',
+            'CACHE_TYPE': 'SimpleCache',
+            'CACHE_DEFAULT_TIMEOUT': 300,
+            'DB_TIMEOUT': 30.0,
+            'DB_CHECK_SAME_THREAD': False
+        }
 
-    # Initialize test database
-    with flask_app.app_context():
-        init_test_db(db_path)
+        flask_app = create_app()
+        flask_app.config.update(test_config)
 
-    yield flask_app
+        yield flask_app
 
-    # Cleanup
-    os.close(db_fd)
-    os.unlink(db_path)
+    finally:
+        # Cleanup test database
+        cleanup_test_databases()
+        os.environ.pop('DIMETUVERDAD_ENV', None)
 
 
 @pytest.fixture
@@ -200,7 +121,7 @@ class MockRow:
 @pytest.fixture
 def mock_database():
     """Mock database operations."""
-    with patch('web.app.get_db_connection') as mock_conn:
+    with patch('utils.database.get_db_connection') as mock_conn:
         mock_cursor = Mock()
         mock_connection = Mock()
 

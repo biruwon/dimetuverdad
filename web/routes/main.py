@@ -36,7 +36,7 @@ def index() -> str:
             # Check if account has posts in this category
             has_category = conn.execute("""
                 SELECT COUNT(*) FROM content_analyses ca
-                JOIN tweets t ON ca.tweet_id = t.tweet_id
+                JOIN tweets t ON ca.post_id = t.tweet_id
                 WHERE t.username = ? AND ca.category = ?
             """, (account['username'], category_filter)).fetchone()[0]
 
@@ -55,9 +55,9 @@ def index() -> str:
         overall_stats = conn.execute("""
         SELECT
             COUNT(DISTINCT t.username) as total_accounts,
-            COUNT(CASE WHEN ca.tweet_id IS NOT NULL THEN 1 END) as analyzed_tweets
+            COUNT(CASE WHEN ca.post_id IS NOT NULL THEN 1 END) as analyzed_tweets
         FROM tweets t
-        LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
+        LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
         """).fetchone()
         conn.close()
         return dict(overall_stats) if overall_stats else {}

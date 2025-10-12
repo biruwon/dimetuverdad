@@ -78,5 +78,10 @@
         "/.*python.*-c.*/": true,
         "source venv/bin/activate && python -c *": true,
         "cd /Users/antonio/projects/bulos/dimetuverdad && source venv/bin/activate && python -c *": true
-    }
+    },
+    "python.testing.pytestArgs": [
+      "."
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

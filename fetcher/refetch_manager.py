@@ -16,6 +16,8 @@ from fetcher.session_manager import SessionManager
 from fetcher.media_monitor import MediaMonitor
 from fetcher.scroller import Scroller
 from utils import paths
+# Import repository interfaces
+from repositories import get_tweet_repository
 
 
 class RefetchManager:

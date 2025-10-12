@@ -23,6 +23,8 @@ from .media_monitor import get_media_monitor
 from . import db as fetcher_db
 from . import parsers as fetcher_parsers
 from utils import paths
+# Import repository interfaces
+from repositories import get_tweet_repository
 
 logger = get_logger('collector')
 
@@ -77,26 +79,21 @@ class TweetCollector:
         if not resume_from_last:
             return False, None
 
-        exists = fetcher_db.check_if_tweet_exists(username, tweet_id)
+        # Use repository pattern
+        tweet_repo = get_tweet_repository()
+        tweet = tweet_repo.get_tweet_by_id(tweet_id)
+        
+        exists = tweet is not None and tweet.get('username') == username
         if not exists:
             return False, None
 
-        # Check if update is needed
-        try:
-            conn = sqlite3.connect(self.db_path, timeout=self.config.db_timeout)
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute("SELECT post_type, content, original_author, original_tweet_id FROM tweets WHERE tweet_id = ?", (tweet_id,))
-            db_row = cur.fetchone()
-            conn.close()
-
-            if db_row:
-                return True, dict(db_row)
-            return True, None
-
-        except Exception as e:
-            logger.warning(f"Error checking tweet existence: {e}")
-            return False, None
+        # Return existing data for comparison
+        return True, {
+            'post_type': tweet.get('post_type'),
+            'content': tweet.get('content'),
+            'original_author': tweet.get('original_author'),
+            'original_tweet_id': tweet.get('original_tweet_id')
+        }
 
     def extract_tweet_data(self, article, tweet_id: str, tweet_url: str, username: str, profile_pic_url: Optional[str], media_urls: List[str]) -> Optional[Dict]:
         """

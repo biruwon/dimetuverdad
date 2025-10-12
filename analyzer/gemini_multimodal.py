@@ -394,6 +394,66 @@ class GeminiMultimodal:
         # Configure logging level
         self.logger.setLevel(getattr(logging, dependencies.config.log_level.upper()))
 
+        # Track rate-limited models to avoid repeated failures
+        self.rate_limited_models = set()
+
+    def _get_available_models(self) -> List[str]:
+        """
+        Get list of available models, excluding currently rate-limited ones.
+
+        Returns:
+            List of model names that are not currently rate-limited
+        """
+        available_models = []
+
+        for model_name in self.dependencies.config.model_priority:
+            if model_name not in self.rate_limited_models:
+                available_models.append(model_name)
+            else:
+                self.logger.debug(f"⏳ Skipping rate-limited model {model_name}")
+
+        return available_models
+
+    def _mark_model_rate_limited(self, model_name: str):
+        """
+        Mark a model as rate-limited.
+
+        Args:
+            model_name: Name of the model that was rate-limited
+        """
+        self.rate_limited_models.add(model_name)
+        self.logger.warning(f"🚫 Marked model as rate-limited: {model_name}")
+
+    def _mark_model_success(self, model_name: str):
+        """
+        Mark a model as successful, clearing any rate-limit status.
+
+        Args:
+            model_name: Name of the model that succeeded
+        """
+        if model_name in self.rate_limited_models:
+            self.rate_limited_models.discard(model_name)
+            self.logger.info(f"✅ Model recovered from rate-limit: {model_name}")
+
+    def get_rate_limit_status(self) -> Dict[str, Any]:
+        """
+        Get current rate limit status for all models.
+
+        Returns:
+            Dict with rate limit information
+        """
+        status = {
+            "rate_limited_models": list(self.rate_limited_models),
+            "available_models": self._get_available_models()
+        }
+
+        return status
+
+    def reset_rate_limits(self):
+        """Reset all rate limit tracking."""
+        self.rate_limited_models.clear()
+        self.logger.info("🔄 Reset all rate limit tracking")
+
     def analyze_multimodal_content(self, media_urls: List[str], text_content: str) -> Tuple[Optional[str], float]:
         """
         Analyze multimodal content (images/videos + text) using Gemini models with fallback.
@@ -450,8 +510,13 @@ class GeminiMultimodal:
             return None, time.time() - analysis_start_time
 
         try:
-            # Try each model in priority order
-            for model_name in self.dependencies.config.model_priority:
+            # Try each available model in priority order
+            available_models = self._get_available_models()
+            if not available_models:
+                self.logger.error("💔 No available models (all rate-limited)")
+                return None, time.time() - analysis_start_time
+
+            for model_name in available_models:
                 # Check timeout
                 if time.time() - analysis_start_time > self.dependencies.config.analysis_timeout:
                     self.logger.error("❌ Analysis timeout exceeded")
@@ -459,6 +524,8 @@ class GeminiMultimodal:
 
                 result = self._try_model_analysis(model_name, media_path, media_url, text_content, is_video)
                 if result:
+                    # Mark model as successful
+                    self._mark_model_success(model_name)
                     total_time = time.time() - analysis_start_time
                     self.dependencies.metrics_collector.record_operation(
                         "analysis_success", total_time, True,
@@ -466,8 +533,8 @@ class GeminiMultimodal:
                     )
                     return result, total_time
 
-            # All models failed
-            self.logger.error("💔 All models failed")
+            # All available models failed
+            self.logger.error("💔 All available models failed")
             return None, time.time() - analysis_start_time
 
         finally:
@@ -533,8 +600,13 @@ class GeminiMultimodal:
             return None, time.time() - analysis_start_time
 
         try:
-            # Try each model in priority order with async processing
-            for model_name in self.dependencies.config.model_priority:
+            # Try each available model in priority order
+            available_models = self._get_available_models()
+            if not available_models:
+                self.logger.error("💔 No available models (all rate-limited)")
+                return None, time.time() - analysis_start_time
+
+            for model_name in available_models:
                 # Check timeout
                 if time.time() - analysis_start_time > self.dependencies.config.analysis_timeout:
                     self.logger.error("❌ Analysis timeout exceeded")
@@ -542,6 +614,8 @@ class GeminiMultimodal:
 
                 result = await self._try_model_analysis_async(model_name, media_path, media_url, text_content, is_video)
                 if result:
+                    # Mark model as successful
+                    self._mark_model_success(model_name)
                     total_time = time.time() - analysis_start_time
                     self.dependencies.metrics_collector.record_operation(
                         "async_analysis_success", total_time, True,
@@ -549,8 +623,8 @@ class GeminiMultimodal:
                     )
                     return result, total_time
 
-            # All models failed
-            self.logger.error("💔 All async models failed")
+            # All available models failed
+            self.logger.error("💔 All available async models failed")
             return None, time.time() - analysis_start_time
 
         finally:
@@ -767,6 +841,11 @@ class GeminiMultimodal:
 
         except Exception as e:
             error = classify_error(e, f"{model_name} analysis")
+
+            # Check if this is a rate limiting error
+            if error.category == ErrorCategory.QUOTA_ERROR:
+                self._mark_model_rate_limited(model_name)
+
             self.logger.error(f"❌ {error}")
             return None
 
@@ -811,6 +890,11 @@ class GeminiMultimodal:
 
         except Exception as e:
             error = classify_error(e, f"async {model_name} analysis")
+
+            # Check if this is a rate limiting error
+            if error.category == ErrorCategory.QUOTA_ERROR:
+                self._mark_model_rate_limited(model_name)
+
             self.logger.error(f"❌ {error}")
             return None
 

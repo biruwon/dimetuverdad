@@ -196,6 +196,9 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Category Distribution -->
+            <div class="col-md-6 mb-4">
                 <div class="card admin-card">
                     <div class="card-header bg-info text-white">
                         <h5 class="mb-0">
@@ -205,6 +208,7 @@
                     <div class="card-body">
                         {% for category in categories %}
                             <div class="d-flex justify-content-between align-items-center mb-2">
+                                {% if category.category %}
                                 <a href="{{ url_for('admin.admin_view_category', category_name=category.category) }}" class="text-decoration-none" title="Ver todos los tweets de esta categoría">
                                     <span class="badge category-badge bg-{{ 
                                         'danger' if category.category == 'hate_speech' else
@@ -218,6 +222,11 @@
                                         {{ category.category }} <i class="fas fa-external-link-alt ms-1 small"></i>
                                     </span>
                                 </a>
+                                {% else %}
+                                <span class="badge category-badge bg-secondary" title="Categoría sin nombre">
+                                    Sin categoría <i class="fas fa-exclamation-triangle ms-1 small"></i>
+                                </span>
+                                {% endif %}
                                 <strong>{{ category.count }}</strong>
                             </div>
                         {% endfor %}
@@ -237,10 +246,10 @@
                     </div>
                     <div class="card-body recent-activity">
                         {% for analysis in recent_analyses %}
-                            <div class="border-bottom py-2 hover-bg-light" style="cursor: pointer;" onclick="window.open('{{ url_for('admin.admin_view_user_category', username=analysis.username, category=analysis.category) }}', '_blank')">
+                            <div class="border-bottom py-2 hover-bg-light" style="cursor: pointer;" {% if analysis.username and analysis.category %}onclick="window.open('{{ url_for('admin.admin_view_user_category', username=analysis.username, category=analysis.category) }}', '_blank')"{% endif %}>
                                 <div class="row align-items-center">
                                     <div class="col-md-2">
-                                        <small class="text-muted">{{ analysis.analysis_timestamp[:16].replace('T', ' ') }}</small>
+                                        <small class="text-muted">{{ analysis.analysis_timestamp[:16].replace('T', ' ') if analysis.analysis_timestamp else '' }}</small>
                                     </div>
                                     <div class="col-md-2">
                                         <span class="badge bg-{{ 
@@ -256,9 +265,13 @@
                                         </span>
                                     </div>
                                     <div class="col-md-2">
+                                        {% if analysis.username %}
                                         <a href="{{ url_for('main.user_page', username=analysis.username) }}" class="text-decoration-none" onclick="event.stopPropagation();">
                                             <strong>@{{ analysis.username }}</strong> <i class="fas fa-external-link-alt small"></i>
                                         </a>
+                                        {% else %}
+                                        <span class="text-muted">Sin usuario</span>
+                                        {% endif %}
                                     </div>
                                     <div class="col-md-4">
                                         <small>{{ analysis.content_preview }}...</small>

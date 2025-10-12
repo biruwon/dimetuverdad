@@ -25,6 +25,8 @@ from .pattern_analyzer import PatternAnalyzer
 from utils.text_utils import normalize_text
 from .llm_models import EnhancedLLMPipeline
 from .categories import Categories
+# Import repository interfaces
+from repositories import get_tweet_repository
 
 # Import new modular components
 from .config import AnalyzerConfig
@@ -133,10 +135,10 @@ class Analyzer:
 
             # Return error result
             return ContentAnalysis(
-                tweet_id=tweet_id,
-                tweet_url=tweet_url,
-                username=username,
-                tweet_content=content,
+                post_id=tweet_id,
+                post_url=tweet_url,
+                author_username=username,
+                post_content=content,
                 analysis_timestamp=datetime.now().isoformat(),
                 category=Categories.GENERAL,
                 categories_detected=[Categories.GENERAL],
@@ -278,7 +280,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
     )
 
     # Also get count of already analyzed tweets for reporting
-    analyzed_count = analyzer_instance.repository.get_analysis_count_by_username(username)
+    analyzed_count = analyzer_instance.repository.get_analysis_count_by_author(username)
 
     if not tweets:
         search_desc = "tweets" if force_reanalyze else "unanalyzed tweets"
@@ -335,10 +337,10 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
 
             # Create ContentAnalysis object for saving (copy all fields from result)
             analysis = ContentAnalysis(
-                tweet_id=tweet_id,
-                tweet_url=tweet_url,
-                username=tweet_username,
-                tweet_content=content,
+                post_id=tweet_id,
+                post_url=tweet_url,
+                author_username=tweet_username,
+                post_content=content,
                 analysis_timestamp=datetime.now().isoformat(),
                 category=result.category,
                 categories_detected=getattr(result, 'categories_detected', []),

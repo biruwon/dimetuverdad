@@ -79,11 +79,11 @@ class Tweet:
 @dataclass
 class ContentAnalysis:
     """Represents the analysis results for a tweet."""
-    tweet_id: str
+    post_id: str
     category: str
     llm_explanation: str
     analysis_method: str
-    username: str
+    author_username: str
     analysis_timestamp: str
     categories_detected: Optional[str] = None
     multimodal_analysis: bool = False
@@ -93,11 +93,11 @@ class ContentAnalysis:
     def from_row(cls, row) -> 'ContentAnalysis':
         """Create ContentAnalysis instance from database row."""
         return cls(
-            tweet_id=row['tweet_id'],
+            post_id=row['post_id'],
             category=row['category'] or 'general',
             llm_explanation=row['llm_explanation'] or '',
             analysis_method=row['analysis_method'] or 'unknown',
-            username=row['username'] or '',
+            author_username=row['author_username'] or '',
             analysis_timestamp=row['analysis_timestamp'] or '',
             categories_detected=row['categories_detected'],
             multimodal_analysis=bool(row['multimodal_analysis']) if row['multimodal_analysis'] is not None else False,
@@ -107,11 +107,11 @@ class ContentAnalysis:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
-            'tweet_id': self.tweet_id,
+            'post_id': self.post_id,
             'category': self.category,
             'llm_explanation': self.llm_explanation,
             'analysis_method': self.analysis_method,
-            'username': self.username,
+            'author_username': self.author_username,
             'analysis_timestamp': self.analysis_timestamp,
             'categories_detected': self.categories_detected,
             'multimodal_analysis': self.multimodal_analysis,

@@ -12,7 +12,9 @@ from web.utils.decorators import rate_limit, ANALYSIS_CATEGORIES
 from utils import database
 import config
 
+import logging
 api_bp = Blueprint('api', __name__, url_prefix='/api')
+api_bp.logger = logging.getLogger('web.routes.api')
 
 def get_db_connection():
     """Get database connection with row factory for easier access."""
@@ -97,7 +99,7 @@ def get_tweet_versions(tweet_id: str) -> str:
                 t.content, t.username, t.tweet_timestamp, t.tweet_url,
                 ca.category, ca.llm_explanation
             FROM tweets t
-            LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
+            LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
             WHERE t.tweet_id = ?
         """, (tweet_id,)).fetchone()
 
@@ -149,6 +151,41 @@ def get_tweet_versions(tweet_id: str) -> str:
 
     except Exception as e:
         api_bp.logger.error(f"Error getting tweet versions for {tweet_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@api_bp.route('/tweet-status/<tweet_id>')
+@rate_limit(**config.get_rate_limit('api_endpoints'))
+def get_tweet_status(tweet_id: str) -> str:
+    """API endpoint to check if a tweet exists and get basic status."""
+    try:
+        conn = get_db_connection()
+        
+        # Check if tweet exists
+        tweet = conn.execute("""
+            SELECT 
+                t.tweet_id, t.username, t.content,
+                ca.category, ca.analysis_method
+            FROM tweets t
+            LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
+            WHERE t.tweet_id = ?
+        """, (tweet_id,)).fetchone()
+        
+        conn.close()
+        
+        if tweet:
+            return jsonify({
+                'exists': True,
+                'tweet_id': tweet['tweet_id'],
+                'username': tweet['username'],
+                'analyzed': tweet['category'] is not None,
+                'category': tweet['category'],
+                'analysis_method': tweet['analysis_method']
+            })
+        else:
+            return jsonify({'exists': False}), 404
+            
+    except Exception as e:
+        api_bp.logger.error(f"Error checking tweet status for {tweet_id}: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/usernames')

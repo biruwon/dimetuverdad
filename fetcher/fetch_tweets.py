@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fetcher import db as fetcher_db
 from fetcher import parsers as fetcher_parsers
-from fetcher.config import FetcherConfig, get_config
+from fetcher.config import FetcherConfig, get_config, DEFAULT_HANDLES
 from fetcher.logging_config import setup_logging, get_logger
 from fetcher.session_manager import SessionManager
 from fetcher.scroller import Scroller
@@ -35,6 +35,8 @@ from fetcher.media_monitor import MediaMonitor
 from fetcher.resume_manager import ResumeManager
 from fetcher.refetch_manager import RefetchManager
 from utils import paths
+# Import repository interfaces
+from repositories import get_tweet_repository
 
 try:
     from dotenv import load_dotenv
@@ -70,21 +72,6 @@ PASSWORD = config.password
 EMAIL_OR_PHONE = config.email_or_phone
 USER_AGENTS = config.user_agents
 DB_PATH = str(paths.get_db_path())
-
-# Default target handles (focusing on Spanish far-right accounts)
-DEFAULT_HANDLES = [
-    "vox_es",
-    "Santi_ABASCAL", 
-    "eduardomenoni",
-    "IdiazAyuso",
-    "CapitanBitcoin",
-    "vitoquiles",
-    "wallstwolverine", 
-    "WillyTolerdoo",
-    "Agenda2030_",
-    "Doct_Tricornio",
-    "LosMeconios"
-]
 
 
 def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size: int = 800) -> List[Dict]:
@@ -381,26 +368,24 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
         oldest_timestamp = None
         newest_timestamp = None
         if resume_from_last:
-            # Get the oldest timestamp for resume
-            try:
-                cur = conn.cursor()
-                cur.execute("SELECT tweet_timestamp FROM tweets WHERE username = ? ORDER BY tweet_timestamp ASC LIMIT 1", (username,))
-                row = cur.fetchone()
-                oldest_timestamp = row[0] if row else None
-            except Exception:
-                oldest_timestamp = None
+            # Use repository to get tweet timestamps
+            tweet_repo = get_tweet_repository()
             
-            if oldest_timestamp:
-                # Also get the newest timestamp to detect new tweets
-                try:
-                    cur = conn.cursor()
-                    cur.execute("SELECT tweet_timestamp FROM tweets WHERE username = ? ORDER BY tweet_timestamp DESC LIMIT 1", (username,))
-                    row = cur.fetchone()
-                    newest_timestamp = row[0] if row else None
-                except Exception:
-                    newest_timestamp = None
+            # Get tweets for this user to find timestamps
+            user_tweets = tweet_repo.get_tweets_by_username(username, limit=1000)  # Get enough to find min/max
+            
+            if user_tweets:
+                # Extract timestamps
+                timestamps = []
+                for tweet in user_tweets:
+                    if tweet.get('tweet_timestamp'):
+                        timestamps.append(tweet['tweet_timestamp'])
                 
-                print(f"📅 Existing tweet range: {newest_timestamp} (newest) to {oldest_timestamp} (oldest)")
+                if timestamps:
+                    oldest_timestamp = min(timestamps)
+                    newest_timestamp = max(timestamps)
+                    
+                    print(f"📅 Existing tweet range: {newest_timestamp} (newest) to {oldest_timestamp} (oldest)")
                 
                 # PHASE 1: Fetch new tweets (from profile start)
                 print(f"\n🔄 PHASE 1: Fetching new tweets (newer than {newest_timestamp})")

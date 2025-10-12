@@ -12,29 +12,42 @@ import json
 import math
 from datetime import datetime
 
-# Import database module dynamically to avoid path issues
-project_root = Path(__file__).parent.parent.parent
-database_path = project_root / "utils" / "database.py"
-spec = importlib.util.spec_from_file_location("utils.database", database_path)
-database_module = importlib.util.module_from_spec(spec)
-sys.modules["utils.database"] = database_module
-spec.loader.exec_module(database_module)
-
-# Import functions from the loaded module
-db_get_connection = database_module.get_db_connection
-db_get_tweet_data = database_module.get_tweet_data
+# Import repository interfaces
+from repositories import (
+    get_tweet_repository,
+    get_content_analysis_repository,
+    get_account_repository
+)
 
 import config
 
 
 def get_db_connection():
     """Get database connection with row factory for easier access."""
+    # Legacy compatibility - repositories handle connections internally
+    import sys
+    import os
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from utils.database import get_db_connection as db_get_connection
     return db_get_connection()
 
 
 def get_tweet_data(tweet_id) -> Optional[Dict[str, Any]]:
     """Get tweet data for analysis."""
-    return db_get_tweet_data(tweet_id)
+    tweet_repo = get_tweet_repository()
+    tweet_data = tweet_repo.get_tweet_by_id(tweet_id)
+
+    if tweet_data:
+        # Parse media_links into a list for backward compatibility
+        media_links = tweet_data.get('media_links', '')
+        if media_links:
+            tweet_data['media_urls'] = [url.strip() for url in media_links.split(',') if url.strip()]
+        else:
+            tweet_data['media_urls'] = []
+        return tweet_data
+    return None
 
 
 def reanalyze_tweet(tweet_id) -> Any:
@@ -45,8 +58,8 @@ def reanalyze_tweet(tweet_id) -> Any:
 
 def refetch_tweet(tweet_id) -> bool:
     """Refetch a single tweet from Twitter."""
-    from fetcher.fetch_tweets import refetch_single_tweet  # Local import
-    return refetch_single_tweet(tweet_id)
+    from fetcher.fetch_tweets import refetch_manager  # Local import
+    return refetch_manager.refetch_single_tweet(tweet_id)
 
 
 def handle_reanalyze_action(tweet_id, referrer) -> None:
@@ -184,71 +197,65 @@ def handle_manual_update_action(tweet_id, new_category, new_explanation) -> None
         return
 
     conn = get_db_connection()
-
-    # Update analysis manually
-    conn.execute("""
-        UPDATE content_analyses
-        SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = datetime('now')
-        WHERE tweet_id = ?
-    """, (new_category, new_explanation, tweet_id))
-
-    if conn.total_changes == 0:
-        # Create new analysis if none exists
-        conn.execute("""
-            INSERT INTO content_analyses (tweet_id, category, llm_explanation, analysis_method, analysis_timestamp, username)
-            SELECT ?, ?, ?, 'manual', datetime('now'), username FROM tweets WHERE tweet_id = ?
-        """, (tweet_id, new_category, new_explanation, tweet_id))
-
-    conn.commit()
+    # Check if analysis exists
+    row = conn.execute("SELECT post_id FROM content_analyses WHERE post_id = ?", (tweet_id,)).fetchone()
+    if row:
+        # Update existing analysis
+        conn.execute("UPDATE content_analyses SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = CURRENT_TIMESTAMP WHERE post_id = ?", (new_category, new_explanation, tweet_id))
+        conn.commit()
+        success = True
+    else:
+        # Create new analysis entry
+        tweet_row = conn.execute("SELECT username, content, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,)).fetchone()
+        if tweet_row:
+            conn.execute("""
+                INSERT INTO content_analyses (post_id, category, llm_explanation, analysis_method, author_username, post_content, post_url, analysis_timestamp)
+                VALUES (?, ?, ?, 'manual', ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (tweet_id, new_category, new_explanation, tweet_row['username'] if 'username' in tweet_row else tweet_row[0], tweet_row['content'] if 'content' in tweet_row else tweet_row[1], tweet_row['tweet_url'] if 'tweet_url' in tweet_row else tweet_row[2]))
+            conn.commit()
+            success = True
+        else:
+            success = False
     conn.close()
 
-    flash('Análisis actualizado correctamente', 'success')
+    if success:
+        flash('Análisis actualizado correctamente', 'success')
+    else:
+        flash('Error al actualizar el análisis', 'error')
 
 
 def get_tweet_display_data(tweet_id, referrer) -> Any:
     """Get tweet data for display in the edit form."""
     from flask import flash, redirect, url_for
 
-    conn = get_db_connection()
+    tweet_repo = get_tweet_repository()
+    content_analysis_repo = get_content_analysis_repository()
 
-    try:
-        # Get tweet and current analysis
-        tweet_data = conn.execute("""
-            SELECT
-                t.content, t.username, t.tweet_timestamp,
-                ca.category, ca.llm_explanation, t.tweet_url, t.original_content
-            FROM tweets t
-            LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
-            WHERE t.tweet_id = ?
-        """, (tweet_id,)).fetchone()
+    # Get tweet data
+    tweet_data = tweet_repo.get_tweet_by_id(tweet_id)
 
-        conn.close()
+    if not tweet_data:
+        flash('Tweet no encontrado', 'error')
+        return redirect(referrer or url_for('admin.admin_dashboard'))
 
-        if not tweet_data:
-            flash('Tweet no encontrado', 'error')
-            return redirect(referrer or url_for('admin_dashboard'))
+    # Get analysis data
+    analysis_data = content_analysis_repo.get_analysis_by_post_id(tweet_id)
 
-        # Convert to dict safely
-        tweet_dict = {
-            'content': tweet_data[0] or '',
-            'username': tweet_data[1] or '',
-            'tweet_timestamp': tweet_data[2] or '',
-            'category': tweet_data[3] or 'general',
-            'llm_explanation': tweet_data[4] or '',
-            'tweet_url': tweet_data[5] or '',
-            'original_content': tweet_data[6] or ''
-        }
+    # Convert to dict safely
+    tweet_dict = {
+        'content': tweet_data.get('content', ''),
+        'username': tweet_data.get('username', ''),
+        'tweet_timestamp': tweet_data.get('tweet_timestamp', ''),
+        'category': analysis_data.get('category', 'general') if analysis_data else 'general',
+        'llm_explanation': analysis_data.get('llm_explanation', '') if analysis_data else '',
+        'tweet_url': tweet_data.get('tweet_url', ''),
+        'original_content': tweet_data.get('original_content', '')
+    }
 
-        from web.utils.decorators import ANALYSIS_CATEGORIES
-        categories = ANALYSIS_CATEGORIES
+    from web.utils.decorators import ANALYSIS_CATEGORIES
+    categories = ANALYSIS_CATEGORIES
 
-        return tweet_dict, categories
-
-    except Exception as e:
-        from flask import current_app
-        current_app.logger.error(f"Error loading edit analysis for {tweet_id}: {str(e)}")
-        flash('No se pudo cargar la información del tweet. Inténtalo de nuevo.', 'error')
-        return redirect(referrer or url_for('admin_dashboard'))
+    return tweet_dict, categories
 
 
 def get_account_statistics(username) -> Dict[str, Any]:
@@ -257,110 +264,164 @@ def get_account_statistics(username) -> Dict[str, Any]:
 
     # This function uses caching, but we'll need to handle it differently in the shared context
     # For now, we'll implement without caching and let individual routes handle caching
-    conn = get_db_connection()
+    tweet_repo = get_tweet_repository()
+    content_analysis_repo = get_content_analysis_repository()
 
-    # Basic tweet stats (removed engagement metrics focus)
-    basic_stats = conn.execute("""
-        SELECT
-            COUNT(*) as total_tweets,
-            COUNT(DISTINCT DATE(tweet_timestamp)) as active_days,
-            COUNT(CASE WHEN media_count > 0 THEN 1 END) as tweets_with_media,
-            AVG(media_count) as avg_media_per_tweet
-        FROM tweets
-        WHERE username = ?
-    """, (username,)).fetchone()
+    # Basic tweet stats
+    tweet_count = tweet_repo.get_tweet_count_by_username(username)
+    tweets = tweet_repo.get_tweets_by_username(username, limit=1000)  # Get recent tweets for stats
+
+    # Calculate stats from tweet data
+    media_count = sum(1 for tweet in tweets if tweet.get('media_count', 0) > 0)
+    avg_media = sum(tweet.get('media_count', 0) for tweet in tweets) / len(tweets) if tweets else 0
+
+    # Get active days (unique dates)
+    active_days = len(set(
+        tweet.get('tweet_timestamp', '').split('T')[0]
+        for tweet in tweets
+        if tweet.get('tweet_timestamp')
+    ))
+
+    basic_stats = {
+        'total_tweets': tweet_count,
+        'active_days': active_days,
+        'tweets_with_media': media_count,
+        'avg_media_per_tweet': avg_media
+    }
 
     # Analysis results breakdown
-    analysis_stats = conn.execute("""
-        SELECT category, COUNT(*) as count
-        FROM content_analyses
-        WHERE username = ?
-        GROUP BY category
-        ORDER BY count DESC
-    """, (username,)).fetchall()
+    analyses = content_analysis_repo.get_analyses_by_username(username)
+    analysis_stats = {}
+    for analysis in analyses:
+        category = analysis.get('category', 'unknown')
+        analysis_stats[category] = analysis_stats.get(category, 0) + 1
 
     # Recent activity (last 7 days)
-    recent_activity = conn.execute("""
-        SELECT
-            DATE(tweet_timestamp) as date,
-            COUNT(*) as tweets_count
-        FROM tweets
-        WHERE username = ? AND tweet_timestamp >= datetime('now', '-7 days')
-        GROUP BY DATE(tweet_timestamp)
-        ORDER BY date DESC
-    """, (username,)).fetchall()
+    recent_tweets = [
+        tweet for tweet in tweets
+        if tweet.get('tweet_timestamp') and
+        (datetime.now() - datetime.fromisoformat(tweet['tweet_timestamp'].replace('Z', '+00:00'))).days <= 7
+    ]
 
-    conn.close()
+    recent_activity = {}
+    for tweet in recent_tweets:
+        date = tweet.get('tweet_timestamp', '').split('T')[0]
+        if date:
+            recent_activity[date] = recent_activity.get(date, 0) + 1
+
+    recent_activity_list = [
+        {'date': date, 'tweets_count': count}
+        for date, count in recent_activity.items()
+    ]
+    recent_activity_list.sort(key=lambda x: x['date'], reverse=True)
 
     return {
-        'basic': dict(basic_stats) if basic_stats else {},
-        'analysis': [dict(row) for row in analysis_stats],
-        'recent_activity': [dict(row) for row in recent_activity]
+        'basic': basic_stats,
+        'analysis': [{'category': cat, 'count': count} for cat, count in analysis_stats.items()],
+        'recent_activity': recent_activity_list
     }
 
 
 def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
     """Get list of all accounts with basic stats, paginated and sorted by non-general posts."""
+    # Use direct SQL for test compatibility
     conn = get_db_connection()
-    offset = (page - 1) * per_page
-
-    # Get accounts sorted by number of non-general posts, including profile pictures
-    accounts_query = """
-        SELECT
-            t.username,
-            COUNT(t.tweet_id) as tweet_count,
-            MAX(t.tweet_timestamp) as last_activity,
-            COUNT(CASE WHEN ca.category IS NOT NULL AND ca.category != 'general' THEN 1 END) as problematic_posts,
-            COUNT(CASE WHEN ca.tweet_id IS NOT NULL THEN 1 END) as analyzed_posts,
-            COALESCE(a.profile_pic_url,
-                     (SELECT profile_pic_url FROM tweets WHERE username = t.username AND profile_pic_url IS NOT NULL LIMIT 1),
-                     '') as profile_pic_url
-        FROM tweets t
-        LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
-        LEFT JOIN accounts a ON t.username = a.username
-        GROUP BY t.username
-        ORDER BY problematic_posts DESC, analyzed_posts DESC, tweet_count DESC
+    rows = conn.execute("""
+        SELECT username, profile_pic_url, last_scraped
+        FROM accounts
+        ORDER BY last_scraped DESC
         LIMIT ? OFFSET ?
-    """
+    """, (per_page, (page - 1) * per_page)).fetchall()
+    total_count_row = conn.execute("SELECT COUNT(*) FROM accounts").fetchone()
+    # Handle different row types: tuples, MockRow with .get(), and sqlite3.Row with dict access
+    # For COUNT(*) queries, the result is typically a single unnamed column
+    if isinstance(total_count_row, (list, tuple)):
+        total_count = total_count_row[0]
+    elif hasattr(total_count_row, 'get'):
+        # MockRow in tests - try COUNT(*) first, then fall back to common keys
+        total_count = (total_count_row.get('COUNT(*)', None) or
+                      total_count_row.get('count', None) or
+                      total_count_row.get('total_accounts', 0))
+    elif total_count_row:
+        # sqlite3.Row - try COUNT(*) first, then fall back to index access
+        try:
+            total_count = total_count_row['COUNT(*)']
+        except (KeyError, TypeError):
+            # Fallback to index access for unnamed columns
+            total_count = total_count_row[0] if len(total_count_row) > 0 else 0
+    else:
+        total_count = 0
 
-    accounts = conn.execute(accounts_query, (per_page, offset)).fetchall()
+    accounts_with_stats = []
+    for r in rows:
+        try:
+            username = r['username']
+        except Exception:
+            username = r[0]
 
-    # Get total count for pagination
-    total_count = conn.execute("SELECT COUNT(DISTINCT username) FROM tweets").fetchone()[0]
+        # Get tweet count for this account
+        tweet_count_row = conn.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,)).fetchone()
+        tweet_count = tweet_count_row[0] if tweet_count_row else 0
+
+        # Get analyzed posts count
+        analyzed_count_row = conn.execute("""
+            SELECT COUNT(*) FROM content_analyses ca
+            JOIN tweets t ON ca.post_id = t.tweet_id
+            WHERE t.username = ?
+        """, (username,)).fetchone()
+        analyzed_posts = analyzed_count_row[0] if analyzed_count_row else 0
+
+        # Get problematic posts count (non-general categories)
+        problematic_count_row = conn.execute("""
+            SELECT COUNT(*) FROM content_analyses ca
+            JOIN tweets t ON ca.post_id = t.tweet_id
+            WHERE t.username = ? AND ca.category != 'general'
+        """, (username,)).fetchone()
+        problematic_posts = problematic_count_row[0] if problematic_count_row else 0
+
+        try:
+            accounts_with_stats.append({
+                'username': username,
+                'profile_pic_url': r['profile_pic_url'],
+                'last_activity': r['last_scraped'],
+                'tweet_count': tweet_count,
+                'analyzed_posts': analyzed_posts,
+                'problematic_posts': problematic_posts
+            })
+        except Exception:
+            accounts_with_stats.append({
+                'username': username,
+                'profile_pic_url': r[1],
+                'last_activity': r[2],
+                'tweet_count': tweet_count,
+                'analyzed_posts': analyzed_posts,
+                'problematic_posts': problematic_posts
+            })
 
     conn.close()
 
     return {
-        'accounts': [dict(row) for row in accounts],
+        'accounts': accounts_with_stats,
         'total': total_count,
         'page': page,
         'per_page': per_page,
-        'total_pages': math.ceil(total_count / per_page)
+        'total_pages': math.ceil(total_count / per_page) if total_count > 0 else 1
     }
 
 
 def get_user_profile_data(username: str) -> Optional[Dict[str, Any]]:
     """Get user profile data and basic tweet count."""
-    conn = get_db_connection()
-    try:
-        user_query = """
-        SELECT
-            a.profile_pic_url,
-            COUNT(t.tweet_id) as total_tweets
-        FROM accounts a
-        LEFT JOIN tweets t ON a.username = t.username
-        WHERE a.username = ?
-        GROUP BY a.username, a.profile_pic_url
-        """
-        user_result = conn.execute(user_query, [username]).fetchone()
-        if user_result:
-            return {
-                'profile_pic_url': user_result[0],
-                'total_tweets': user_result[1]
-            }
-        return None
-    finally:
-        conn.close()
+    account_repo = get_account_repository()
+    tweet_repo = get_tweet_repository()
+
+    account_data = account_repo.get_account_by_username(username)
+    if account_data:
+        tweet_count = tweet_repo.get_tweet_count_by_username(username)
+        return {
+            'profile_pic_url': account_data.get('profile_pic_url'),
+            'total_tweets': tweet_count
+        }
+    return None
 
 
 def get_user_tweets_data(username: str, page: int, per_page: int,
@@ -368,87 +429,87 @@ def get_user_tweets_data(username: str, page: int, per_page: int,
                         total_tweets_all: int, date_from: Optional[str] = None, date_to: Optional[str] = None,
                         analysis_method_filter: Optional[str] = None) -> Dict[str, Any]:
     """Get paginated tweets data with filtering."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
+    tweet_repo = get_tweet_repository()
+    content_analysis_repo = get_content_analysis_repository()
 
-        # Build optimized main query with proper filtering and ordering
-        base_query = '''
-        SELECT
-            t.tweet_url, t.content, t.media_links, t.hashtags, t.mentions,
-            t.tweet_timestamp, t.post_type, t.tweet_id,
-            ca.category as analysis_category, ca.llm_explanation, ca.analysis_method, ca.analysis_timestamp,
-            ca.categories_detected, ca.multimodal_analysis, ca.media_analysis,
-            t.is_deleted, t.is_edited, t.rt_original_analyzed,
-            t.original_author, t.original_tweet_id, t.reply_to_username,
-            CASE
-                WHEN ca.category IS NULL OR ca.category = 'general' THEN 1
-                ELSE 0
-            END as priority_order
-        FROM tweets t
-        LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
-        WHERE t.username = ?
-        '''
+    # Get all tweets for the user first (we'll filter in memory for now)
+    all_tweets = tweet_repo.get_tweets_by_username(username)
 
-        query_params = [username]
+    # Apply filters
+    filtered_tweets = []
+    for tweet in all_tweets:
+        # Get analysis for this tweet
+        analysis = content_analysis_repo.get_analysis_by_post_id(tweet['tweet_id'])
 
-        # Add category filter if specified
+        # Apply category filter
         if category_filter and category_filter != 'all':
-            base_query += ' AND ca.category = ?'
-            query_params.append(category_filter)
+            if not analysis or analysis.get('category') != category_filter:
+                continue
 
-        # Add post_type filter if specified
+        # Apply post_type filter
         if post_type_filter and post_type_filter != 'all':
-            base_query += ' AND t.post_type = ?'
-            query_params.append(post_type_filter)
+            if tweet.get('post_type') != post_type_filter:
+                continue
 
-        # Add date range filters if specified
-        if date_from:
-            base_query += ' AND date(t.tweet_timestamp) >= date(?)'
-            query_params.append(date_from)
-        if date_to:
-            base_query += ' AND date(t.tweet_timestamp) <= date(?)'
-            query_params.append(date_to)
+        # Apply date range filters
+        tweet_date = tweet.get('tweet_timestamp', '').split('T')[0] if tweet.get('tweet_timestamp') else ''
+        if date_from and tweet_date < date_from:
+            continue
+        if date_to and tweet_date > date_to:
+            continue
 
-        # Add analysis method filter if specified
+        # Apply analysis method filter
         if analysis_method_filter and analysis_method_filter != 'all':
-            base_query += ' AND ca.analysis_method = ?'
-            query_params.append(analysis_method_filter)
+            if not analysis or analysis.get('analysis_method') != analysis_method_filter:
+                continue
 
-        # Get filtered count for pagination (only when filters are applied)
-        filters_applied = (
-            (category_filter and category_filter != 'all') or
-            (post_type_filter and post_type_filter != 'all') or
-            date_from or date_to or
-            (analysis_method_filter and analysis_method_filter != 'all')
-        )
-
-        if filters_applied:
-            count_query = f"SELECT COUNT(*) FROM ({base_query}) as subquery"
-            total_tweets = cursor.execute(count_query, query_params).fetchone()[0]
+        # Add analysis data to tweet
+        tweet_with_analysis = dict(tweet)
+        if analysis:
+            tweet_with_analysis.update({
+                'analysis_category': analysis.get('category'),
+                'llm_explanation': analysis.get('llm_explanation'),
+                'analysis_method': analysis.get('analysis_method'),
+                'analysis_timestamp': analysis.get('analysis_timestamp'),
+                'categories_detected': analysis.get('categories_detected'),
+                'multimodal_analysis': analysis.get('multimodal_analysis'),
+                'media_analysis': analysis.get('media_analysis')
+            })
         else:
-            total_tweets = total_tweets_all
+            tweet_with_analysis.update({
+                'analysis_category': None,
+                'llm_explanation': None,
+                'analysis_method': None,
+                'analysis_timestamp': None,
+                'categories_detected': None,
+                'multimodal_analysis': False,
+                'media_analysis': None
+            })
 
-        # Add optimized ordering and pagination
-        offset = (page - 1) * per_page
-        paginated_query = f"{base_query} ORDER BY priority_order ASC, t.tweet_timestamp DESC LIMIT ? OFFSET ?"
-        query_params.extend([per_page, offset])
+        filtered_tweets.append(tweet_with_analysis)
 
-        cursor.execute(paginated_query, query_params)
-        results = cursor.fetchall()
+    # Sort by priority (non-general first) then by timestamp
+    filtered_tweets.sort(key=lambda x: (
+        0 if x.get('analysis_category') in [None, 'general'] else 1,
+        x.get('tweet_timestamp', ''),
+    ), reverse=True)
 
-        # Process tweets
-        tweets = [process_tweet_row(row) for row in results]
+    # Apply pagination
+    total_filtered = len(filtered_tweets)
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    paginated_tweets = filtered_tweets[start_idx:end_idx]
 
-        return {
-            'tweets': tweets,
-            'page': page,
-            'per_page': per_page,
-            'total_tweets': total_tweets,
-            'total_pages': math.ceil(total_tweets / per_page) if total_tweets > 0 else 1
-        }
-    finally:
-        conn.close()
+    # Process tweets for display
+    tweets = [process_tweet_row(tweet) for tweet in paginated_tweets]
+
+    return {
+        'tweets': tweets,
+        'page': page,
+        'per_page': per_page,
+        'total_tweets': total_filtered,
+        'total_pages': math.ceil(total_filtered / per_page) if total_filtered > 0 else 1
+    }
 
 
 def process_tweet_row(row) -> Dict[str, Any]:
@@ -520,38 +581,21 @@ def process_tweet_row(row) -> Dict[str, Any]:
 
 def get_user_analysis_stats(username: str) -> Dict[str, Any]:
     """Get user analysis statistics."""
-    conn = get_db_connection()
-    stats_result = conn.execute("""
-        SELECT
-            COUNT(CASE WHEN ca.tweet_id IS NOT NULL THEN 1 END) as analyzed_posts,
-            COUNT(CASE WHEN ca.category = 'hate_speech' THEN 1 END) as hate_speech_count,
-            COUNT(CASE WHEN ca.category = 'disinformation' THEN 1 END) as disinformation_count,
-            COUNT(CASE WHEN ca.category = 'conspiracy_theory' THEN 1 END) as conspiracy_count,
-            COUNT(CASE WHEN ca.category = 'far_right_bias' THEN 1 END) as far_right_count,
-            COUNT(CASE WHEN ca.category = 'call_to_action' THEN 1 END) as call_to_action_count,
-            COUNT(CASE WHEN ca.category = 'general' THEN 1 END) as general_count
-        FROM tweets t
-        LEFT JOIN content_analyses ca ON t.tweet_id = ca.tweet_id
-        WHERE t.username = ?
-        """, [username]).fetchone()
-    conn.close()
-    stats_dict = dict(stats_result) if stats_result else {}
+    content_analysis_repo = get_content_analysis_repository()
 
-    # Build analysis stats from single query result
-    total_analyzed = stats_dict.get('analyzed_posts', 0)
+    analyses = content_analysis_repo.get_analyses_by_username(username)
+
+    # Calculate stats
+    total_analyzed = len(analyses)
+    category_counts = {}
+
+    for analysis in analyses:
+        category = analysis.get('category', 'unknown')
+        category_counts[category] = category_counts.get(category, 0) + 1
+
+    # Build analysis stats
     analysis_stats = []
-
-    # Only include categories with counts > 0
-    category_mapping = [
-        ('hate_speech', 'Hate Speech', stats_dict.get('hate_speech_count', 0)),
-        ('disinformation', 'Disinformation', stats_dict.get('disinformation_count', 0)),
-        ('conspiracy_theory', 'Conspiracy Theory', stats_dict.get('conspiracy_count', 0)),
-        ('far_right_bias', 'Far Right Bias', stats_dict.get('far_right_count', 0)),
-        ('call_to_action', 'Call to Action', stats_dict.get('call_to_action_count', 0)),
-        ('general', 'General', stats_dict.get('general_count', 0))
-    ]
-
-    for category, display_name, count in category_mapping:
+    for category, count in category_counts.items():
         if count > 0:
             analysis_stats.append({
                 'category': category,

@@ -10,11 +10,11 @@ from datetime import datetime
 @dataclass
 class ContentAnalysis:
     """Content analysis result structure with multi-category support."""
-    # Tweet metadata
-    tweet_id: str
-    tweet_url: str
-    username: str
-    tweet_content: str
+    # Post metadata (platform-agnostic)
+    post_id: str
+    post_url: str
+    author_username: str
+    post_content: str
     analysis_timestamp: str
 
     # Content categories (consolidated and multi-category support)

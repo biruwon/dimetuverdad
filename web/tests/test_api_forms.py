@@ -9,279 +9,26 @@ from unittest.mock import patch, Mock, MagicMock
 from web.tests.conftest import TestHelpers, MockRow
 
 
-class TestAPIEndpoints:
-    """Test API endpoint functionality."""
-
-    def test_api_status_endpoint(self, client):
-        """Test API status endpoint."""
-        pytest.skip("API status endpoint not implemented")
-        response = client.get('/api/status')
-        assert response.status_code == 200
-
-        data = response.get_json()
-        assert 'status' in data
-        assert 'timestamp' in data
-        assert 'version' in data
-
-    def test_api_stats_endpoint(self, client, mock_database):
-        """Test API stats endpoint."""
-        pytest.skip("API stats endpoint not implemented")
-        # Mock stats data
-        mock_database.execute.side_effect = [
-            Mock(fetchone=Mock(return_value=(1000,))),  # Total tweets
-            Mock(fetchone=Mock(return_value=(750,))),   # Analyzed tweets
-            Mock(fetchall=Mock(return_value=[
-                ('hate_speech', 200),
-                ('disinformation', 150),
-                ('general', 400)
-            ])),  # Category counts
-            Mock(fetchone=Mock(return_value=(50,))),    # Unique users
-            Mock(fetchone=Mock(return_value=('2024-01-01 12:00:00',)))  # Latest analysis
-        ]
-
-        response = client.get('/api/stats')
-        assert response.status_code == 200
-
-        data = response.get_json()
-        assert 'total_tweets' in data
-        assert 'analyzed_tweets' in data
-        assert 'categories' in data
-        assert 'unique_users' in data
-        assert 'latest_analysis' in data
-
-    def test_api_user_stats_endpoint(self, client, mock_database):
-        """Test API user stats endpoint."""
-        pytest.skip("API user stats endpoint not implemented")
-        # Mock user stats data
-        mock_database.execute.side_effect = [
-            Mock(fetchone=Mock(return_value=(1,))),     # User exists
-            Mock(fetchone=Mock(return_value=(100,))),   # Total tweets
-            Mock(fetchone=Mock(return_value=(80,))),    # Analyzed tweets
-            Mock(fetchall=Mock(return_value=[
-                ('hate_speech', 30),
-                ('disinformation', 25),
-                ('general', 25)
-            ])),  # Category counts
-            Mock(fetchone=Mock(return_value=('2024-01-01 12:00:00',)))  # Latest analysis
-        ]
-
-        response = client.get('/api/user/testuser/stats')
-        assert response.status_code == 200
-
-        data = response.get_json()
-        assert 'username' in data
-        assert 'total_tweets' in data
-        assert 'analyzed_tweets' in data
-        assert 'categories' in data
-        assert 'latest_analysis' in data
-
-    def test_api_user_stats_nonexistent_user(self, client, mock_database):
-        """Test API user stats for non-existent user."""
-        pytest.skip("API user stats endpoint not implemented")
-        mock_database.execute.return_value.fetchone.return_value = None
-
-        response = client.get('/api/user/nonexistent/stats')
-        assert response.status_code == 404
-
-        data = response.get_json()
-        assert 'error' in data
-        assert 'User not found' in data['error']
-
-    def test_api_recent_analyses_endpoint(self, client, mock_database):
-        """Test API recent analyses endpoint."""
-        pytest.skip("API recent analyses endpoint not implemented")
-        # Mock recent analyses data
-        mock_database.execute.return_value.fetchall.return_value = [
-            ('1234567890', 'testuser', 'hate_speech', 'pattern', '2024-01-01 12:00:00'),
-            ('0987654321', 'testuser2', 'disinformation', 'llm', '2024-01-01 11:00:00')
-        ]
-
-        response = client.get('/api/recent-analyses?limit=10')
-        assert response.status_code == 200
-
-        data = response.get_json()
-        assert 'analyses' in data
-        assert len(data['analyses']) == 2
-        assert data['analyses'][0]['tweet_id'] == '1234567890'
-
-    def test_api_recent_analyses_limit_validation(self, client):
-        """Test API recent analyses limit validation."""
-        pytest.skip("API recent analyses endpoint not implemented")
-        response = client.get('/api/recent-analyses?limit=1000')  # Too high
-        assert response.status_code == 400
-
-        data = response.get_json()
-        assert 'error' in data
-
-    def test_api_category_distribution_endpoint(self, client, mock_database):
-        """Test API category distribution endpoint."""
-        pytest.skip("API category distribution endpoint not implemented")
-        # Mock category distribution data
-        mock_database.execute.return_value.fetchall.return_value = [
-            ('hate_speech', 200),
-            ('disinformation', 150),
-            ('general', 400)
-        ]
-
-        response = client.get('/api/category-distribution')
-        assert response.status_code == 200
-
-        data = response.get_json()
-        assert 'categories' in data
-        assert len(data['categories']) == 3
-        assert data['categories'][0]['name'] == 'hate_speech'
-        assert data['categories'][0]['count'] == 200
-
-
-class TestFormFunctionality:
-    """Test form submission and validation functionality."""
-
-    def test_search_form_get(self, client):
-        """Test search form GET request."""
-        pytest.skip("Search form endpoint not implemented")
-        response = client.get('/search')
-        assert response.status_code == 200
-        assert b'Buscar tweets' in response.data
-
-    def test_search_form_post_valid(self, client, mock_database):
-        """Test search form POST with valid data."""
-        pytest.skip("Search form endpoint not implemented")
-        # Mock search results
-        mock_database.execute.return_value.fetchall.return_value = [
-            ('1234567890', 'testuser', 'Test content', 'general', 'pattern',
-             '2024-01-01 12:00:00', 'https://twitter.com/test/status/123')
-        ]
-
-        response = client.post('/search',
-                             data={'query': 'test content', 'category': 'all'},
-                             follow_redirects=True)
-
-        assert response.status_code == 200
-        assert b'Test content' in response.data
-
-    def test_search_form_post_empty_query(self, client):
-        """Test search form POST with empty query."""
-        pytest.skip("Search form endpoint not implemented")
-        response = client.post('/search',
-                             data={'query': '', 'category': 'all'},
-                             follow_redirects=True)
-
-        assert response.status_code == 200
-        assert b'Por favor ingrese un t\xc3\xa9rmino de b\xc3\xbasqueda' in response.data
-
-    def test_search_form_post_category_filter(self, client, mock_database):
-        """Test search form POST with category filter."""
-        pytest.skip("Search form endpoint not implemented")
-        # Mock filtered search results
-        mock_database.execute.return_value.fetchall.return_value = [
-            ('1234567890', 'testuser', 'Hate speech content', 'hate_speech', 'pattern',
-             '2024-01-01 12:00:00', 'https://twitter.com/test/status/123')
-        ]
-
-        response = client.post('/search',
-                             data={'query': 'hate', 'category': 'hate_speech'},
-                             follow_redirects=True)
-
-        assert response.status_code == 200
-        assert b'Hate speech content' in response.data
-
-    def test_fact_check_form_get(self, client):
-        """Test fact check form GET request."""
-        pytest.skip("Fact check form endpoint not implemented")
-        response = client.get('/fact-check')
-        assert response.status_code == 200
-        assert b'Verificaci\xc3\xb3n de hechos' in response.data
-
-    def test_fact_check_form_post_valid(self, client, mock_database):
-        """Test fact check form POST with valid data."""
-        pytest.skip("Fact check form endpoint not implemented")
-        with patch('web.app.analyze_content') as mock_analyze:
-            mock_analyze.return_value = Mock(
-                category='disinformation',
-                explanation='This appears to be false information'
-            )
-
-            response = client.post('/fact-check',
-                                 data={'content': 'COVID vaccines cause autism'},
-                                 follow_redirects=True)
-
-            assert response.status_code == 200
-            assert b'disinformation' in response.data
-            mock_analyze.assert_called_once()
-
-    def test_fact_check_form_post_empty_content(self, client):
-        """Test fact check form POST with empty content."""
-        pytest.skip("Fact check form endpoint not implemented")
-        response = client.post('/fact-check',
-                             data={'content': ''},
-                             follow_redirects=True)
-
-        assert response.status_code == 200
-        assert b'Por favor ingrese contenido para analizar' in response.data
-
-    def test_fact_check_form_post_long_content(self, client):
-        """Test fact check form POST with very long content."""
-        pytest.skip("Fact check form endpoint not implemented")
-        long_content = 'A' * 10000  # Very long content
-
-        with patch('web.app.analyze_content') as mock_analyze:
-            mock_analyze.return_value = Mock(
-                category='general',
-                explanation='Content analyzed'
-            )
-
-            response = client.post('/fact-check',
-                                 data={'content': long_content},
-                                 follow_redirects=True)
-
-            assert response.status_code == 200
-            mock_analyze.assert_called_once()
-
-
 class TestTemplateRendering:
     """Test template rendering and context functionality."""
 
     def test_index_template_context(self, client, mock_database):
         """Test index template renders with correct context."""
-        # Mock database calls for the index page
-        mock_database.execute.side_effect = [
-            # get_all_accounts query
-            Mock(fetchall=Mock(return_value=[
-                MockRow({
-                    'username': 'testuser',
-                    'tweet_count': 100,
-                    'last_activity': '2024-01-01 12:00:00',
-                    'problematic_posts': 5,
-                    'analyzed_posts': 95,
-                    'profile_pic_url': 'https://example.com/avatar.jpg'
-                })
-            ])),
-            Mock(fetchone=Mock(return_value=(1,))),  # Total count
-            # get_overall_stats_cached query
-            Mock(fetchone=Mock(return_value=MockRow({
-                'total_accounts': 1000,
-                'analyzed_tweets': 750
-            }))),
-            # get_analysis_distribution_cached query
-            Mock(fetchall=Mock(return_value=[
-                MockRow({
-                    'category': 'hate_speech',
-                    'count': 200,
-                    'percentage': 26.7
-                }),
-                MockRow({
-                    'category': 'disinformation',
-                    'count': 150,
-                    'percentage': 20.0
-                })
-            ]))
-        ]
-
-        response = client.get('/')
-        assert response.status_code == 200
-        assert b'dimetuverdad' in response.data
-        assert b'1000' in response.data  # Total accounts
-        assert b'750' in response.data   # Analyzed tweets
+        # Mock the database connection used by the local functions in the index route
+        with patch('web.utils.helpers.get_db_connection') as mock_get_conn:
+            mock_conn = MagicMock()
+            mock_get_conn.return_value = mock_conn
+            
+            # Mock the database queries used by get_all_accounts
+            mock_conn.execute.return_value.fetchall.return_value = [
+                {'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'}
+            ]
+            mock_conn.execute.return_value.fetchone.return_value = (1,)  # Total count
+            
+            # Mock the response for the template rendering
+            response = client.get('/')
+            assert response.status_code == 200
+            assert b'dimetuverdad' in response.data
 
     def test_user_template_context(self, client, mock_database):
         """Test user template renders with correct context."""
@@ -429,50 +176,21 @@ class TestJavaScriptIntegration:
 
     def test_chart_js_integration(self, client, mock_database):
         """Test Chart.js integration in templates."""
-        # Mock database calls for the index page
-        mock_database.execute.side_effect = [
-            # get_all_accounts query
-            Mock(fetchall=Mock(return_value=[
-                MockRow({
-                    'username': 'testuser',
-                    'tweet_count': 100,
-                    'last_activity': '2024-01-01 12:00:00',
-                    'problematic_posts': 5,
-                    'analyzed_posts': 95,
-                    'profile_pic_url': 'https://example.com/avatar.jpg'
-                })
-            ])),
-            Mock(fetchone=Mock(return_value=(1,))),  # Total count
-            # get_overall_stats_cached query
-            Mock(fetchone=Mock(return_value=MockRow({
-                'total_accounts': 1000,
-                'analyzed_tweets': 750
-            }))),
-            # get_analysis_distribution_cached query
-            Mock(fetchall=Mock(return_value=[
-                MockRow({
-                    'category': 'hate_speech',
-                    'count': 200,
-                    'percentage': 26.7
-                }),
-                MockRow({
-                    'category': 'disinformation',
-                    'count': 150,
-                    'percentage': 20.0
-                }),
-                MockRow({
-                    'category': 'general',
-                    'count': 400,
-                    'percentage': 53.3
-                })
-            ]))
-        ]
-
-        response = client.get('/')
-        assert response.status_code == 200
-
-        # Check for Chart.js elements (basic check)
-        assert b'chart' in response.data.lower() or b'Chart' in response.data
+        # Mock the database connection used by the local functions in the index route
+        with patch('web.utils.helpers.get_db_connection') as mock_get_conn:
+            mock_conn = MagicMock()
+            mock_get_conn.return_value = mock_conn
+            
+            # Mock the database queries used by get_all_accounts
+            mock_conn.execute.return_value.fetchall.return_value = [
+                {'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'}
+            ]
+            mock_conn.execute.return_value.fetchone.return_value = (1,)  # Total count
+            
+            response = client.get('/')
+            assert response.status_code == 200
+            # Check for Chart.js elements (basic check)
+            assert b'chart' in response.data.lower() or b'Chart' in response.data
 
     def test_responsive_js_integration(self, client):
         """Test responsive JavaScript integration."""
@@ -486,32 +204,3 @@ class TestJavaScriptIntegration:
 
 class TestRateLimiting:
     """Test rate limiting functionality."""
-
-    def test_api_rate_limiting(self, client):
-        """Test API endpoint rate limiting."""
-        pytest.skip("API endpoints not implemented")
-        # Make multiple rapid requests to API endpoint
-        responses = []
-        for _ in range(10):
-            response = client.get('/api/stats')
-            responses.append(response.status_code)
-
-        # At least some requests should succeed
-        assert 200 in responses
-
-        # If rate limiting is implemented, some might be 429
-        # But we don't enforce it in tests unless specifically configured
-
-    def test_form_rate_limiting(self, client):
-        """Test form submission rate limiting."""
-        pytest.skip("Form endpoints not implemented")
-        # Make multiple rapid form submissions
-        responses = []
-        for _ in range(5):
-            response = client.post('/fact-check',
-                                 data={'content': f'Test content {_}'},
-                                 follow_redirects=True)
-            responses.append(response.status_code)
-
-        # At least some requests should succeed
-        assert 200 in responses

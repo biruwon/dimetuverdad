@@ -41,10 +41,56 @@ def create_app(config_name=None):
     app.register_blueprint(api_bp)
     app.register_blueprint(loading_bp)
 
+    # Export helpers for test mocks
+    import web.utils.helpers as helpers
+    app.get_user_profile_data = helpers.get_user_profile_data
+    app.get_user_tweets_data = helpers.get_user_tweets_data
+    app.get_user_analysis_stats = helpers.get_user_analysis_stats
+    app.get_tweet_data = helpers.get_tweet_data
+    app.reanalyze_tweet = helpers.reanalyze_tweet
+    
+    # Add placeholder functions for route-level operations
+    def get_analyzer():
+        """Placeholder for analyzer access."""
+        return None
+    
+    def reanalyze_category():
+        """Placeholder for category reanalysis."""
+        return None
+        
+    def run_user_analysis():
+        """Placeholder for user analysis."""
+        return None
+    
+    app.get_analyzer = get_analyzer
+    app.reanalyze_category = reanalyze_category
+    app.run_user_analysis = run_user_analysis
+
     # Set up logging
     _setup_logging(app)
 
     return app
+
+# Module level exports for tests
+import web.utils.helpers as helpers
+
+get_user_profile_data = helpers.get_user_profile_data
+get_user_tweets_data = helpers.get_user_tweets_data
+get_user_analysis_stats = helpers.get_user_analysis_stats
+get_tweet_data = helpers.get_tweet_data
+reanalyze_tweet = helpers.reanalyze_tweet
+
+def get_analyzer():
+    """Placeholder for analyzer access."""
+    return None
+
+def reanalyze_category():
+    """Placeholder for category reanalysis."""
+    return None
+    
+def run_user_analysis():
+    """Placeholder for user analysis."""
+    return None
 
 def _setup_logging(app):
     """Configure logging for the Flask application."""

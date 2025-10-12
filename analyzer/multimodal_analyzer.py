@@ -71,10 +71,10 @@ class MultimodalAnalyzer:
         media_analysis_text = media_result.get('description', '') if media_result else ''
 
         return ContentAnalysis(
-            tweet_id=tweet_id,
-            tweet_url=tweet_url,
-            username=username,
-            tweet_content=content,
+            post_id=tweet_id,
+            post_url=tweet_url,
+            author_username=username,
+            post_content=content,
             analysis_timestamp=datetime.now().isoformat(),
             category=combined_category,
             categories_detected=[combined_category],  # Multimodal focuses on primary category

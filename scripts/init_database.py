@@ -16,6 +16,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from utils import paths
+from utils.database import get_db_connection
 
 DB_PATH = paths.get_db_path()
 
@@ -27,21 +28,25 @@ def drop_existing_database():
     else:
         print(f"📋 No existing database found")
 
-def create_fresh_database():
-    """Create a clean database with optimized schema."""
-    print("🏗️  Creating fresh database schema...")
-    
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # Enable row factory for dict-like access
+def create_fresh_database_schema(db_path: str = None):
+    """Create a clean database schema for the specified path."""
+    target_path = db_path or DB_PATH
+
+    print(f"🏗️  Creating fresh database schema at {target_path}...")
+
+    # Create connection directly to the target database
+    conn = sqlite3.connect(target_path, timeout=30.0, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    
+
     try:
-        # Core accounts table
+        # Core accounts table (multi-platform support)
         print("  📝 Creating accounts table...")
         c.execute('''
             CREATE TABLE accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
+                platform TEXT DEFAULT 'twitter',  -- Multi-platform support
                 profile_pic_url TEXT,
                 profile_pic_updated TIMESTAMP,
                 last_scraped TIMESTAMP,
@@ -96,69 +101,98 @@ def create_fresh_database():
             )
         ''')
         
-        # Content analysis results
+        # Content analysis results (platform-agnostic)
         print("  📝 Creating content_analyses table...")
         c.execute('''
             CREATE TABLE content_analyses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tweet_id TEXT NOT NULL,
-                tweet_url TEXT,
-                username TEXT,
-                tweet_content TEXT,
-                category TEXT,                -- Primary category (backward compatibility)
-                categories_detected TEXT,     -- JSON array of all detected categories
+                post_id TEXT NOT NULL,           -- Platform-agnostic post identifier
+                post_url TEXT,                   -- Platform-agnostic post URL
+                author_username TEXT,            -- Platform-agnostic author identifier
+                platform TEXT DEFAULT 'twitter', -- Multi-platform support
+                post_content TEXT,               -- Platform-agnostic content
+                category TEXT,                   -- Primary category (backward compatibility)
+                categories_detected TEXT,        -- JSON array of all detected categories
                 llm_explanation TEXT,
                 analysis_method TEXT DEFAULT "pattern", -- "pattern", "llm", or "gemini"
                 analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 analysis_json TEXT,
                 
                 -- Multi-category support
-                pattern_matches TEXT,         -- JSON array of pattern matches
-                topic_classification TEXT,    -- JSON topic classification data
+                pattern_matches TEXT,            -- JSON array of pattern matches
+                topic_classification TEXT,       -- JSON topic classification data
                 
                 -- Media analysis (multimodal support)
-                media_urls TEXT,              -- JSON array of media URLs
-                media_analysis TEXT,          -- Gemini multimodal analysis result
-                media_type TEXT,              -- "image", "video", or ""
+                media_urls TEXT,                 -- JSON array of media URLs
+                media_analysis TEXT,             -- Gemini multimodal analysis result
+                media_type TEXT,                 -- "image", "video", or ""
                 multimodal_analysis BOOLEAN DEFAULT FALSE, -- Whether media was analyzed
                 
-                FOREIGN KEY (tweet_id) REFERENCES tweets (tweet_id),
-                FOREIGN KEY (username) REFERENCES accounts (username),
-                UNIQUE(tweet_id) -- One analysis per tweet
+                FOREIGN KEY (post_id) REFERENCES tweets (tweet_id),  -- Keep FK for now, will be updated
+                FOREIGN KEY (author_username) REFERENCES accounts (username),  -- Keep FK for now, will be updated
+                UNIQUE(post_id) -- One analysis per post
             )
         ''')
         
-        # Edit history (simplified)
-        print("  📝 Creating edit_history table...")
+        # Post edits detection (renamed for clarity - tracks post content changes)
+        print("  📝 Creating post_edits table...")
         c.execute('''
-            CREATE TABLE edit_history (
+            CREATE TABLE post_edits (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tweet_id TEXT NOT NULL,
+                post_id TEXT NOT NULL,
                 version_number INTEGER NOT NULL,
                 previous_content TEXT NOT NULL,
                 detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 
-                FOREIGN KEY (tweet_id) REFERENCES tweets (tweet_id),
-                UNIQUE(tweet_id, version_number)
+                FOREIGN KEY (post_id) REFERENCES tweets (tweet_id),  -- Keep FK for now, will be updated
+                UNIQUE(post_id, version_number)
             )
         ''')
         
-        # User feedback table for model improvement
+        # User feedback table for model improvement (platform-agnostic)
         print("  📝 Creating user_feedback table...")
         c.execute('''
             CREATE TABLE user_feedback (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tweet_id TEXT NOT NULL,
-                feedback_type TEXT NOT NULL,  -- 'correction', 'flag', 'improvement'
+                post_id TEXT NOT NULL,          -- Platform-agnostic post identifier
+                feedback_type TEXT NOT NULL,    -- 'correction', 'flag', 'improvement'
                 original_category TEXT,
                 corrected_category TEXT,
                 user_comment TEXT,
-                user_ip TEXT,  -- For rate limiting and analytics
+                user_ip TEXT,                   -- For rate limiting and analytics
                 submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 
-                FOREIGN KEY (tweet_id) REFERENCES tweets (tweet_id)
+                FOREIGN KEY (post_id) REFERENCES tweets (tweet_id)  -- Keep FK for now, will be updated
             )
         ''')
+        
+        # Platforms table for multi-platform support (hierarchical)
+        print("  📝 Creating platforms table...")
+        c.execute('''
+            CREATE TABLE platforms (
+                platform_id TEXT PRIMARY KEY,
+                category TEXT NOT NULL,  -- 'social_media', 'messenger', 'news', etc.
+                name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                description TEXT,
+                api_base_url TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Populate platforms table with defaults
+        print("  📝 Populating platforms table...")
+        platforms_data = [
+            ('twitter', 'social_media', 'Twitter', 'Twitter/X', 'Social media platform for short-form content', 'https://twitter.com'),
+            ('telegram', 'messenger', 'Telegram', 'Telegram', 'Messaging platform with channels and groups', 'https://telegram.org'),
+            ('news', 'news', 'News', 'News Sources', 'Newspaper and news website sources', None),
+        ]
+        
+        c.executemany('''
+            INSERT INTO platforms (platform_id, category, name, display_name, description, api_base_url)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', platforms_data)
         
         # Performance indexes
         print("  📝 Creating indexes...")
@@ -169,16 +203,18 @@ def create_fresh_database():
             ('idx_tweets_tweet_timestamp', 'tweets', 'tweet_timestamp'),
             ('idx_tweets_deleted', 'tweets', 'is_deleted'),
             ('idx_tweets_edited', 'tweets', 'is_edited'),
-            ('idx_analyses_tweet', 'content_analyses', 'tweet_id'),
+            ('idx_analyses_post', 'content_analyses', 'post_id'),
             ('idx_analyses_category', 'content_analyses', 'category'),
-            ('idx_analyses_username', 'content_analyses', 'username'),
+            ('idx_analyses_author', 'content_analyses', 'author_username'),
+            ('idx_analyses_platform', 'content_analyses', 'platform'),
             ('idx_content_analyses_timestamp', 'content_analyses', 'analysis_timestamp'),
             ('idx_content_analyses_method', 'content_analyses', 'analysis_method'),
             ('idx_content_analyses_multimodal', 'content_analyses', 'multimodal_analysis'),
-            ('idx_edit_history_tweet', 'edit_history', 'tweet_id'),
-            ('idx_user_feedback_tweet', 'user_feedback', 'tweet_id'),
+            ('idx_post_edits_post', 'post_edits', 'post_id'),
+            ('idx_user_feedback_post', 'user_feedback', 'post_id'),
             ('idx_user_feedback_type', 'user_feedback', 'feedback_type'),
-            ('idx_user_feedback_submitted', 'user_feedback', 'submitted_at')
+            ('idx_user_feedback_submitted', 'user_feedback', 'submitted_at'),
+            ('idx_platforms_name', 'platforms', 'name')
         ]
         
         for idx_name, table, columns in indexes:
@@ -193,7 +229,7 @@ def create_fresh_database():
         c.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = [row['name'] for row in c.fetchall()]
         print(f"📊 Created {len(tables)} tables: {', '.join(tables)}")
-        
+
     except Exception as e:
         conn.rollback()
         print(f"❌ Database creation failed: {e}")
@@ -201,19 +237,24 @@ def create_fresh_database():
     finally:
         conn.close()
 
+
+def create_fresh_database():
+    """Create a clean database with optimized schema (legacy wrapper)."""
+    return create_fresh_database_schema()
+
+
 def verify_schema():
     """Verify the database schema is correct."""
     print("🔍 Verifying database schema...")
     
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # Enable row factory for dict-like access
+    conn = get_db_connection()
     c = conn.cursor()
     
     try:
         # Check tables exist
         c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = [row['name'] for row in c.fetchall()]
-        expected_tables = ['accounts', 'tweets', 'content_analyses', 'edit_history', 'user_feedback']
+        expected_tables = ['accounts', 'content_analyses', 'platforms', 'post_edits', 'tweets', 'user_feedback']
         
         print(f"  📋 Tables found: {tables}")
         for table in expected_tables:
@@ -227,7 +268,7 @@ def verify_schema():
         c.execute("PRAGMA table_info(content_analyses)")
         ca_columns = [row['name'] for row in c.fetchall()]
         essential_ca_fields = [
-            'tweet_id', 'username', 'category', 'analysis_method', 'analysis_timestamp',
+            'post_id', 'author_username', 'platform', 'category', 'analysis_method', 'analysis_timestamp',
             'categories_detected', 'media_urls', 'media_analysis', 'media_type', 'multimodal_analysis'
         ]
         
@@ -301,7 +342,7 @@ if __name__ == "__main__":
             drop_existing_database()
         
         # Create fresh schema
-        create_fresh_database()
+        create_fresh_database_schema()
         
         # Verify it worked
         if verify_schema():

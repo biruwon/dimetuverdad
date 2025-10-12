@@ -169,24 +169,6 @@
             background: #e8f0fe;
             color: #1a73e8;
         }
-        .priority-badge {
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 0.8em;
-            font-weight: 600;
-        }
-        .priority-high {
-            background: #fce8e6;
-            color: #d73027;
-        }
-        .priority-medium {
-            background: #fff3cd;
-            color: #856404;
-        }
-        .priority-low {
-            background: #e8f5e8;
-            color: #2e7d32;
-        }
         .timestamp {
             color: #666;
             font-size: 0.8em;
@@ -259,7 +241,6 @@
         </div>
         <div>
             <a href="/" class="btn btn-secondary">← Dashboard</a>
-            <a href="/search?category={{ category }}" class="btn btn-secondary">🔎 Search Category</a>
         </div>
     </div>
 
@@ -288,7 +269,7 @@
             <div class="analysis-item">
                 <div class="analysis-header">
                     <div class="user-info">
-                        <a href="/user/{{ analysis.username }}" class="username">@{{ analysis.username }}</a>
+                        <a href="/user/{{ analysis.author_username }}" class="username">@{{ analysis.author_username }}</a>
                         <span class="timestamp">{{ analysis.analysis_timestamp[:16] }}</span>
                     </div>
                     <div class="category-badges">
@@ -296,7 +277,6 @@
                         {% if analysis.subcategory %}
                         <span class="category-badge subcategory-badge">{{ analysis.subcategory }}</span>
                         {% endif %}
-                        <span class="priority-badge priority-{{ analysis.fact_check_priority }}">{{ analysis.fact_check_priority.title() }}</span>
                     </div>
                 </div>
 
@@ -307,9 +287,9 @@
                     </div>
                 </div>
 
-                {% if analysis.tweet_content %}
+                {% if analysis.post_content %}
                 <div class="tweet-content">
-                    {{ analysis.tweet_content[:300] }}{% if analysis.tweet_content|length > 300 %}...{% endif %}
+                    {{ analysis.post_content[:300] }}{% if analysis.post_content|length > 300 %}...{% endif %}
                 </div>
                 {% endif %}
 
@@ -318,11 +298,8 @@
                 </div>
 
                 <div class="actions">
-                    <a href="{{ analysis.tweet_url }}" target="_blank" class="btn btn-small">View Tweet</a>
-                    <a href="/user/{{ analysis.username }}" class="btn btn-small btn-outline">User Profile</a>
-                    {% if analysis.fact_check_priority in ['high', 'medium'] %}
-                    <a href="/fact-check" class="btn btn-small btn-outline">Fact-Check Queue</a>
-                    {% endif %}
+                    <a href="{{ analysis.post_url }}" target="_blank" class="btn btn-small">View Tweet</a>
+                    <a href="/user/{{ analysis.author_username }}" class="btn btn-small btn-outline">User Profile</a>
                 </div>
             </div>
             {% endfor %}

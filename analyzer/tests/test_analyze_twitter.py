@@ -32,15 +32,15 @@ class TestContentAnalysis(unittest.TestCase):
     def test_content_analysis_creation(self):
         """Test basic ContentAnalysis creation."""
         analysis = ContentAnalysis(
-            tweet_id="test_123",
-            tweet_url="https://twitter.com/test/status/test_123",
-            username="test_user",
-            tweet_content="Test content",
+            post_id="test_123",
+            post_url="https://twitter.com/test/status/test_123",
+            author_username="test_user",
+            post_content="Test content",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.GENERAL
         )
 
-        self.assertEqual(analysis.tweet_id, "test_123")
+        self.assertEqual(analysis.post_id, "test_123")
         self.assertEqual(analysis.category, Categories.GENERAL)  # default
         self.assertEqual(analysis.analysis_method, "pattern")  # default
         self.assertEqual(len(analysis.categories_detected), 0)
@@ -49,10 +49,10 @@ class TestContentAnalysis(unittest.TestCase):
     def test_content_analysis_with_categories(self):
         """Test ContentAnalysis with category data."""
         analysis = ContentAnalysis(
-            tweet_id="test_123",
-            tweet_url="https://twitter.com/test/status/test_123",
-            username="test_user",
-            tweet_content="Test content",
+            post_id="test_123",
+            post_url="https://twitter.com/test/status/test_123",
+            author_username="test_user",
+            post_content="Test content",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH,
             categories_detected=[Categories.HATE_SPEECH, Categories.FAR_RIGHT_BIAS],
@@ -67,10 +67,10 @@ class TestContentAnalysis(unittest.TestCase):
     def test_content_analysis_with_metrics(self):
         """Test ContentAnalysis with performance metrics."""
         analysis = ContentAnalysis(
-            tweet_id="test_123",
-            tweet_url="https://twitter.com/test/status/test_123",
-            username="test_user",
-            tweet_content="Test content",
+            post_id="test_123",
+            post_url="https://twitter.com/test/status/test_123",
+            author_username="test_user",
+            post_content="Test content",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH,
             analysis_time_seconds=2.5,
@@ -334,10 +334,10 @@ class TestAnalyzerInternalMethods(unittest.TestCase):
         """Test model name generation for pattern analysis."""
         analyzer = Analyzer(config=AnalyzerConfig(use_llm=False))
         result = ContentAnalysis(
-            tweet_id="test",
-            tweet_url="https://twitter.com/test/status/test",
-            username="test",
-            tweet_content="test",
+            post_id="test",
+            post_url="https://twitter.com/test/status/test",
+            author_username="test",
+            post_content="test",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.GENERAL,
             analysis_method="pattern"
@@ -349,10 +349,10 @@ class TestAnalyzerInternalMethods(unittest.TestCase):
         """Test model name generation for LLM analysis."""
         analyzer = Analyzer(config=AnalyzerConfig(use_llm=True, model_priority="fast"))
         result = ContentAnalysis(
-            tweet_id="test",
-            tweet_url="https://twitter.com/test/status/test",
-            username="test",
-            tweet_content="test",
+            post_id="test",
+            post_url="https://twitter.com/test/status/test",
+            author_username="test",
+            post_content="test",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.GENERAL,
             analysis_method="llm"
@@ -364,10 +364,10 @@ class TestAnalyzerInternalMethods(unittest.TestCase):
         """Test model name generation for multimodal analysis."""
         analyzer = Analyzer(config=AnalyzerConfig(use_llm=False))
         result = ContentAnalysis(
-            tweet_id="test",
-            tweet_url="https://twitter.com/test/status/test",
-            username="test",
-            tweet_content="test",
+            post_id="test",
+            post_url="https://twitter.com/test/status/test",
+            author_username="test",
+            post_content="test",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.GENERAL,
             analysis_method="multimodal"
@@ -470,10 +470,11 @@ class TestDatabaseFunctions(unittest.TestCase):
         c.execute('''
         CREATE TABLE IF NOT EXISTS content_analyses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tweet_id TEXT UNIQUE,
-            tweet_url TEXT,
-            username TEXT,
-            tweet_content TEXT,
+            post_id TEXT UNIQUE,
+            post_url TEXT,
+            author_username TEXT,
+            platform TEXT DEFAULT 'twitter',
+            post_content TEXT,
             category TEXT,
             llm_explanation TEXT,
             analysis_json TEXT,
@@ -490,10 +491,10 @@ class TestDatabaseFunctions(unittest.TestCase):
         conn.close()
 
         analysis = ContentAnalysis(
-            tweet_id="test_123",
-            tweet_url="https://twitter.com/test/status/test_123",
-            username="test_user",
-            tweet_content="Test content",
+            post_id="test_123",
+            post_url="https://twitter.com/test/status/test_123",
+            author_username="test_user",
+            post_content="Test content",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH,
             llm_explanation="Test explanation",
@@ -507,11 +508,11 @@ class TestDatabaseFunctions(unittest.TestCase):
         conn.row_factory = sqlite3.Row  # Enable named column access
         c = conn.cursor()
 
-        c.execute("SELECT * FROM content_analyses WHERE tweet_id = ?", ("test_123",))
+        c.execute("SELECT * FROM content_analyses WHERE post_id = ?", ("test_123",))
         row = c.fetchone()
 
         self.assertIsNotNone(row)
-        self.assertEqual(row['tweet_id'], "test_123")
+        self.assertEqual(row['post_id'], "test_123")
         self.assertEqual(row['category'], Categories.HATE_SPEECH)
         self.assertEqual(row['llm_explanation'], "Test explanation")
         self.assertEqual(row['analysis_method'], "pattern")
@@ -529,10 +530,11 @@ class TestDatabaseFunctions(unittest.TestCase):
         c.execute('''
         CREATE TABLE IF NOT EXISTS content_analyses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tweet_id TEXT UNIQUE,
-            tweet_url TEXT,
-            username TEXT,
-            tweet_content TEXT,
+            post_id TEXT UNIQUE,
+            post_url TEXT,
+            author_username TEXT,
+            platform TEXT DEFAULT 'twitter',
+            post_content TEXT,
             category TEXT,
             llm_explanation TEXT,
             analysis_json TEXT,
@@ -549,19 +551,19 @@ class TestDatabaseFunctions(unittest.TestCase):
         conn.close()
 
         analysis1 = ContentAnalysis(
-            tweet_id="test_123",
-            tweet_url="https://twitter.com/test/status/test_123",
-            username="test_user",
-            tweet_content="Test content 1",
+            post_id="test_123",
+            post_url="https://twitter.com/test/status/test_123",
+            author_username="test_user",
+            post_content="Test content 1",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH
         )
 
         analysis2 = ContentAnalysis(
-            tweet_id="test_123",
-            tweet_url="https://twitter.com/test/status/test_123",
-            username="test_user",
-            tweet_content="Test content 2",
+            post_id="test_123",
+            post_url="https://twitter.com/test/status/test_123",
+            author_username="test_user",
+            post_content="Test content 2",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.DISINFORMATION
         )
@@ -572,11 +574,11 @@ class TestDatabaseFunctions(unittest.TestCase):
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
 
-        c.execute("SELECT COUNT(*) FROM content_analyses WHERE tweet_id = ?", ("test_123",))
+        c.execute("SELECT COUNT(*) FROM content_analyses WHERE post_id = ?", ("test_123",))
         count = c.fetchone()[0]
         self.assertEqual(count, 1)
 
-        c.execute("SELECT category FROM content_analyses WHERE tweet_id = ?", ("test_123",))
+        c.execute("SELECT category FROM content_analyses WHERE post_id = ?", ("test_123",))
         category = c.fetchone()[0]
         self.assertEqual(category, Categories.DISINFORMATION)
 
@@ -611,7 +613,7 @@ class TestAnalyzerMultimodal(unittest.TestCase):
             media_urls=["https://example.com/image.jpg"]
         )
 
-        self.assertEqual(result.tweet_id, "test_123")
+        self.assertEqual(result.post_id, "test_123")
         self.assertEqual(result.category, Categories.GENERAL)  # Default for now
         self.assertEqual(result.analysis_method, "multimodal")  # Updated to match actual method
         self.assertEqual(result.media_analysis, "Test Gemini analysis")
@@ -639,7 +641,7 @@ class TestAnalyzerMultimodal(unittest.TestCase):
         )
 
         # Should return a valid ContentAnalysis but with error indication
-        self.assertEqual(result.tweet_id, "test_123")
+        self.assertEqual(result.post_id, "test_123")
         self.assertEqual(result.category, Categories.GENERAL)  # Fallback category
         self.assertEqual(result.analysis_method, "multimodal")  # Still multimodal method
         self.assertIn("Media analysis failed", result.llm_explanation)  # Error message
@@ -649,10 +651,10 @@ class TestAnalyzerMultimodal(unittest.TestCase):
         """Test that analyze_content routes to text-only for no media."""
         with patch.object(self.analyzer.text_analyzer, 'analyze') as mock_text_only:
             mock_result = ContentAnalysis(
-                tweet_id="test_123",
-                tweet_url="https://twitter.com/test/status/test_123",
-                username="test_user",
-                tweet_content="Test content",
+                post_id="test_123",
+                post_url="https://twitter.com/test/status/test_123",
+                author_username="test_user",
+                post_content="Test content",
                 analysis_timestamp="2024-01-01T12:00:00",
                 category=Categories.GENERAL
             )
@@ -673,10 +675,10 @@ class TestAnalyzerMultimodal(unittest.TestCase):
         """Test that analyze_content routes to multimodal for media."""
         with patch.object(self.analyzer.multimodal_analyzer, 'analyze_with_media') as mock_multimodal:
             mock_result = ContentAnalysis(
-                tweet_id="test_123",
-                tweet_url="https://twitter.com/test/status/test_123",
-                username="test_user",
-                tweet_content="Test content",
+                post_id="test_123",
+                post_url="https://twitter.com/test/status/test_123",
+                author_username="test_user",
+                post_content="Test content",
                 analysis_timestamp="2024-01-01T12:00:00",
                 category=Categories.GENERAL,
                 multimodal_analysis=True

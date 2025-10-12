@@ -62,8 +62,8 @@ class TestAdminEditAnalysis:
 
     def test_edit_analysis_reanalyze_action(self, admin_client, mock_database, sample_tweet_data):
         """Test reanalyze action."""
-        with patch('web.app.get_tweet_data') as mock_get_tweet, \
-             patch('web.app.reanalyze_tweet') as mock_reanalyze:
+        with patch('web.utils.helpers.get_tweet_data') as mock_get_tweet, \
+             patch('web.utils.helpers.reanalyze_tweet') as mock_reanalyze:
 
             mock_get_tweet.return_value = sample_tweet_data
             mock_reanalyze.return_value = Mock(category='disinformation', explanation='Reanalyzed content')
@@ -77,8 +77,8 @@ class TestAdminEditAnalysis:
 
     def test_edit_analysis_refresh_action(self, admin_client, mock_database, sample_tweet_data):
         """Test refresh action."""
-        with patch('web.app.get_tweet_data') as mock_get_tweet, \
-             patch('web.app.refetch_tweet') as mock_refetch:
+        with patch('web.utils.helpers.get_tweet_data') as mock_get_tweet, \
+             patch('web.utils.helpers.refetch_tweet') as mock_refetch:
 
             mock_get_tweet.return_value = sample_tweet_data
             mock_refetch.return_value = True
@@ -92,9 +92,9 @@ class TestAdminEditAnalysis:
 
     def test_edit_analysis_refresh_and_reanalyze(self, admin_client, mock_database, sample_tweet_data):
         """Test refresh and reanalyze combined action."""
-        with patch('web.app.get_tweet_data') as mock_get_tweet, \
-             patch('web.app.refetch_tweet') as mock_refetch, \
-             patch('web.app.reanalyze_tweet') as mock_reanalyze:
+        with patch('web.utils.helpers.get_tweet_data') as mock_get_tweet, \
+             patch('web.utils.helpers.refetch_tweet') as mock_refetch, \
+             patch('web.utils.helpers.reanalyze_tweet') as mock_reanalyze:
 
             mock_get_tweet.return_value = sample_tweet_data
             mock_refetch.return_value = True
@@ -196,9 +196,10 @@ class TestAdminQuickEdit:
 
     def test_quick_edit_create_new_analysis(self, admin_client, mock_database):
         """Test quick edit creates new analysis if none exists."""
-        # Mock no existing analysis
+        # Mock no existing analysis, then tweet data, then successful insert
         mock_database.execute.side_effect = [
             Mock(fetchone=Mock(return_value=None)),  # No existing analysis
+            Mock(fetchone=Mock(return_value=MockRow({'username': 'testuser', 'content': 'Test content', 'tweet_url': 'https://twitter.com/test/status/123'}))),  # Tweet data for insert
             Mock(rowcount=1),  # Insert successful
         ]
 
@@ -248,7 +249,7 @@ class TestAdminExport:
         assert response.status_code == 200
         assert 'text/csv' in response.content_type
         assert 'attachment' in response.headers.get('Content-Disposition', '')
-        assert b'Tweet ID,Username,Category' in response.data
+        assert b'Post ID,Author Username,Category' in response.data
 
     def test_export_json_success(self, admin_client, mock_database):
         """Test successful JSON export."""
@@ -256,8 +257,8 @@ class TestAdminExport:
         mock_cursor = Mock()
         mock_cursor.fetchall.return_value = [
             MockRow({
-                'tweet_id': '1234567890',
-                'username': 'testuser',
+                'post_id': '1234567890',
+                'author_username': 'testuser',
                 'category': 'general',
                 'llm_explanation': 'Test explanation',
                 'analysis_method': 'pattern',
@@ -278,7 +279,7 @@ class TestAdminExport:
         data = response.get_json()
         assert 'data' in data
         assert len(data['data']) == 1
-        assert data['data'][0]['tweet_id'] == '1234567890'
+        assert data['data'][0]['post_id'] == '1234567890'
 
 
 class TestAdminReanalyzeSingle:
@@ -291,8 +292,8 @@ class TestAdminReanalyzeSingle:
 
     def test_reanalyze_single_success(self, admin_client, mock_database, sample_tweet_data):
         """Test successful single tweet reanalysis."""
-        with patch('web.app.get_tweet_data') as mock_get_tweet, \
-             patch('web.app.reanalyze_tweet') as mock_reanalyze:
+        with patch('web.utils.helpers.get_tweet_data') as mock_get_tweet, \
+             patch('web.utils.helpers.reanalyze_tweet') as mock_reanalyze:
 
             mock_get_tweet.return_value = sample_tweet_data
             mock_reanalyze.return_value = Mock(category='hate_speech', explanation='Updated analysis')
@@ -304,7 +305,7 @@ class TestAdminReanalyzeSingle:
 
     def test_reanalyze_single_no_tweet(self, admin_client):
         """Test reanalysis of non-existent tweet."""
-        with patch('web.app.get_tweet_data') as mock_get_tweet:
+        with patch('web.utils.helpers.get_tweet_data') as mock_get_tweet:
             mock_get_tweet.return_value = None
 
             response = admin_client.post('/admin/reanalyze-single/9999999999',

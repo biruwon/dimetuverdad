@@ -12,24 +12,17 @@
             color: white;
         }
         .category-header {
-            background: linear-gradient(135deg, 
-                {{ 'var(--bs-danger)' if category_name == 'hate_speech' else
-                   'var(--bs-warning)' if category_name == 'disinformation' else
-                   'var(--bs-dark)' if category_name == 'conspiracy_theory' else
-                   'var(--bs-primary)' if category_name == 'far_right_bias' else
-                   'var(--bs-success)' if category_name == 'call_to_action' else
-                   'var(--bs-secondary)' if category_name == 'general' else
-                   'var(--bs-info)' }} 0%, 
-                {{ 'var(--bs-danger)' if category_name == 'hate_speech' else
-                   'var(--bs-warning)' if category_name == 'disinformation' else
-                   'var(--bs-dark)' if category_name == 'conspiracy_theory' else
-                   'var(--bs-primary)' if category_name == 'far_right_bias' else
-                   'var(--bs-success)' if category_name == 'call_to_action' else
-                   'var(--bs-secondary)' if category_name == 'general' else
-                   'var(--bs-info)' }} 100%);
             color: white;
             border-radius: 15px;
         }
+        
+        /* Category color classes */
+        .category-hate_speech { background: linear-gradient(135deg, var(--bs-danger) 0%, var(--bs-danger) 100%); }
+        .category-disinformation { background: linear-gradient(135deg, var(--bs-warning) 0%, var(--bs-warning) 100%); }
+        .category-conspiracy_theory { background: linear-gradient(135deg, var(--bs-dark) 0%, var(--bs-dark) 100%); }
+        .category-far_right_bias { background: linear-gradient(135deg, var(--bs-primary) 0%, var(--bs-primary) 100%); }
+        .category-call_to_action { background: linear-gradient(135deg, var(--bs-success) 0%, var(--bs-success) 100%); }
+        .category-general { background: linear-gradient(135deg, var(--bs-secondary) 0%, var(--bs-secondary) 100%); }
         .tweet-card {
             border-radius: 15px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -65,10 +58,10 @@
                     <small class="opacity-75">Vista detallada de contenido por categoría</small>
                 </div>
                 <div>
-                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-light me-2">
+                    <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-light me-2">
                         <i class="fas fa-arrow-left me-1"></i>Panel Admin
                     </a>
-                    <a href="{{ url_for('index') }}" class="btn btn-outline-light">
+                    <a href="{{ url_for('main.index') }}" class="btn btn-outline-light">
                         <i class="fas fa-home me-1"></i>Inicio
                     </a>
                 </div>
@@ -78,7 +71,7 @@
 
     <div class="container my-4">
         <!-- Category Statistics -->
-        <div class="category-header p-4 mb-4">
+        <div class="category-header category-{{ category_name }} p-4 mb-4">
             <div class="row text-center">
                 <div class="col-md-3">
                     <h2 class="mb-1">{{ category_stats.total_tweets or 0 }}</h2>
@@ -109,7 +102,7 @@
                     </h4>
                     
                     <!-- Reanalyze Category Button -->
-                    <form method="POST" action="{{ url_for('admin_reanalyze') }}" style="display: inline;">
+                    <form method="POST" action="{{ url_for('admin.admin_reanalyze') }}" style="display: inline;">
                         <input type="hidden" name="action" value="category">
                         <input type="hidden" name="category" value="{{ category_name }}">
                         <button type="submit" class="btn btn-outline-warning" onclick="return confirm('¿Reanalizar todos los tweets de esta categoría?')">
@@ -125,7 +118,7 @@
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
                                     <div>
-                                        <a href="{{ url_for('user_page', username=tweet.username) }}" class="text-decoration-none">
+                                        <a href="{{ url_for('main.user_page', username=tweet.username) }}" class="text-decoration-none">
                                             <h6 class="mb-1">
                                                 <i class="fab fa-twitter text-primary me-1"></i>@{{ tweet.username }}
                                             </h6>
@@ -171,10 +164,10 @@
                                 <!-- Admin Actions -->
                                 <div class="border-top pt-3 mt-3">
                                     <div class="d-flex gap-2">
-                                        <a href="{{ url_for('admin_edit_analysis', tweet_id=tweet.tweet_id) }}" class="btn btn-sm btn-outline-warning">
+                                        <a href="{{ url_for('admin.admin_edit_analysis', tweet_id=tweet.tweet_id) }}" class="btn btn-sm btn-outline-warning">
                                             <i class="fas fa-edit me-1"></i>Editar
                                         </a>
-                                        <form method="POST" action="{{ url_for('admin_reanalyze_single', tweet_id=tweet.tweet_id) }}" style="display: inline;">
+                                        <form method="POST" action="{{ url_for('admin.admin_reanalyze_single', tweet_id=tweet.tweet_id) }}" style="display: inline;">
                                             <button type="submit" class="btn btn-sm btn-outline-info" onclick="return confirm('¿Reanalizar este tweet?')">
                                                 <i class="fas fa-sync-alt me-1"></i>Reanalizar
                                             </button>
@@ -196,7 +189,7 @@
                             <ul class="pagination justify-content-center">
                                 {% if pagination.page > 1 %}
                                     <li class="page-item">
-                                        <a class="page-link" href="{{ url_for('admin_view_category', category_name=category_name, page=pagination.page-1) }}">Anterior</a>
+                                        <a class="page-link" href="{{ url_for('admin.admin_view_category', category_name=category_name, page=pagination.page-1) }}">Anterior</a>
                                     </li>
                                 {% endif %}
                                 
@@ -207,7 +200,7 @@
                                         </li>
                                     {% elif page_num <= 3 or page_num > pagination.total_pages - 3 or (page_num >= pagination.page - 1 and page_num <= pagination.page + 1) %}
                                         <li class="page-item">
-                                            <a class="page-link" href="{{ url_for('admin_view_category', category_name=category_name, page=page_num) }}">{{ page_num }}</a>
+                                            <a class="page-link" href="{{ url_for('admin.admin_view_category', category_name=category_name, page=page_num) }}">{{ page_num }}</a>
                                         </li>
                                     {% elif page_num == 4 or page_num == pagination.total_pages - 3 %}
                                         <li class="page-item disabled">
@@ -218,7 +211,7 @@
                                 
                                 {% if pagination.page < pagination.total_pages %}
                                     <li class="page-item">
-                                        <a class="page-link" href="{{ url_for('admin_view_category', category_name=category_name, page=pagination.page+1) }}">Siguiente</a>
+                                        <a class="page-link" href="{{ url_for('admin.admin_view_category', category_name=category_name, page=pagination.page+1) }}">Siguiente</a>
                                     </li>
                                 {% endif %}
                             </ul>
@@ -244,7 +237,7 @@
                     <div class="card-body p-0">
                         {% for user in top_users %}
                             <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
-                                <a href="{{ url_for('user_page', username=user.username, category=category_name) }}" class="text-decoration-none">
+                                <a href="{{ url_for('main.user_page', username=user.username, category=category_name) }}" class="text-decoration-none">
                                     <strong>@{{ user.username }}</strong>
                                 </a>
                                 <span class="badge bg-primary">{{ user.tweet_count }}</span>

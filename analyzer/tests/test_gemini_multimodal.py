@@ -701,8 +701,8 @@ class TestGeminiMultimodalErrorHandling(unittest.TestCase):
         self.assertFalse(analysis_error.recoverable)
 
 
-class TestGeminiMultimodalUtilities(unittest.TestCase):
-    """Test cases for utility methods."""
+class TestGeminiMultimodalRateLimiting(unittest.TestCase):
+    """Test cases for rate limiting functionality."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -715,24 +715,136 @@ class TestGeminiMultimodalUtilities(unittest.TestCase):
         )
         self.analyzer = GeminiMultimodal(self.deps)
 
-    def test_cleanup_file(self):
-        """Test file cleanup functionality."""
-        self.analyzer._cleanup_file("/tmp/test.jpg")
-        self.deps.file_system.remove_file.assert_called_once_with("/tmp/test.jpg")
+    def test_initial_rate_limit_status(self):
+        """Test initial rate limit status with no models rate-limited."""
+        status = self.analyzer.get_rate_limit_status()
 
-    def test_log_metrics_summary(self):
-        """Test metrics summary logging."""
-        with patch.object(self.analyzer.logger, 'info') as mock_info:
-            self.analyzer.log_metrics_summary()
-            mock_info.assert_called()
+        self.assertEqual(status["rate_limited_models"], [])
+        self.assertEqual(len(status["available_models"]), 6)  # All models in priority list
+        self.assertNotIn("reset_times", status)  # Should not have reset times
 
-    def test_reset_metrics(self):
-        """Test metrics reset functionality."""
-        old_collector = self.deps.metrics_collector
-        self.analyzer.reset_metrics()
+    def test_mark_model_rate_limited(self):
+        """Test marking a model as rate-limited."""
+        # Initially no models rate-limited
+        self.assertEqual(len(self.analyzer.rate_limited_models), 0)
 
-        # Metrics collector should be replaced
-        self.assertNotEqual(self.deps.metrics_collector, old_collector)
+        # Mark a model as rate-limited
+        self.analyzer._mark_model_rate_limited("gemini-2.5-pro")
+
+        self.assertIn("gemini-2.5-pro", self.analyzer.rate_limited_models)
+        self.assertEqual(len(self.analyzer.rate_limited_models), 1)
+
+    def test_mark_model_success(self):
+        """Test marking a model as successful removes rate limit."""
+        # Mark model as rate-limited first
+        self.analyzer._mark_model_rate_limited("gemini-2.5-pro")
+        self.assertIn("gemini-2.5-pro", self.analyzer.rate_limited_models)
+
+        # Mark as successful
+        self.analyzer._mark_model_success("gemini-2.5-pro")
+
+        self.assertNotIn("gemini-2.5-pro", self.analyzer.rate_limited_models)
+        self.assertEqual(len(self.analyzer.rate_limited_models), 0)
+
+    def test_get_available_models_excludes_rate_limited(self):
+        """Test that available models excludes rate-limited ones."""
+        # Initially all models available
+        available = self.analyzer._get_available_models()
+        self.assertEqual(len(available), 6)
+
+        # Mark one model as rate-limited
+        self.analyzer._mark_model_rate_limited("gemini-2.5-pro")
+        available = self.analyzer._get_available_models()
+
+        self.assertEqual(len(available), 5)
+        self.assertNotIn("gemini-2.5-pro", available)
+        self.assertIn("gemini-2.5-flash", available)
+
+    def test_reset_rate_limits(self):
+        """Test resetting all rate limits."""
+        # Mark multiple models as rate-limited
+        self.analyzer._mark_model_rate_limited("gemini-2.5-pro")
+        self.analyzer._mark_model_rate_limited("gemini-2.5-flash")
+
+        self.assertEqual(len(self.analyzer.rate_limited_models), 2)
+
+        # Reset all rate limits
+        self.analyzer.reset_rate_limits()
+
+        self.assertEqual(len(self.analyzer.rate_limited_models), 0)
+
+    def test_get_rate_limit_status_after_changes(self):
+        """Test rate limit status after marking models."""
+        # Mark a model as rate-limited
+        self.analyzer._mark_model_rate_limited("gemini-2.5-pro")
+
+        status = self.analyzer.get_rate_limit_status()
+
+        self.assertEqual(status["rate_limited_models"], ["gemini-2.5-pro"])
+        self.assertEqual(len(status["available_models"]), 5)
+        self.assertNotIn("gemini-2.5-pro", status["available_models"])
+
+    def test_quota_error_triggers_rate_limiting(self):
+        """Test that quota errors automatically trigger rate limiting."""
+        # Mock Gemini components to simulate quota error
+        with patch('analyzer.gemini_multimodal.genai.configure'), \
+             patch('analyzer.gemini_multimodal.genai.GenerativeModel') as mock_generative_model:
+
+            mock_model = MagicMock()
+            mock_generative_model.return_value = mock_model
+
+            # Simulate quota error
+            from analyzer.gemini_multimodal import AnalysisError, ErrorCategory
+            quota_error = AnalysisError("Quota exceeded", ErrorCategory.QUOTA_ERROR)
+            mock_model.generate_content.side_effect = Exception("Quota exceeded")
+
+            # Try analysis - should trigger rate limiting on quota error
+            result = self.analyzer._try_model_analysis(
+                "gemini-2.5-pro", "/tmp/test.jpg", "https://example.com/image.jpg",
+                "Test content", False
+            )
+
+            # Model should be marked as rate-limited
+            self.assertIn("gemini-2.5-pro", self.analyzer.rate_limited_models)
+            self.assertIsNone(result)
+
+    def test_analysis_skips_rate_limited_models(self):
+        """Test that analysis skips rate-limited models in priority order."""
+        # Mark first model as rate-limited
+        self.analyzer._mark_model_rate_limited("gemini-2.5-pro")
+
+        # Mock successful analysis for second model
+        with patch('analyzer.gemini_multimodal.genai.configure'), \
+             patch('analyzer.gemini_multimodal.genai.GenerativeModel') as mock_generative_model, \
+             patch('analyzer.gemini_multimodal.genai.upload_file') as mock_upload_file:
+
+            mock_model = MagicMock()
+            mock_generative_model.return_value = mock_model
+
+            mock_file = MagicMock()
+            mock_file.state.name = "ACTIVE"
+            mock_upload_file.return_value = mock_file
+
+            mock_response = MagicMock()
+            mock_response.text = "Success with fallback model"
+            mock_model.generate_content.return_value = mock_response
+
+            # Mock download
+            mock_response_dl = MagicMock()
+            mock_response_dl.status_code = 200
+            mock_response_dl.raise_for_status.return_value = None
+            mock_response_dl.iter_content.return_value = [b'test']
+            self.deps.http_client.get.return_value = mock_response_dl
+            self.deps.file_system.create_temp_file.return_value = "/tmp/test.jpg"
+            self.deps.resource_monitor.check_file_size.return_value = 1024
+
+            result, time_taken = self.analyzer.analyze_multimodal_content(
+                ["https://example.com/image.jpg"], "Test content"
+            )
+
+            # Should succeed with the second model
+            self.assertEqual(result, "Success with fallback model")
+            self.assertIsInstance(time_taken, float)
 
 
 if __name__ == '__main__':
