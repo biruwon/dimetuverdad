@@ -22,6 +22,7 @@ import argparse
 import json
 import time
 import sys
+import asyncio
 from pathlib import Path
 
 # Import utility modules
@@ -194,12 +195,13 @@ class TestAnalyzerIntegration:
             print(f"⚡ {test_id}... ", end="", flush=True)
             
             try:
-                analysis = self.analyzer.analyze_content(
+                # Run the async analyze_content method
+                analysis = asyncio.run(self.analyzer.analyze_content(
                     tweet_id=test_id,
                     tweet_url=f"https://example.com/{test_id}",
                     username="test_user",
                     content=test_case['content']
-                )
+                ))
                 
                 expected = test_case['expected_category']
                 actual = analysis.category
@@ -272,12 +274,13 @@ class TestAnalyzerIntegration:
             print(f"⚡ {test_id}... ", end="", flush=True)
             
             try:
-                analysis = self.analyzer.analyze_content(
+                # Run the async analyze_content method
+                analysis = asyncio.run(self.analyzer.analyze_content(
                     tweet_id=test_id,
                     tweet_url=f"https://example.com/{test_id}",
                     username="test_user_llm",
                     content=test_case['content']
-                )
+                ))
                 
                 expected = test_case['expected_category']
                 actual = analysis.category
@@ -387,12 +390,13 @@ class TestAnalyzerIntegration:
         print(f"⚡ {test_name}... ", end="", flush=True)
         
         try:
-            analysis = self.analyzer.analyze_content(
+            # Run the async analyze_content method
+            analysis = asyncio.run(self.analyzer.analyze_content(
                 tweet_id=test_name,
                 tweet_url=f"https://example.com/{test_name}",
                 username="test_user" if not is_llm_test else "test_user_llm",
                 content=test_case['content']
-            )
+            ))
             
             expected = test_case['expected_category']
             actual = analysis.category

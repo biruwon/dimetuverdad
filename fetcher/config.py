@@ -8,12 +8,7 @@ used throughout the tweet fetching system.
 import os
 from typing import Dict, List, Any
 from dataclasses import dataclass
-
-try:
-    from dotenv import load_dotenv
-except Exception:
-    def load_dotenv():
-        return None
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()

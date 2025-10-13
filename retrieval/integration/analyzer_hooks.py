@@ -158,11 +158,18 @@ class AnalyzerHooks:
             )
 
         except Exception as e:
-            self.logger.error(f"Verification failed: {e}")
-            # Return original result on error
+            # Log the full exception with stack trace for debugging
+            self.logger.exception("Verification failed with exception")
+
+            # Annotate the result with error information so callers can detect verification failure
+            error_info = {
+                'error': f"{type(e).__name__}: {str(e)}",
+                'verification_failed': True
+            }
+
             return AnalysisResult(
                 original_result=original_result,
-                verification_data=None,
+                verification_data=error_info,
                 explanation_with_verification=original_result.get('explanation', '')
             )
 

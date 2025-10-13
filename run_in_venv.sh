@@ -86,7 +86,7 @@ test_analyzer_integration(){
 test_fetch_integration(){
   ensure_venv
   echo "Running fetch integration tests (requires Twitter/X credentials)..."
-  "$PY" "$ROOT_DIR/fetcher/tests/test_fetch_integration.py" --live-fetch
+  "$PY" "$ROOT_DIR/fetcher/tests/test_fetch_integration.py" "$@"
 }
 
 test_retrieval_integration(){
@@ -103,7 +103,7 @@ test_integration(){
   echo "Running analyzer integration tests..."
   "$PY" "$ROOT_DIR/analyzer/tests/test_analyze_twitter_integration.py" "$@"
   echo "Running fetch integration tests..."
-  "$PY" "$ROOT_DIR/fetcher/tests/test_fetch_integration.py" --live-fetch
+  "$PY" "$ROOT_DIR/fetcher/tests/test_fetch_integration.py"
 }
 
 test_unit(){

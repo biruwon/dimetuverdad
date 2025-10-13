@@ -224,38 +224,27 @@ class ModelComparator:
         """Test a single example with a model."""
         start_time = time.time()
         
-        try:
-            # Create Analyzer instance with the specific LLM pipeline
-            analyzer = Analyzer(llm_pipeline=pipeline)
-            
-            # Run analysis using Analyzer.analyze_content with fake tweet data
-            result = analyzer.analyze_content(
-                tweet_id=f"test_{example.id}",
-                tweet_url=f"https://x.com/test/status/{example.id}",
-                username="test_user",
-                content=example.text
-            )
-            processing_time = time.time() - start_time
-            
-            return ModelResult(
-                model_name=model_name,
-                model_config=model_config,
-                example_id=example.id,
-                processing_time=processing_time,
-                success=True,
-                llm_explanation=result.llm_explanation,
-                llm_categories=[result.category] if result.category else []
-            )
-        except Exception as e:
-            processing_time = time.time() - start_time
-            return ModelResult(
-                model_name=model_name,
-                model_config=model_config,
-                example_id=example.id,
-                processing_time=processing_time,
-                success=False,
-                error=str(e)
-            )
+        # Create Analyzer instance with the specific LLM pipeline
+        analyzer = Analyzer(llm_pipeline=pipeline)
+        
+        # Run analysis using Analyzer.analyze_content with fake tweet data
+        result = analyzer.analyze_content(
+            tweet_id=f"test_{example.id}",
+            tweet_url=f"https://x.com/test/status/{example.id}",
+            username="test_user",
+            content=example.text
+        )
+        processing_time = time.time() - start_time
+        
+        return ModelResult(
+            model_name=model_name,
+            model_config=model_config,
+            example_id=example.id,
+            processing_time=processing_time,
+            success=True,
+            llm_explanation=result.llm_explanation,
+            llm_categories=[result.category] if result.category else []
+        )
     
     def generate_comparison_report(self) -> Dict:
         """Generate focused comparison report with essential information."""

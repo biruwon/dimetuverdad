@@ -961,11 +961,6 @@ def find_and_extract_quoted_tweet(page, main_article, post_analysis: dict) -> di
                 }
         except Exception as e:
             print(f"⚠️ Could not visit quoted tweet: {e}")
-            # Fall back to embedded text if available
-            if embedded_text:
-                post_analysis['original_content'] = embedded_text
-                print(f"⚠️ Using embedded text as fallback")
-                return {'content': embedded_text}
             
     except Exception as e:
         print(f"⚠️ Error extracting quoted tweet: {e}")

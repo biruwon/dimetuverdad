@@ -97,15 +97,56 @@ ollama serve
 ollama pull gpt-oss:20b
 ```
 
-### 3. Configuration
+### 3. Environment Configuration
 
-Create `.env` file for Twitter credentials:
+The project supports multiple environments (development, testing, production) with separate configuration files:
+
+#### Environment Files Setup
+
+1. **Copy the example configuration:**
+   ```bash
+   cp .env.example .env.development
+   cp .env.example .env.testing
+   cp .env.example .env.production
+   ```
+
+2. **Configure each environment file:**
+   - **`.env.development`**: Your local development settings
+   - **`.env.testing`**: Test environment with mock data
+   - **`.env.production`**: Production credentials and settings
+
+3. **Update credentials in each file:**
+   ```bash
+   # Edit .env.development with your actual credentials
+   X_USERNAME=your_twitter_username
+   X_PASSWORD=your_twitter_password
+   X_EMAIL_OR_PHONE=your_email
+   GEMINI_API_KEY=your_gemini_api_key
+   ```
+
+#### Environment Selection
+
+**Default Environment**: `development`
+
+**Switch Environments:**
 ```bash
-# Twitter/X credentials for data collection
-X_USERNAME=your_username
-X_PASSWORD=your_password  
-X_EMAIL_OR_PHONE=your_email
+# Development (default)
+./run_in_venv.sh analyze-twitter
+
+# Testing environment
+DIMETUVERDAD_ENV=testing ./run_in_venv.sh analyze-twitter
+
+# Production environment
+DIMETUVERDAD_ENV=production ./run_in_venv.sh analyze-twitter
 ```
+
+**Environment Priority:**
+1. `DIMETUVERDAD_ENV` environment variable
+2. Environment-specific `.env.{environment}` file
+3. Fallback to `.env` file
+4. Auto-detection (pytest → testing, otherwise development)
+
+**Important**: Environment files (`.env.*`) are gitignored and should never be committed to version control.
 
 ### 4. Database Initialization
 

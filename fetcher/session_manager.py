@@ -12,14 +12,7 @@ from pathlib import Path
 
 if TYPE_CHECKING:
     from playwright.sync_api import Browser, BrowserContext, Page
-
-try:
-    from playwright.sync_api import sync_playwright, TimeoutError
-except Exception:
-    sync_playwright = None
-    class TimeoutError(Exception):
-        pass
-
+from playwright.sync_api import sync_playwright, TimeoutError
 from .config import get_config
 from .logging_config import get_logger
 from .scroller import Scroller

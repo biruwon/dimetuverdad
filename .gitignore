@@ -24,6 +24,7 @@ storage_state.json
 # Credentials
 config.json
 *.env
+.env.*
 x_session.json
 scripts/model_comparison_*.json
 scripts/test_results.json

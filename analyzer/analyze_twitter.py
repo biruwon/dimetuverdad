@@ -347,7 +347,8 @@ class Analyzer:
 
         # Check database
         try:
-            conn = sqlite3.connect(DB_PATH, timeout=5.0)
+            from utils.database import get_db_connection
+            conn = get_db_connection()
             c = conn.cursor()
             c.execute("SELECT COUNT(*) FROM content_analyses")
             count = c.fetchone()[0]

@@ -16,7 +16,6 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from utils import paths
-from utils.database import get_db_connection
 
 DB_PATH = paths.get_db_path()
 
@@ -251,6 +250,8 @@ def verify_schema():
     """Verify the database schema is correct."""
     print("🔍 Verifying database schema...")
     
+    # Import get_db_connection lazily to avoid circular imports
+    from utils.database import get_db_connection
     conn = get_db_connection()
     c = conn.cursor()
     

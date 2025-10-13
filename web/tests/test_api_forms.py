@@ -23,7 +23,7 @@ class TestTemplateRendering:
             mock_conn.execute.return_value.fetchall.return_value = [
                 {'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'}
             ]
-            mock_conn.execute.return_value.fetchone.return_value = (1,)  # Total count
+            mock_conn.execute.return_value.fetchone.return_value = MockRow({'cnt': 1})  # Total count
             
             # Mock the response for the template rendering
             response = client.get('/')
@@ -185,7 +185,7 @@ class TestJavaScriptIntegration:
             mock_conn.execute.return_value.fetchall.return_value = [
                 {'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'}
             ]
-            mock_conn.execute.return_value.fetchone.return_value = (1,)  # Total count
+            mock_conn.execute.return_value.fetchone.return_value = MockRow({'cnt': 1})  # Total count
             
             response = client.get('/')
             assert response.status_code == 200

@@ -137,8 +137,8 @@ def admin_fetch() -> str:
         try:
             # Check if user exists in database
             conn = get_db_connection()
-            user_exists_row = conn.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,)).fetchone()
-            user_exists = user_exists_row['COUNT(*)'] if user_exists_row and 'COUNT(*)' in user_exists_row else user_exists_row[0] if user_exists_row else 0
+            user_exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
+            user_exists = user_exists_row['cnt'] if user_exists_row and 'cnt' in user_exists_row else 0
             conn.close()
 
             # Choose fetch strategy based on user existence
@@ -328,31 +328,36 @@ def admin_edit_analysis(tweet_id: str) -> str:
         flash('Tweet no encontrado', 'error')
         return redirect(url_for('admin.admin_dashboard'))
 
-    # Support tuple or mapping rows as in tests
-    try:
+    # Normalize row to mapping-like interface: prefer dict-style access
+    from collections.abc import Mapping
+
+    if isinstance(row, Mapping) or (hasattr(row, 'keys') and callable(getattr(row, 'keys'))):
+        # Safe mapping-style access with defaults
         tweet_dict = {
-            'content': row['content'] if 'content' in row else row[0],
-            'username': row['username'] if 'username' in row else row[1],
-            'tweet_timestamp': row['tweet_timestamp'] if 'tweet_timestamp' in row else row[2],
-            'category': row['category'] if 'category' in row else (row[3] if len(row) > 3 else 'general'),
-            'llm_explanation': row['llm_explanation'] if 'llm_explanation' in row else (row[4] if len(row) > 4 else ''),
-            'tweet_url': row['tweet_url'] if 'tweet_url' in row else (row[5] if len(row) > 5 else ''),
-            'original_content': row['original_content'] if 'original_content' in row else (row[6] if len(row) > 6 else ''),
-            'verification_data': json.loads(row['verification_data']) if row['verification_data'] and 'verification_data' in row else None,
-            'verification_confidence': row['verification_confidence'] if 'verification_confidence' in row else (row[8] if len(row) > 8 else 0.0)
+            'content': row.get('content') if getattr(row, 'get', None) else (row['content'] if 'content' in row else None),
+            'username': row.get('username') if getattr(row, 'get', None) else (row['username'] if 'username' in row else None),
+            'tweet_timestamp': row.get('tweet_timestamp') if getattr(row, 'get', None) else (row['tweet_timestamp'] if 'tweet_timestamp' in row else None),
+            'category': row.get('category') if getattr(row, 'get', None) else (row['category'] if 'category' in row else None),
+            'llm_explanation': row.get('llm_explanation') if getattr(row, 'get', None) else (row['llm_explanation'] if 'llm_explanation' in row else None),
+            'tweet_url': row.get('tweet_url') if getattr(row, 'get', None) else (row['tweet_url'] if 'tweet_url' in row else None),
+            'original_content': row.get('original_content') if getattr(row, 'get', None) else (row['original_content'] if 'original_content' in row else None),
+            'verification_data': (json.loads(row['verification_data']) if (('verification_data' in row or getattr(row, 'get', None)) and row.get('verification_data')) else None) if getattr(row, 'get', None) else (json.loads(row['verification_data']) if ('verification_data' in row and row['verification_data']) else None),
+            'verification_confidence': row.get('verification_confidence') if getattr(row, 'get', None) else (row['verification_confidence'] if 'verification_confidence' in row else None)
         }
-    except Exception:
-        # Fallback mapping for strict tuples
+    else:
+        # Fallback for sequence-like rows: map using the expected column order
+        # Expected order from SELECT: content, username, tweet_timestamp, category, llm_explanation, tweet_url, original_content, verification_data, verification_confidence
+        seq = list(row)
         tweet_dict = {
-            'content': row[0],
-            'username': row[1],
-            'tweet_timestamp': row[2],
-            'category': row[3] if len(row) > 3 else 'general',
-            'llm_explanation': row[4] if len(row) > 4 else '',
-            'tweet_url': row[5] if len(row) > 5 else '',
-            'original_content': row[6] if len(row) > 6 else '',
-            'verification_data': json.loads(row[7]) if row[7] and len(row) > 7 else None,
-            'verification_confidence': row[8] if len(row) > 8 else 0.0
+            'content': seq[0] if len(seq) > 0 else None,
+            'username': seq[1] if len(seq) > 1 else None,
+            'tweet_timestamp': seq[2] if len(seq) > 2 else None,
+            'category': seq[3] if len(seq) > 3 and seq[3] else 'general',
+            'llm_explanation': seq[4] if len(seq) > 4 and seq[4] else '',
+            'tweet_url': seq[5] if len(seq) > 5 and seq[5] else '',
+            'original_content': seq[6] if len(seq) > 6 and seq[6] else '',
+            'verification_data': json.loads(seq[7]) if len(seq) > 7 and seq[7] else None,
+            'verification_confidence': seq[8] if len(seq) > 8 and seq[8] else 0.0
         }
 
     from web.utils.decorators import ANALYSIS_CATEGORIES
@@ -401,16 +406,16 @@ def admin_view_category(category_name: str) -> str:
         conn = get_db_connection()
 
         # 1) Check if category exists
-        exists_row = conn.execute("SELECT COUNT(*) FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
-        exists_count = exists_row['COUNT(*)'] if exists_row and 'COUNT(*)' in exists_row else exists_row[0] if exists_row else 0
+        exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
+        exists_count = exists_row['cnt'] if exists_row and 'cnt' in exists_row else 0
         if not exists_count:
             conn.close()
             flash(f'No se encontraron tweets para la categoría "{category_name}"', 'info')
             return redirect(url_for('admin.admin_dashboard'))
 
         # 2) Total count
-        total_count_row = conn.execute("SELECT COUNT(*) FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
-        total_count = total_count_row['COUNT(*)'] if total_count_row and 'COUNT(*)' in total_count_row else total_count_row[0] if total_count_row else 0
+        total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
+        total_count = total_count_row['cnt'] if total_count_row and 'cnt' in total_count_row else 0
 
         # Pagination
         offset = (page - 1) * per_page
@@ -607,14 +612,10 @@ def export_csv() -> str:
 
         # Write data
         for r in rows:
-            try:
-                writer.writerow([
-                    r['post_id'], r['author_username'], r['category'], r['llm_explanation'],
-                    r['analysis_method'], r['analysis_timestamp'], r['tweet_content'], r['tweet_url'], r['tweet_timestamp']
-                ])
-            except Exception:
-                # Support MockRow/tuple
-                writer.writerow([r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]])
+            writer.writerow([
+                r['post_id'], r['author_username'], r['category'], r['llm_explanation'],
+                r['analysis_method'], r['analysis_timestamp'], r['tweet_content'], r['tweet_url'], r['tweet_timestamp']
+            ])
 
         output.seek(0)
         csv_data = output.getvalue()
@@ -671,32 +672,19 @@ def export_json() -> str:
         }
 
         for r in rows:
-            try:
-                record = {
-                    'post_id': r['post_id'],
-                    'author_username': r['author_username'],
-                    'category': r['category'],
-                    'llm_explanation': r['llm_explanation'],
-                    'analysis_method': r['analysis_method'],
-                    'analysis_timestamp': r['analysis_timestamp'],
-                    'post_content': r['post_content'],
-                    'post_url': r['post_url'],
-                    'post_timestamp': r['post_timestamp'],
-                    'categories_detected': r['categories_detected']
-                }
-            except Exception:
-                record = {
-                    'post_id': r[0],
-                    'author_username': r[1],
-                    'category': r[2],
-                    'llm_explanation': r[3],
-                    'analysis_method': r[4],
-                    'analysis_timestamp': r[5],
-                    'post_content': r[6],
-                    'post_url': r[7],
-                    'post_timestamp': r[8],
-                    'categories_detected': r[9] if len(r) > 9 else None
-                }
+            record = {
+                'post_id': r['post_id'],
+                'author_username': r['author_username'],
+                'category': r['category'],
+                'llm_explanation': r['llm_explanation'],
+                'analysis_method': r['analysis_method'],
+                'analysis_timestamp': r['analysis_timestamp'],
+                'post_content': r['post_content'],
+                'post_url': r['post_url'],
+                'post_timestamp': r['post_timestamp'],
+                'categories_detected': r['categories_detected']
+            }
+
             export_data['data'].append(record)
 
         # Create response

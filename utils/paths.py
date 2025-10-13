@@ -1,12 +1,13 @@
 """
 Path utilities for the dimetuverdad project.
-Centralized path management with environment isolation.
+Centralized path management - paths only, no environment logic.
 """
 
 import sys
 import os
 from pathlib import Path
 from typing import Optional
+from .config import config
 
 def setup_project_paths():
     """Set up sys.path to include project directories for imports."""
@@ -24,30 +25,10 @@ def get_project_root() -> Path:
     """Get the project root directory."""
     return Path(__file__).resolve().parent.parent
 
-def get_environment() -> str:
-    """Get the current environment (development, testing, production)."""
-    # Check environment variables first
-    env = os.environ.get('DIMETUVERDAD_ENV', '').lower()
-
-    # Auto-detect testing environment
-    if os.environ.get('PYTEST_CURRENT_TEST') or 'pytest' in sys.argv[0]:
-        return 'testing'
-
-    # Default to development
-    if not env:
-        return 'development'
-
-    # Validate environment
-    valid_envs = ['development', 'testing', 'production']
-    if env not in valid_envs:
-        raise ValueError(f"Invalid environment '{env}'. Must be one of: {valid_envs}")
-
-    return env
-
 def get_db_path(env: Optional[str] = None, test_mode: bool = False) -> str:
     """Get the database file path for the specified environment."""
     if env is None:
-        env = get_environment()
+        env = config.get_environment()
 
     # Environment-specific database paths
     db_names = {

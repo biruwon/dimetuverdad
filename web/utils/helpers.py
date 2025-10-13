@@ -60,19 +60,16 @@ def reanalyze_tweet_sync(tweet_id) -> Any:
     """Synchronous wrapper for reanalyze_tweet that can be called from Flask routes."""
     import asyncio
     try:
-        # Create a new event loop if one doesn't exist
+        # Check if there's already a running event loop
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If loop is already running, we need to use a different approach
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, reanalyze_tweet(tweet_id))
-                    return future.result(timeout=30)  # 30 second timeout
-            else:
-                return loop.run_until_complete(reanalyze_tweet(tweet_id))
+            loop = asyncio.get_running_loop()
+            # If loop is already running, we need to use a different approach
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, reanalyze_tweet(tweet_id))
+                return future.result(timeout=30)  # 30 second timeout
         except RuntimeError:
-            # No event loop, create a new one
+            # No event loop running, create a new one
             return asyncio.run(reanalyze_tweet(tweet_id))
     except Exception as e:
         print(f"❌ Error in reanalyze_tweet_sync: {e}")
@@ -355,10 +352,9 @@ def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
         ORDER BY last_scraped DESC
         LIMIT ? OFFSET ?
     """, (per_page, (page - 1) * per_page)).fetchall()
-    total_count_row = conn.execute("SELECT COUNT(*) FROM accounts").fetchone()
+    total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM accounts").fetchone()
     # Handle different row types: tuples, MockRow with .get(), and sqlite3.Row with dict access
-    # For COUNT(*) queries, the result is typically a single unnamed column
-    total_count = total_count_row['COUNT(*)'] if total_count_row and 'COUNT(*)' in total_count_row else total_count_row[0] if total_count_row else 0
+    total_count = total_count_row['cnt'] if total_count_row and 'cnt' in total_count_row else 0
 
     accounts_with_stats = []
     for r in rows:
@@ -367,24 +363,24 @@ def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
         last_scraped = r['last_scraped']
 
         # Get tweet count for this account
-        tweet_count_row = conn.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,)).fetchone()
-        tweet_count = tweet_count_row['COUNT(*)'] if tweet_count_row and 'COUNT(*)' in tweet_count_row else tweet_count_row[0] if tweet_count_row else 0
+        tweet_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
+        tweet_count = tweet_count_row['cnt'] if tweet_count_row and 'cnt' in tweet_count_row else 0
 
         # Get analyzed posts count
         analyzed_count_row = conn.execute("""
-            SELECT COUNT(*) FROM content_analyses ca
+            SELECT COUNT(*) AS cnt FROM content_analyses ca
             JOIN tweets t ON ca.post_id = t.tweet_id
             WHERE t.username = ?
         """, (username,)).fetchone()
-        analyzed_posts = analyzed_count_row['COUNT(*)'] if analyzed_count_row and 'COUNT(*)' in analyzed_count_row else analyzed_count_row[0] if analyzed_count_row else 0
+        analyzed_posts = analyzed_count_row['cnt'] if analyzed_count_row and 'cnt' in analyzed_count_row else 0
 
         # Get problematic posts count (non-general categories)
         problematic_count_row = conn.execute("""
-            SELECT COUNT(*) FROM content_analyses ca
+            SELECT COUNT(*) AS cnt FROM content_analyses ca
             JOIN tweets t ON ca.post_id = t.tweet_id
             WHERE t.username = ? AND ca.category != 'general'
         """, (username,)).fetchone()
-        problematic_posts = problematic_count_row['COUNT(*)'] if problematic_count_row and 'COUNT(*)' in problematic_count_row else problematic_count_row[0] if problematic_count_row else 0
+        problematic_posts = problematic_count_row['cnt'] if problematic_count_row and 'cnt' in problematic_count_row else 0
 
         accounts_with_stats.append({
             'username': username,

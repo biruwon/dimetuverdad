@@ -44,8 +44,10 @@ class RefetchManager:
             Exception: If database error occurs
         """
         if self._db_path:
-            conn = get_db_connection(db_path=self._db_path)
+            conn = sqlite3.connect(self._db_path, timeout=30.0)
+            conn.row_factory = sqlite3.Row
         else:
+            from utils.database import get_db_connection
             conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("SELECT username, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,))

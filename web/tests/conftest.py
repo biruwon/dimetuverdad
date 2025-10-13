@@ -127,6 +127,34 @@ class MockRow:
         return f"MockRow({self._data})"
 
 
+def make_count_row(count: int = 0, key: str = 'cnt') -> MockRow:
+    """Return a MockRow representing a simple COUNT(*) AS cnt result."""
+    return MockRow({key: count})
+
+
+def make_post_export_row(post_id: str, author: str, category: str = 'general', explanation: str = '',
+                         method: str = 'pattern', timestamp: str = '2024-01-01 12:00:00',
+                         content: str = None, url: str = None, post_ts: str = None, categories_detected=None) -> MockRow:
+    """Return a MockRow shaped for export endpoints (CSV/JSON)."""
+    return MockRow({
+        'post_id': post_id,
+        'author_username': author,
+        'category': category,
+        'llm_explanation': explanation,
+        'analysis_method': method,
+        'analysis_timestamp': timestamp,
+        'post_content': content or '',
+        'post_url': url or '',
+        'post_timestamp': post_ts or timestamp,
+        'categories_detected': categories_detected
+    })
+
+
+def tuple_to_mockrow(seq: tuple, fields: list) -> MockRow:
+    """Convert a sequence/tuple into a MockRow given a list of field names."""
+    return MockRow({k: (seq[i] if i < len(seq) else None) for i, k in enumerate(fields)})
+
+
 @pytest.fixture
 def mock_database():
     """Mock database operations."""

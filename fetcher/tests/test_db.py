@@ -9,44 +9,42 @@ from utils.database import init_test_database, cleanup_test_database
 
 # ===== TEST HELPERS =====
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="function")
 def test_db():
-    """Create a test database for all tests in this class"""
+    """Create a test database for each test function"""
     # Initialize test database
     db_path = init_test_database()
     yield db_path
-    # Cleanup after all tests in this class
+    # Cleanup after each test function
     cleanup_test_database()
 
 
 @pytest.fixture(autouse=True)
 def override_db_path(test_db):
-    """Override DB_PATH for all tests"""
-    original_path = db.DB_PATH
-    db.DB_PATH = test_db
+    """Override TEST_DATABASE_PATH for all tests"""
+    import os
+    original_path = os.environ.get('TEST_DATABASE_PATH')
+    os.environ['TEST_DATABASE_PATH'] = test_db
     yield
-    db.DB_PATH = original_path
+    if original_path is not None:
+        os.environ['TEST_DATABASE_PATH'] = original_path
+    else:
+        os.environ.pop('TEST_DATABASE_PATH', None)
 
 
 def get_test_connection():
     """Get a connection to the test database"""
-    return db.get_connection()
-
-
-# ===== DATABASE CONNECTION TESTS =====
-
-def test_get_connection():
-    """Test database connection creation"""
-    conn = db.get_connection()
-    assert conn is not None
-    assert isinstance(conn, sqlite3.Connection)
-    conn.close()
-
-# ===== SAVE TWEET TESTS =====
+    from utils.database import get_db_connection
+    return get_db_connection()
 
 def test_save_tweet_new_tweet():
     """Test saving a new tweet"""
     conn = get_test_connection()
+
+    # Create account first (required by foreign key constraint)
+    c = conn.cursor()
+    c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+    conn.commit()
 
     tweet_data = {
         'tweet_id': '123',
@@ -65,9 +63,9 @@ def test_save_tweet_new_tweet():
     c.execute("SELECT * FROM tweets WHERE tweet_id = ?", ('123',))
     row = c.fetchone()
     assert row is not None
-    assert row[1] == '123'  # tweet_id
-    assert row[4] == 'Hello world'  # content
-    assert row[3] == 'testuser'  # username
+    assert row['tweet_id'] == '123'
+    assert row['content'] == 'Hello world'
+    assert row['username'] == 'testuser'
 
     conn.close()
 
@@ -75,6 +73,11 @@ def test_save_tweet_new_tweet():
 def test_save_tweet_duplicate_no_changes():
     """Test saving duplicate tweet with no changes"""
     conn = get_test_connection()
+
+    # Create account first (required by foreign key constraint)
+    c = conn.cursor()
+    c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+    conn.commit()
 
     tweet_data = {
         'tweet_id': '123',
@@ -100,6 +103,11 @@ def test_save_tweet_update_content():
     """Test updating tweet content"""
     conn = get_test_connection()
 
+    # Create account first (required by foreign key constraint)
+    c = conn.cursor()
+    c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+    conn.commit()
+
     tweet_data = {
         'tweet_id': '123',
         'content': 'Hello world',
@@ -121,7 +129,7 @@ def test_save_tweet_update_content():
     c = conn.cursor()
     c.execute("SELECT content FROM tweets WHERE tweet_id = ?", ('123',))
     row = c.fetchone()
-    assert row[0] == 'Updated content'
+    assert row['content'] == 'Updated content'
 
     conn.close()
 
@@ -129,6 +137,11 @@ def test_save_tweet_update_content():
 def test_save_tweet_update_post_type():
     """Test updating tweet post type"""
     conn = get_test_connection()
+
+    # Create account first (required by foreign key constraint)
+    c = conn.cursor()
+    c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+    conn.commit()
 
     tweet_data = {
         'tweet_id': '123',
@@ -151,7 +164,7 @@ def test_save_tweet_update_post_type():
     c = conn.cursor()
     c.execute("SELECT post_type FROM tweets WHERE tweet_id = ?", ('123',))
     row = c.fetchone()
-    assert row[0] == 'repost'
+    assert row['post_type'] == 'repost'
 
     conn.close()
 
@@ -182,6 +195,8 @@ def test_check_if_tweet_exists_tweet_exists():
     """Test checking if tweet exists when it does"""
     conn = get_test_connection()
     c = conn.cursor()
+    # Create account first
+    c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
     c.execute("INSERT INTO tweets (tweet_id, username, tweet_url, content) VALUES (?, ?, ?, ?)", ('123', 'testuser', 'https://x.com/testuser/status/123', 'test'))
     conn.commit()
     conn.close()
@@ -200,6 +215,8 @@ def test_check_if_tweet_exists_wrong_user():
     """Test checking if tweet exists for wrong user"""
     conn = get_test_connection()
     c = conn.cursor()
+    # Create account first
+    c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
     c.execute("INSERT INTO tweets (tweet_id, username, tweet_url, content) VALUES (?, ?, ?, ?)", ('123', 'testuser', 'https://x.com/testuser/status/123', 'test'))
     conn.commit()
     conn.close()
@@ -221,10 +238,10 @@ def test_save_account_profile_info_new_account(capsys):
     c.execute("SELECT * FROM accounts WHERE username = ?", ('testuser',))
     row = c.fetchone()
     assert row is not None
-    assert row[1] == 'testuser'  # username is at index 1
-    assert row[3] == 'https://example.com/pic.jpg'  # profile_pic_url is at index 3
-    assert row[4] is not None  # profile_pic_updated
-    assert row[5] is not None  # last_scraped
+    assert row['username'] == 'testuser'
+    assert row['profile_pic_url'] == 'https://example.com/pic.jpg'
+    assert row['profile_pic_updated'] is not None
+    assert row['last_scraped'] is not None
 
     # Check output
     captured = capsys.readouterr()
@@ -249,7 +266,7 @@ def test_save_account_profile_info_update_existing():
     # Verify update
     c.execute("SELECT profile_pic_url FROM accounts WHERE username = ?", ('testuser',))
     row = c.fetchone()
-    assert row[0] == 'https://example.com/new.jpg'
+    assert row['profile_pic_url'] == 'https://example.com/new.jpg'
 
     conn.close()
 

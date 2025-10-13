@@ -133,6 +133,11 @@ analyzer = Analyzer(model_priority="quality")
 ```
 
 ### Database Operations
+- **ALWAYS USE STANDARDIZED CONNECTION**: Use `from utils.database import get_db_connection; conn = get_db_connection()` for all database connections
+- **NEVER USE DIRECT sqlite3.connect**: Except for repository classes that work with specific database paths
+- **ENVIRONMENT-AWARE**: `get_db_connection()` automatically uses the correct database path based on environment (development/testing/production)
+- **ROW FACTORY ENABLED**: All connections automatically have `row_factory = sqlite3.Row` for named column access
+- **ENVIRONMENT OPTIMIZATIONS**: Automatic PRAGMA settings based on environment (development=8MB cache, testing=1MB+fast, production=64MB+WAL)
 - **Always** use `scripts/init_database.py --force` to set up fresh database schema
 - Database locked errors: restart Python process and check for hanging connections
 - Use timeout=30.0 for all SQLite connections due to concurrent access

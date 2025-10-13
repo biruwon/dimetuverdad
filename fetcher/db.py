@@ -8,14 +8,11 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 from utils import paths
+from utils.database import get_db_connection
 # Import repository interfaces
 from repositories import get_tweet_repository, get_account_repository
 
 DB_PATH = str(paths.get_db_path())
-
-def get_connection(timeout: float = 10.0) -> sqlite3.Connection:
-    return sqlite3.connect(DB_PATH, timeout=timeout)
-
 
 def delete_account_data(username: str) -> Dict[str, int]:
     """
@@ -38,26 +35,27 @@ def delete_account_data(username: str) -> Dict[str, int]:
         
         # For analyses count, we need to use direct access since content analysis repo might not have username filtering
         # This is a specialized operation that may need to stay direct for now
-        conn = get_connection()
+        conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM content_analyses WHERE username = ?", (username,))
-        analyses_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) AS analyses_count FROM content_analyses WHERE username = ?", (username,))
+        row = cur.fetchone()
+        analyses_count = row['analyses_count'] if row and 'analyses_count' in row else 0
         conn.close()
-        
+
         # Delete tweets using repository
         deleted_tweets = tweet_repo.delete_tweets_by_username(username)
-        
+
         # Delete analyses using direct access (for now)
-        conn = get_connection()
+        conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("DELETE FROM content_analyses WHERE username = ?", (username,))
         conn.commit()
         conn.close()
-        
+
         print(f"✅ Deleted {deleted_tweets} tweets and {analyses_count} analyses for @{username}")
-        
+
         return {'tweets': deleted_tweets, 'analyses': analyses_count}
-        
+
     except Exception as e:
         print(f"❌ Error deleting data for @{username}: {e}")
         raise
@@ -71,7 +69,11 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
         c.execute("SELECT id, post_type, content, original_author, original_tweet_id FROM tweets WHERE tweet_id = ?", (tweet_data['tweet_id'],))
         existing = c.fetchone()
         if existing:
-            existing_id, existing_post_type, existing_content, existing_original_author, existing_original_tweet_id = existing[0], existing[1], existing[2], existing[3], existing[4]
+            existing_id = existing['id']
+            existing_post_type = existing['post_type']
+            existing_content = existing['content']
+            existing_original_author = existing['original_author']
+            existing_original_tweet_id = existing['original_tweet_id']
             new_post_type = tweet_data.get('post_type', 'original')
             needs_update = False
             if existing_post_type != new_post_type:
@@ -135,19 +137,19 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
 def check_if_tweet_exists(username: str, tweet_id: str) -> bool:
     """Check if a tweet already exists in the database."""
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=10.0)
+        conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             SELECT 1 FROM tweets 
             WHERE username = ? AND tweet_id = ?
         """, (username, tweet_id))
-        
+
         result = cursor.fetchone()
         conn.close()
-        
+
         return result is not None
-        
+
     except Exception as e:
         print(f"  ⚠️ Error checking if tweet exists: {e}")
         return False
@@ -184,7 +186,7 @@ def save_account_profile_info(conn, username: str, profile_pic_url: str = None):
 
 def init_db():
     """Initialize database with schema."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     c = conn.cursor()
     
     # The schema is already created by migrate_tweets_schema.py
@@ -223,17 +225,13 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict, db_path: str = Non
         bool: True if successful
     """
     try:
-        # Use provided path or get current environment path
-        if db_path is None:
-            db_path = DB_PATH
-            
-        conn = sqlite3.connect(db_path, timeout=10.0)
+        conn = get_db_connection()
         c = conn.cursor()
         
         # Get current media_links to combine with any new video URLs
         c.execute("SELECT media_links FROM tweets WHERE tweet_id = ?", (tweet_id,))
         row = c.fetchone()
-        current_media = row[0] if row and row[0] else ""
+        current_media = row['media_links'] if row and 'media_links' in row and row['media_links'] else ""
         
         # If tweet_data contains media_links, combine them with existing ones
         if tweet_data.get('media_links'):

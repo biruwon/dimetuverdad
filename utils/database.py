@@ -10,6 +10,10 @@ import fcntl
 from contextlib import contextmanager
 from typing import Optional, Dict, Any
 from utils import paths
+from utils.config import config
+
+# Direct import of schema creation function for tests
+from scripts.init_database import create_fresh_database_schema
 
 # Thread-local storage for database connections
 _local = threading.local()
@@ -18,7 +22,7 @@ class DatabaseConfig:
     """Database configuration for different environments."""
 
     def __init__(self, env: str = None):
-        self.env = env or paths.get_environment()
+        self.env = env or config.get_environment()
         self.db_path = paths.get_db_path(env=self.env)
 
         # Environment-specific settings
@@ -64,36 +68,34 @@ def _get_flask_database_path() -> Optional[str]:
     
     return None
 
-def get_db_connection(env: str = None, row_factory: bool = True, db_path: str = None) -> sqlite3.Connection:
+def get_db_connection(env: str = None) -> sqlite3.Connection:
     """
     Get a database connection for the specified environment.
 
     Args:
         env: Environment name ('development', 'testing', 'production')
-        row_factory: Whether to enable row factory for dict-like access
-        db_path: Optional explicit database path to use
 
     Returns:
         SQLite database connection
     """
     if env is None:
-        env = paths.get_environment()
+        env = config.get_environment()
 
-    config = DatabaseConfig(env)
-    params = config.get_connection_params().copy()
+    config_obj = DatabaseConfig(env)
+    params = config_obj.get_connection_params().copy()
     # Store enable_foreign_keys before removing it from params
     enable_foreign_keys = params.pop('enable_foreign_keys', True)
 
-    # Use explicit db_path if provided and do not modify it
-    if db_path:
-        conn = sqlite3.connect(db_path, **params)
-    else:
-        # Check for Flask app DATABASE_PATH config first (for web tests)
-        final_db_path = _get_flask_database_path() or config.get_db_path()
-        conn = sqlite3.connect(final_db_path, **params)
+    # Determine db_path with priority: TEST_DATABASE_PATH env var > Flask config > environment-based path
+    test_db_path = os.environ.get('TEST_DATABASE_PATH')
+    flask_db_path = _get_flask_database_path()
+    env_db_path = config_obj.get_db_path()
+    
+    final_db_path = test_db_path or flask_db_path or env_db_path
+    conn = sqlite3.connect(final_db_path, **params)
 
-    if row_factory:
-        conn.row_factory = sqlite3.Row
+    # Always enable row factory for dict-like access
+    conn.row_factory = sqlite3.Row
 
     # Enable foreign keys
     if enable_foreign_keys:
@@ -110,11 +112,16 @@ def get_db_connection(env: str = None, row_factory: bool = True, db_path: str = 
         conn.execute("PRAGMA journal_mode = MEMORY")
         conn.execute("PRAGMA synchronous = OFF")
         conn.execute("PRAGMA cache_size = -1000")  # 1MB cache
+    elif env == 'development':
+        # Development optimizations - balanced performance and durability
+        conn.execute("PRAGMA journal_mode = DELETE")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA cache_size = -8000")  # 8MB cache
 
     return conn
 
 @contextmanager
-def get_db_connection_context(env: str = None, row_factory: bool = True):
+def get_db_connection_context(env: str = None):
     """
     Context manager for database connections.
 
@@ -122,7 +129,7 @@ def get_db_connection_context(env: str = None, row_factory: bool = True):
     """
     conn = None
     try:
-        conn = get_db_connection(env, row_factory)
+        conn = get_db_connection(env)
         yield conn
     except Exception as e:
         if conn:
@@ -213,18 +220,7 @@ def init_test_database(fixtures: bool = False) -> str:
 
 def _create_test_database_schema(db_path: str):
     """Create test database schema using the centralized schema from init_database.py."""
-    # Lazy import to avoid circular dependency
-    try:
-        from scripts.init_database import create_fresh_database_schema
-    except ImportError:
-        # Fallback for when running from different directories
-        import sys
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if project_root not in sys.path:
-            sys.path.insert(0, project_root)
-        from scripts.init_database import create_fresh_database_schema
-
-    # Use the same schema creation function as the main database initialization
+    # Direct call to the centrally imported schema creator
     create_fresh_database_schema(db_path)
 
 def _load_test_fixtures(db_path: str):

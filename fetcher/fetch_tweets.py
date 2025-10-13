@@ -34,25 +34,11 @@ from fetcher.collector import TweetCollector
 from fetcher.media_monitor import MediaMonitor
 from fetcher.resume_manager import ResumeManager
 from fetcher.refetch_manager import RefetchManager
+from dotenv import load_dotenv
 from utils import paths
-# Import repository interfaces
+from fetcher.parsers import human_delay  # type: ignore
 from repositories import get_tweet_repository
-
-try:
-    from dotenv import load_dotenv
-except Exception:
-    # Allow running without python-dotenv
-    def load_dotenv():
-        return None
-
-try:
-    from playwright.sync_api import sync_playwright, TimeoutError
-except Exception:
-    # Playwright may not be available in lightweight test environments
-    sync_playwright = None
-    class TimeoutError(Exception):
-        pass
-
+from playwright.sync_api import sync_playwright, TimeoutError
 from datetime import datetime
 
 # Load configuration
@@ -419,12 +405,8 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
                     filtered_new_tweets = []
                     for tweet in new_tweets:
                         if tweet.get('tweet_timestamp'):
-                            try:
-                                tweet_time = datetime.fromisoformat(tweet['tweet_timestamp'].replace('Z', '+00:00'))
-                                if tweet_time > newest_time:
-                                    filtered_new_tweets.append(tweet)
-                            except Exception:
-                                # If timestamp parsing fails, include it to be safe
+                            tweet_time = datetime.fromisoformat(tweet['tweet_timestamp'].replace('Z', '+00:00'))
+                            if tweet_time > newest_time:
                                 filtered_new_tweets.append(tweet)
                     new_tweets = filtered_new_tweets
                 

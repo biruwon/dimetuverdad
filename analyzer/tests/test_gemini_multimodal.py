@@ -788,14 +788,20 @@ class TestGeminiMultimodalRateLimiting(unittest.TestCase):
         """Test that quota errors automatically trigger rate limiting."""
         # Mock Gemini components to simulate quota error
         with patch('analyzer.gemini_multimodal.genai.configure'), \
-             patch('analyzer.gemini_multimodal.genai.GenerativeModel') as mock_generative_model:
+             patch('analyzer.gemini_multimodal.genai.GenerativeModel') as mock_generative_model, \
+             patch('analyzer.gemini_multimodal.genai.upload_file') as mock_upload_file, \
+             patch('analyzer.gemini_multimodal.genai.get_file') as mock_get_file:
 
             mock_model = MagicMock()
             mock_generative_model.return_value = mock_model
 
-            # Simulate quota error
-            from analyzer.gemini_multimodal import AnalysisError, ErrorCategory
-            quota_error = AnalysisError("Quota exceeded", ErrorCategory.QUOTA_ERROR)
+            # Mock successful upload
+            mock_file = MagicMock()
+            mock_file.state.name = "ACTIVE"
+            mock_upload_file.return_value = mock_file
+            mock_get_file.return_value = mock_file
+
+            # Simulate quota error during content generation
             mock_model.generate_content.side_effect = Exception("Quota exceeded")
 
             # Try analysis - should trigger rate limiting on quota error

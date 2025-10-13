@@ -45,7 +45,7 @@ class TestMainRoutes:
             
             if mock_fetchone.call_count == 1:
                 # get_all_accounts total count query
-                return (1,)
+                return MockRow({'cnt': 1})
             elif mock_fetchone.call_count == 2:
                 # get_overall_stats_cached query
                 return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
@@ -70,7 +70,7 @@ class TestMainRoutes:
             mock_conn.execute.return_value.fetchall.return_value = [
                 {'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'}
             ]
-            mock_conn.execute.return_value.fetchone.return_value = (1,)  # Total count
+            mock_conn.execute.return_value.fetchone.return_value = MockRow({'cnt': 1})  # Total count
             
             response = client.get('/')
             assert response.status_code == 200

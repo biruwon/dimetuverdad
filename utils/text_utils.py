@@ -23,18 +23,12 @@ def normalize_text(text: str) -> str:
         return ""
 
     # Decompose combined characters (separates accents)
-    try:
-        decomposed = unicodedata.normalize('NFKD', text)
-    except Exception:
-        decomposed = text
+    decomposed = unicodedata.normalize('NFKD', text)
 
     # Lowercase with Unicode awareness
     lowered = decomposed.lower()
 
     # Recompose to NFC for stability
-    try:
-        recomposed = unicodedata.normalize('NFC', lowered)
-    except Exception:
-        recomposed = lowered
+    recomposed = unicodedata.normalize('NFC', lowered)
 
     return recomposed

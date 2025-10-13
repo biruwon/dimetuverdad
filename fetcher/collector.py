@@ -9,13 +9,7 @@ import json
 import sqlite3
 from typing import Dict, List, Optional, Set, Tuple
 from datetime import datetime
-
-try:
-    from playwright.sync_api import Page, TimeoutError
-except Exception:
-    Page = None
-    TimeoutError = Exception
-
+from playwright.sync_api import Page, TimeoutError
 from .config import get_config
 from .logging_config import get_logger
 from .scroller import get_scroller

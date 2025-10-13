@@ -33,16 +33,21 @@ def test_db():
 
 @pytest.fixture(autouse=True)
 def override_db_path(test_db):
-    """Override DB_PATH for all tests"""
-    original_path = fetcher_db.DB_PATH
-    fetcher_db.DB_PATH = test_db
+    """Override TEST_DATABASE_PATH for all tests"""
+    import os
+    original_path = os.environ.get('TEST_DATABASE_PATH')
+    os.environ['TEST_DATABASE_PATH'] = test_db
     yield
-    fetcher_db.DB_PATH = original_path
+    if original_path is not None:
+        os.environ['TEST_DATABASE_PATH'] = original_path
+    else:
+        os.environ.pop('TEST_DATABASE_PATH', None)
 
 
 def get_test_connection():
     """Get a connection to the test database"""
-    return fetcher_db.get_connection()
+    from utils.database import get_db_connection
+    return get_db_connection()
 
 
 # ===== DATABASE SETUP HELPERS =====
@@ -448,6 +453,11 @@ class TestMainFunction:
 def test_save_and_update_tweet():
     conn = get_test_connection()
     try:
+        # Create account first (required by foreign key constraint)
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('u',))
+        conn.commit()
+
         tweet = {
             'tweet_id': '123',
             'content': 'hello',
@@ -508,8 +518,12 @@ def test_collect_tweets_from_page_skips_duplicates():
     """Test that collect_tweets_from_page skips duplicate tweets correctly"""
     conn = get_test_connection()
     try:
-        # Pre-insert a tweet
+        # Create account first (required by foreign key constraint)
         cursor = conn.cursor()
+        cursor.execute("INSERT INTO accounts (username) VALUES (?)", ('user',))
+        conn.commit()
+
+        # Pre-insert a tweet
         cursor.execute("""
             INSERT INTO tweets (tweet_id, username, content, post_type, tweet_url, tweet_timestamp) 
             VALUES ('1', 'user', 'existing content', 'original', 'https://x.com/user/status/1', '2024-01-01T00:00:00Z')
@@ -561,6 +575,11 @@ def test_save_tweet_integration():
     """Test the save_tweet function integration without real fetching"""
     conn = get_test_connection()
     try:
+        # Create account first (required by foreign key constraint)
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+        conn.commit()
+
         # Test actual save_tweet function with realistic data
         tweet_data = {
             'tweet_id': '123456789',
@@ -690,8 +709,12 @@ class TestRefetchSingleTweet:
     def test_refetch_successful_flow(self, monkeypatch, test_db):
         """Test successful tweet refetch flow with mocked components."""
         conn = get_test_connection()
-        # Setup database with test tweet
+        # Create account first (required by foreign key constraint)
         c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+        conn.commit()
+
+        # Setup database with test tweet
         c.execute("""
             INSERT INTO tweets (tweet_id, username, tweet_url, content)
             VALUES ('123456789', 'testuser', 'https://x.com/testuser/status/123456789', 'Test content')
@@ -819,8 +842,12 @@ class TestUpdateTweetInDatabase:
         """Test successful database update."""
         conn = get_test_connection()
         try:
-            # Insert test tweet
+            # Create account first (required by foreign key constraint)
             c = conn.cursor()
+            c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+            conn.commit()
+
+            # Insert test tweet
             c.execute("""
                 INSERT INTO tweets (tweet_id, username, tweet_url, content)
                 VALUES ('123456789', 'testuser', 'https://x.com/test', 'Original content')
@@ -848,7 +875,7 @@ class TestUpdateTweetInDatabase:
                 c = verify_conn.cursor()
                 c.execute("SELECT original_content FROM tweets WHERE tweet_id = '123456789'")
                 row = c.fetchone()
-                assert row[0] == 'Quoted content'
+                assert row['original_content'] == 'Quoted content'
             finally:
                 verify_conn.close()
             
