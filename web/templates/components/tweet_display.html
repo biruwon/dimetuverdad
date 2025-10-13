@@ -128,7 +128,7 @@
             <div class="embedded-tweet-container">
                 <div class="embedded-tweet" data-tweet-url="{{ tweet.tweet_url }}">
                     <iframe
-                        src="https://platform.twitter.com/embed/Tweet.html?id={{ tweet.tweet_url.split('/')[-1] }}&theme=light&lang=es"
+                        src="https://platform.twitter.com/embed/Tweet.html?id={{ tweet.tweet_url.split('/')[-1] if tweet.tweet_url else '' }}&theme=light&lang=es"
                         style="position: static; visibility: visible; width: 100%; height: auto; min-height: 600px; display: block; flex-grow: 1;"
                         title="X Post"
                         frameborder="0"

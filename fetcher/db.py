@@ -39,7 +39,7 @@ def delete_account_data(username: str) -> Dict[str, int]:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) AS analyses_count FROM content_analyses WHERE username = ?", (username,))
         row = cur.fetchone()
-        analyses_count = row['analyses_count'] if row and 'analyses_count' in row else 0
+        analyses_count = row['analyses_count'] if row else 0
         conn.close()
 
         # Delete tweets using repository
@@ -231,7 +231,7 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict, db_path: str = Non
         # Get current media_links to combine with any new video URLs
         c.execute("SELECT media_links FROM tweets WHERE tweet_id = ?", (tweet_id,))
         row = c.fetchone()
-        current_media = row['media_links'] if row and 'media_links' in row and row['media_links'] else ""
+        current_media = row['media_links'] if row and row['media_links'] else ""
         
         # If tweet_data contains media_links, combine them with existing ones
         if tweet_data.get('media_links'):

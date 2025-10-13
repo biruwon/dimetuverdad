@@ -69,10 +69,10 @@ def admin_dashboard() -> str:
     """).fetchone()
 
     stats = {
-        'total_tweets': stats_row['total_tweets'] if stats_row and 'total_tweets' in stats_row else 0,
-        'analyzed_tweets': stats_row['analyzed_tweets'] if stats_row and 'analyzed_tweets' in stats_row else 0,
-        'pattern_analyzed': stats_row['pattern_analyzed'] if stats_row and 'pattern_analyzed' in stats_row else 0,
-        'llm_analyzed': stats_row['llm_analyzed'] if stats_row and 'llm_analyzed' in stats_row else 0,
+        'total_tweets': stats_row['total_tweets'] if stats_row else 0,
+        'analyzed_tweets': stats_row['analyzed_tweets'] if stats_row else 0,
+        'pattern_analyzed': stats_row['pattern_analyzed'] if stats_row else 0,
+        'llm_analyzed': stats_row['llm_analyzed'] if stats_row else 0,
     }
 
     # Recent analyses (last 10)
@@ -138,7 +138,7 @@ def admin_fetch() -> str:
             # Check if user exists in database
             conn = get_db_connection()
             user_exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
-            user_exists = user_exists_row['cnt'] if user_exists_row and 'cnt' in user_exists_row else 0
+            user_exists = user_exists_row['cnt'] if user_exists_row else 0
             conn.close()
 
             # Choose fetch strategy based on user existence
@@ -328,37 +328,18 @@ def admin_edit_analysis(tweet_id: str) -> str:
         flash('Tweet no encontrado', 'error')
         return redirect(url_for('admin.admin_dashboard'))
 
-    # Normalize row to mapping-like interface: prefer dict-style access
-    from collections.abc import Mapping
-
-    if isinstance(row, Mapping) or (hasattr(row, 'keys') and callable(getattr(row, 'keys'))):
-        # Safe mapping-style access with defaults
-        tweet_dict = {
-            'content': row.get('content') if getattr(row, 'get', None) else (row['content'] if 'content' in row else None),
-            'username': row.get('username') if getattr(row, 'get', None) else (row['username'] if 'username' in row else None),
-            'tweet_timestamp': row.get('tweet_timestamp') if getattr(row, 'get', None) else (row['tweet_timestamp'] if 'tweet_timestamp' in row else None),
-            'category': row.get('category') if getattr(row, 'get', None) else (row['category'] if 'category' in row else None),
-            'llm_explanation': row.get('llm_explanation') if getattr(row, 'get', None) else (row['llm_explanation'] if 'llm_explanation' in row else None),
-            'tweet_url': row.get('tweet_url') if getattr(row, 'get', None) else (row['tweet_url'] if 'tweet_url' in row else None),
-            'original_content': row.get('original_content') if getattr(row, 'get', None) else (row['original_content'] if 'original_content' in row else None),
-            'verification_data': (json.loads(row['verification_data']) if (('verification_data' in row or getattr(row, 'get', None)) and row.get('verification_data')) else None) if getattr(row, 'get', None) else (json.loads(row['verification_data']) if ('verification_data' in row and row['verification_data']) else None),
-            'verification_confidence': row.get('verification_confidence') if getattr(row, 'get', None) else (row['verification_confidence'] if 'verification_confidence' in row else None)
-        }
-    else:
-        # Fallback for sequence-like rows: map using the expected column order
-        # Expected order from SELECT: content, username, tweet_timestamp, category, llm_explanation, tweet_url, original_content, verification_data, verification_confidence
-        seq = list(row)
-        tweet_dict = {
-            'content': seq[0] if len(seq) > 0 else None,
-            'username': seq[1] if len(seq) > 1 else None,
-            'tweet_timestamp': seq[2] if len(seq) > 2 else None,
-            'category': seq[3] if len(seq) > 3 and seq[3] else 'general',
-            'llm_explanation': seq[4] if len(seq) > 4 and seq[4] else '',
-            'tweet_url': seq[5] if len(seq) > 5 and seq[5] else '',
-            'original_content': seq[6] if len(seq) > 6 and seq[6] else '',
-            'verification_data': json.loads(seq[7]) if len(seq) > 7 and seq[7] else None,
-            'verification_confidence': seq[8] if len(seq) > 8 and seq[8] else 0.0
-        }
+    # Extract data from row using column names (sqlite3.Row supports dict-like access)
+    tweet_dict = {
+        'content': row['content'],
+        'username': row['username'],
+        'tweet_timestamp': row['tweet_timestamp'],
+        'category': row['category'] if row['category'] is not None else 'general',
+        'llm_explanation': row['llm_explanation'] if row['llm_explanation'] is not None else '',
+        'tweet_url': row['tweet_url'] if row['tweet_url'] is not None else '',
+        'original_content': row['original_content'] if row['original_content'] is not None else '',
+        'verification_data': json.loads(row['verification_data']) if row['verification_data'] is not None else None,
+        'verification_confidence': row['verification_confidence'] if row['verification_confidence'] is not None else 0.0
+    }
 
     from web.utils.decorators import ANALYSIS_CATEGORIES
     return render_template('admin/edit_analysis.html',
@@ -407,7 +388,7 @@ def admin_view_category(category_name: str) -> str:
 
         # 1) Check if category exists
         exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
-        exists_count = exists_row['cnt'] if exists_row and 'cnt' in exists_row else 0
+        exists_count = exists_row['cnt'] if exists_row else 0
         if not exists_count:
             conn.close()
             flash(f'No se encontraron tweets para la categoría "{category_name}"', 'info')
@@ -415,7 +396,7 @@ def admin_view_category(category_name: str) -> str:
 
         # 2) Total count
         total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
-        total_count = total_count_row['cnt'] if total_count_row and 'cnt' in total_count_row else 0
+        total_count = total_count_row['cnt'] if total_count_row else 0
 
         # Pagination
         offset = (page - 1) * per_page
@@ -482,9 +463,9 @@ def admin_view_category(category_name: str) -> str:
             })
 
         # Category stats
-        llm_count = stats_row['llm_count'] if stats_row and 'llm_count' in stats_row else 0
-        pattern_count = stats_row['pattern_count'] if stats_row and 'pattern_count' in stats_row else 0
-        unique_users = stats_row['unique_users'] if stats_row and 'unique_users' in stats_row else 0
+        llm_count = stats_row['llm_count'] if stats_row else 0
+        pattern_count = stats_row['pattern_count'] if stats_row else 0
+        unique_users = stats_row['unique_users'] if stats_row else 0
 
         category_stats = {
             'total_tweets': total_count,
