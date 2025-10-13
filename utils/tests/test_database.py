@@ -86,7 +86,12 @@ class TestDatabaseFunctions(unittest.TestCase):
         mock_config.get_connection_params.return_value = {
             'timeout': 10.0,  # Testing environment
             'check_same_thread': False,
-            'enable_foreign_keys': True
+            'enable_foreign_keys': True,
+            'pragma_settings': {
+                'journal_mode': 'MEMORY',
+                'synchronous': 'OFF',
+                'cache_size': -1000,
+            }
         }
         mock_config.get_db_path.return_value = '/fake/db/path'
         mock_config_class.return_value = mock_config

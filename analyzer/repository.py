@@ -9,6 +9,8 @@ from datetime import datetime
 from .models import ContentAnalysis
 from .constants import DatabaseConstants
 from repositories import get_tweet_repository, get_content_analysis_repository
+from utils.database import get_db_connection_context
+from utils.paths import get_db_path
 
 
 class ContentAnalysisRepository:
@@ -33,6 +35,10 @@ class ContentAnalysisRepository:
         self.tweet_repo = get_tweet_repository()
         self.content_analysis_repo = get_content_analysis_repository()
 
+    def _get_connection(self):
+        """Get database connection context manager with proper path."""
+        return get_db_connection_context(db_path=self.db_path)
+
     def save(self, analysis: ContentAnalysis) -> None:
         """
         Save content analysis to database with retry logic.
@@ -46,38 +52,37 @@ class ContentAnalysisRepository:
         retry_delay = DatabaseConstants.RETRY_DELAY  # Use local variable to avoid modifying global constant
         for attempt in range(DatabaseConstants.MAX_RETRIES):
             try:
-                conn = sqlite3.connect(self.db_path, timeout=self.timeout)
-                cursor = conn.cursor()
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
 
-                cursor.execute(f'''
-                INSERT OR REPLACE INTO {DatabaseConstants.TABLE_NAME}
-                (post_id, post_url, author_username, platform, post_content, category,
-                 llm_explanation, analysis_method, analysis_json, analysis_timestamp,
-                 categories_detected, media_urls, media_analysis, media_type, multimodal_analysis,
-                 verification_data, verification_confidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    analysis.post_id,
-                    analysis.post_url,
-                    analysis.author_username,
-                    'twitter',  # Default platform for existing Twitter data
-                    analysis.post_content,
-                    analysis.category,
-                    analysis.llm_explanation,
-                    analysis.analysis_method,
-                    analysis.analysis_json,
-                    analysis.analysis_timestamp,
-                    json.dumps(analysis.categories_detected, ensure_ascii=False),
-                    json.dumps(analysis.media_urls, ensure_ascii=False),
-                    analysis.media_analysis,
-                    analysis.media_type,
-                    analysis.multimodal_analysis,
-                    json.dumps(analysis.verification_data, ensure_ascii=False, default=str) if analysis.verification_data else None,
-                    analysis.verification_confidence
-                ))
+                    cursor.execute(f'''
+                    INSERT OR REPLACE INTO {DatabaseConstants.TABLE_NAME}
+                    (post_id, post_url, author_username, platform, post_content, category,
+                     llm_explanation, analysis_method, analysis_json, analysis_timestamp,
+                     categories_detected, media_urls, media_analysis, media_type, multimodal_analysis,
+                     verification_data, verification_confidence)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        analysis.post_id,
+                        analysis.post_url,
+                        analysis.author_username,
+                        'twitter',  # Default platform for existing Twitter data
+                        analysis.post_content,
+                        analysis.category,
+                        analysis.llm_explanation,
+                        analysis.analysis_method,
+                        analysis.analysis_json,
+                        analysis.analysis_timestamp,
+                        json.dumps(analysis.categories_detected, ensure_ascii=False),
+                        json.dumps(analysis.media_urls, ensure_ascii=False),
+                        analysis.media_analysis,
+                        analysis.media_type,
+                        analysis.multimodal_analysis,
+                        json.dumps(analysis.verification_data, ensure_ascii=False, default=str) if analysis.verification_data else None,
+                        analysis.verification_confidence
+                    ))
 
-                conn.commit()
-                conn.close()
+                    conn.commit()
                 return  # Success
 
             except sqlite3.OperationalError as e:
@@ -103,21 +108,20 @@ class ContentAnalysisRepository:
             ContentAnalysis object if found, None otherwise
         """
         try:
-            conn = sqlite3.connect(self.db_path, timeout=self.timeout)
-            conn.row_factory = sqlite3.Row  # Enable column access by name
-            cursor = conn.cursor()
+            with self._get_connection() as conn:
+                conn.row_factory = sqlite3.Row  # Enable column access by name
+                cursor = conn.cursor()
 
-            cursor.execute(f'''
-            SELECT * FROM {DatabaseConstants.TABLE_NAME}
-            WHERE post_id = ?
-            ''', (post_id,))
+                cursor.execute(f'''
+                SELECT * FROM {DatabaseConstants.TABLE_NAME}
+                WHERE post_id = ?
+                ''', (post_id,))
 
-            row = cursor.fetchone()
-            conn.close()
+                row = cursor.fetchone()
 
-            if row:
-                return self._row_to_content_analysis(row)
-            return None
+                if row:
+                    return self._row_to_content_analysis(row)
+                return None
 
         except Exception as e:
             print(f"❌ Error retrieving analysis for post {post_id}: {e}")
@@ -134,20 +138,19 @@ class ContentAnalysisRepository:
             List of ContentAnalysis objects
         """
         try:
-            conn = sqlite3.connect(self.db_path, timeout=self.timeout)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            with self._get_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
 
-            cursor.execute(f'''
-            SELECT * FROM {DatabaseConstants.TABLE_NAME}
-            ORDER BY analysis_timestamp DESC
-            LIMIT ?
-            ''', (limit,))
+                cursor.execute(f'''
+                SELECT * FROM {DatabaseConstants.TABLE_NAME}
+                ORDER BY analysis_timestamp DESC
+                LIMIT ?
+                ''', (limit,))
 
-            rows = cursor.fetchall()
-            conn.close()
+                rows = cursor.fetchall()
 
-            return [self._row_to_content_analysis(row) for row in rows]
+                return [self._row_to_content_analysis(row) for row in rows]
 
         except Exception as e:
             print(f"❌ Error retrieving recent analyses: {e}")
@@ -165,21 +168,20 @@ class ContentAnalysisRepository:
             List of ContentAnalysis objects
         """
         try:
-            conn = sqlite3.connect(self.db_path, timeout=self.timeout)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            with self._get_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
 
-            cursor.execute(f'''
-            SELECT * FROM {DatabaseConstants.TABLE_NAME}
-            WHERE category = ?
-            ORDER BY analysis_timestamp DESC
-            LIMIT ?
-            ''', (category, limit))
+                cursor.execute(f'''
+                SELECT * FROM {DatabaseConstants.TABLE_NAME}
+                WHERE category = ?
+                ORDER BY analysis_timestamp DESC
+                LIMIT ?
+                ''', (category, limit))
 
-            rows = cursor.fetchall()
-            conn.close()
+                rows = cursor.fetchall()
 
-            return [self._row_to_content_analysis(row) for row in rows]
+                return [self._row_to_content_analysis(row) for row in rows]
 
         except Exception as e:
             print(f"❌ Error retrieving analyses for category {category}: {e}")
@@ -193,14 +195,13 @@ class ContentAnalysisRepository:
             Total count of analyses in database
         """
         try:
-            conn = sqlite3.connect(self.db_path, timeout=self.timeout)
-            cursor = conn.cursor()
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
 
-            cursor.execute(f'SELECT COUNT(*) FROM {DatabaseConstants.TABLE_NAME}')
-            count = cursor.fetchone()[0]
-            conn.close()
+                cursor.execute(f'SELECT COUNT(*) FROM {DatabaseConstants.TABLE_NAME}')
+                count = cursor.fetchone()[0]
 
-            return count
+                return count
 
         except Exception as e:
             print(f"❌ Error getting analysis count: {e}")
@@ -267,34 +268,33 @@ class ContentAnalysisRepository:
                 tweets_data = self.tweet_repo.get_tweets_by_username(username=username, limit=max_tweets)
             else:
                 # Get unanalyzed tweets - this requires custom logic, so we still need some direct access
-                conn = sqlite3.connect(self.db_path, timeout=self.timeout)
-                cursor = conn.cursor()
-                
-                query = """
-                    SELECT t.tweet_id, t.tweet_url, t.username, t.content, t.media_links, t.original_content FROM tweets t 
-                    LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id 
-                    WHERE ca.post_id IS NULL
-                    AND NOT (
-                        t.post_type IN ('repost_other', 'repost_own') 
-                        AND t.rt_original_analyzed = 1
-                    )
-                """
-                params = []
-                if username:
-                    query += " AND t.username = ?"
-                    params.append(username)
-                
-                query += " ORDER BY t.tweet_id DESC"
-                
-                if max_tweets:
-                    query += " LIMIT ?"
-                    params.append(max_tweets)
-                
-                cursor.execute(query, params)
-                tweets = cursor.fetchall()
-                conn.close()
-                
-                return tweets
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
+                    
+                    query = """
+                        SELECT t.tweet_id, t.tweet_url, t.username, t.content, t.media_links, t.original_content FROM tweets t 
+                        LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id 
+                        WHERE ca.post_id IS NULL
+                        AND NOT (
+                            t.post_type IN ('repost_other', 'repost_own') 
+                            AND t.rt_original_analyzed = 1
+                        )
+                    """
+                    params = []
+                    if username:
+                        query += " AND t.username = ?"
+                        params.append(username)
+                    
+                    query += " ORDER BY t.tweet_id DESC"
+                    
+                    if max_tweets:
+                        query += " LIMIT ?"
+                        params.append(max_tweets)
+                    
+                    cursor.execute(query, params)
+                    tweets = cursor.fetchall()
+                    
+                    return tweets
             
             # Convert tweet data to expected format; support dicts, Rows, or objects
             result = []
@@ -364,16 +364,15 @@ class ContentAnalysisRepository:
             True if deletion successful, False otherwise
         """
         try:
-            conn = sqlite3.connect(self.db_path, timeout=self.timeout)
-            cursor = conn.cursor()
-            
-            cursor.execute(f'DELETE FROM {DatabaseConstants.TABLE_NAME} WHERE post_id = ?', (post_id,))
-            
-            conn.commit()
-            conn.close()
-            
-            return cursor.rowcount > 0
-            
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute(f'DELETE FROM {DatabaseConstants.TABLE_NAME} WHERE post_id = ?', (post_id,))
+                
+                conn.commit()
+                
+                return cursor.rowcount > 0
+                
         except Exception as e:
             print(f"❌ Error deleting analysis for post {post_id}: {e}")
             return False

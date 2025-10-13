@@ -40,6 +40,7 @@ from fetcher.parsers import human_delay  # type: ignore
 from repositories import get_tweet_repository
 from playwright.sync_api import sync_playwright, TimeoutError
 from datetime import datetime
+from utils.database import get_db_connection_context
 
 # Load configuration
 config = get_config()
@@ -529,17 +530,16 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
             print(f"  ❌ Failed to fetch tweets for @{handle} after {max_retries} retries")
             # Log failure
             try:
-                conn_err = sqlite3.connect(DB_PATH)
-                cur_err = conn_err.cursor()
-                cur_err.execute("INSERT INTO scrape_errors (username, tweet_id, error, context, timestamp) VALUES (?, ?, ?, ?, ?)", (
-                    handle,
-                    None,
-                    'max_retries_exceeded',
-                    'fetch_tweets',
-                    datetime.now().isoformat()
-                ))
-                conn_err.commit()
-                conn_err.close()
+                with get_db_connection_context() as conn_err:
+                    cur_err = conn_err.cursor()
+                    cur_err.execute("INSERT INTO scrape_errors (username, tweet_id, error, context, timestamp) VALUES (?, ?, ?, ?, ?)", (
+                        handle,
+                        None,
+                        'max_retries_exceeded',
+                        'fetch_tweets',
+                        datetime.now().isoformat()
+                    ))
+                    conn_err.commit()
             except Exception:
                 pass
         

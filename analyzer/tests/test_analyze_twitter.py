@@ -465,27 +465,19 @@ class TestAnalyzerUtilityMethods(unittest.TestCase):
 class TestDatabaseFunctions(unittest.TestCase):
     """Test database-related functions."""
 
-    def setUp(self):
-        """Set up test database for testing."""
-        from utils.database import init_test_database
-        self.test_db_path = init_test_database(fixtures=False)
+class TestDatabaseFunctions:
+    """Test database-related functions."""
 
-    def tearDown(self):
-        """Clean up test database."""
-        import os
-        if os.path.exists(self.test_db_path):
-            os.unlink(self.test_db_path)
-
-    def test_save_content_analysis(self):
+    def test_save_content_analysis(self, test_db_path, test_tweet):
         """Test saving content analysis to database."""
         # Create repository instance
-        repo = ContentAnalysisRepository(self.test_db_path)
+        repo = ContentAnalysisRepository(test_db_path)
 
         analysis = ContentAnalysis(
-            post_id="test_123",
-            post_url="https://twitter.com/test/status/test_123",
-            author_username="test_user",
-            post_content="Test content",
+            post_id=test_tweet['tweet_id'],
+            post_url=test_tweet['tweet_url'],
+            author_username=test_tweet['username'],
+            post_content=test_tweet['content'],
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH,
             llm_explanation="Test explanation",
@@ -495,40 +487,40 @@ class TestDatabaseFunctions(unittest.TestCase):
 
         repo.save(analysis)
 
-        conn = sqlite3.connect(self.test_db_path)
+        conn = sqlite3.connect(test_db_path)
         conn.row_factory = sqlite3.Row  # Enable named column access
         c = conn.cursor()
 
-        c.execute("SELECT * FROM content_analyses WHERE post_id = ?", ("test_123",))
+        c.execute("SELECT * FROM content_analyses WHERE post_id = ?", (test_tweet['tweet_id'],))
         row = c.fetchone()
 
-        self.assertIsNotNone(row)
-        self.assertEqual(row['post_id'], "test_123")
-        self.assertEqual(row['category'], Categories.HATE_SPEECH)
-        self.assertEqual(row['llm_explanation'], "Test explanation")
-        self.assertEqual(row['analysis_method'], "pattern")
+        assert row is not None
+        assert row['post_id'] == test_tweet['tweet_id']
+        assert row['category'] == Categories.HATE_SPEECH
+        assert row['llm_explanation'] == "Test explanation"
+        assert row['analysis_method'] == "pattern"
 
         conn.close()
 
-    def test_save_content_analysis_duplicate(self):
+    def test_save_content_analysis_duplicate(self, test_db_path, test_tweet):
         """Test saving duplicate content analysis (should replace)."""
         # Create repository instance
-        repo = ContentAnalysisRepository(self.test_db_path)
+        repo = ContentAnalysisRepository(test_db_path)
 
         analysis1 = ContentAnalysis(
-            post_id="test_123",
-            post_url="https://twitter.com/test/status/test_123",
-            author_username="test_user",
-            post_content="Test content 1",
+            post_id=test_tweet['tweet_id'],
+            post_url=test_tweet['tweet_url'],
+            author_username=test_tweet['username'],
+            post_content=test_tweet['content'],
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH
         )
 
         analysis2 = ContentAnalysis(
-            post_id="test_123",
-            post_url="https://twitter.com/test/status/test_123",
-            author_username="test_user",
-            post_content="Test content 2",
+            post_id=test_tweet['tweet_id'],
+            post_url=test_tweet['tweet_url'],
+            author_username=test_tweet['username'],
+            post_content=test_tweet['content'],
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.DISINFORMATION
         )
@@ -536,16 +528,16 @@ class TestDatabaseFunctions(unittest.TestCase):
         repo.save(analysis1)
         repo.save(analysis2)  # Should replace
 
-        conn = sqlite3.connect(self.test_db_path)
+        conn = sqlite3.connect(test_db_path)
         c = conn.cursor()
 
-        c.execute("SELECT COUNT(*) FROM content_analyses WHERE post_id = ?", ("test_123",))
+        c.execute("SELECT COUNT(*) FROM content_analyses WHERE post_id = ?", (test_tweet['tweet_id'],))
         count = c.fetchone()[0]
-        self.assertEqual(count, 1)
+        assert count == 1
 
-        c.execute("SELECT category FROM content_analyses WHERE post_id = ?", ("test_123",))
+        c.execute("SELECT category FROM content_analyses WHERE post_id = ?", (test_tweet['tweet_id'],))
         category = c.fetchone()[0]
-        self.assertEqual(category, Categories.DISINFORMATION)
+        assert category == Categories.DISINFORMATION
 
         conn.close()
 

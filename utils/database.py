@@ -32,24 +32,43 @@ class DatabaseConfig:
                 'isolation_level': None,  # Autocommit mode for development
                 'check_same_thread': False,
                 'enable_foreign_keys': True,
+                'pragma_settings': {
+                    'journal_mode': 'WAL',
+                    'synchronous': 'NORMAL',
+                    'cache_size': -8000,  # 8MB cache
+                }
             },
             'testing': {
                 'timeout': 10.0,
                 'isolation_level': None,
                 'check_same_thread': False,
                 'enable_foreign_keys': True,
+                'pragma_settings': {
+                    'journal_mode': 'MEMORY',
+                    'synchronous': 'OFF',
+                    'cache_size': -1000,  # 1MB cache
+                }
             },
             'production': {
                 'timeout': 60.0,
                 'isolation_level': None,
                 'check_same_thread': True,
                 'enable_foreign_keys': True,
+                'pragma_settings': {
+                    'journal_mode': 'WAL',
+                    'synchronous': 'NORMAL',
+                    'cache_size': -64000,  # 64MB cache
+                }
             }
         }
 
     def get_connection_params(self) -> Dict[str, Any]:
         """Get connection parameters for the current environment."""
         return self.settings.get(self.env, self.settings['development'])
+
+    def get_pragma_settings(self) -> Dict[str, Any]:
+        """Get PRAGMA settings for the current environment."""
+        return self.get_connection_params().get('pragma_settings', {})
 
     def get_db_path(self) -> str:
         """Get the database path for the current environment."""
@@ -68,12 +87,13 @@ def _get_flask_database_path() -> Optional[str]:
     
     return None
 
-def get_db_connection(env: str = None) -> sqlite3.Connection:
+def get_db_connection(env: str = None, db_path: str = None) -> sqlite3.Connection:
     """
-    Get a database connection for the specified environment.
+    Get a database connection for the specified environment or database path.
 
     Args:
         env: Environment name ('development', 'testing', 'production')
+        db_path: Direct database path (overrides environment-based path resolution)
 
     Returns:
         SQLite database connection
@@ -85,13 +105,14 @@ def get_db_connection(env: str = None) -> sqlite3.Connection:
     params = config_obj.get_connection_params().copy()
     # Store enable_foreign_keys before removing it from params
     enable_foreign_keys = params.pop('enable_foreign_keys', True)
+    pragma_settings = params.pop('pragma_settings', {})
 
-    # Determine db_path with priority: TEST_DATABASE_PATH env var > Flask config > environment-based path
+    # Determine db_path with priority: direct db_path > TEST_DATABASE_PATH env var > Flask config > environment-based path
     test_db_path = os.environ.get('TEST_DATABASE_PATH')
     flask_db_path = _get_flask_database_path()
     env_db_path = config_obj.get_db_path()
     
-    final_db_path = test_db_path or flask_db_path or env_db_path
+    final_db_path = db_path or test_db_path or flask_db_path or env_db_path
     conn = sqlite3.connect(final_db_path, **params)
 
     # Always enable row factory for dict-like access
@@ -109,27 +130,21 @@ def get_db_connection(env: str = None) -> sqlite3.Connection:
         # Best-effort; ignore if not supported
         pass
 
-    # Environment-specific optimizations
-    if env == 'production':
-        # Production optimizations
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = NORMAL")
-        conn.execute("PRAGMA cache_size = -64000")  # 64MB cache
-    elif env == 'testing':
-        # Testing optimizations - faster, less durable
-        conn.execute("PRAGMA journal_mode = MEMORY")
-        conn.execute("PRAGMA synchronous = OFF")
-        conn.execute("PRAGMA cache_size = -1000")  # 1MB cache
-    elif env == 'development':
-        # Development optimizations with WAL for better concurrent writes
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = NORMAL")
-        conn.execute("PRAGMA cache_size = -8000")  # 8MB cache
+    # Apply environment-specific PRAGMA settings
+    for pragma_name, pragma_value in pragma_settings.items():
+        try:
+            if isinstance(pragma_value, int):
+                conn.execute(f"PRAGMA {pragma_name} = {pragma_value}")
+            else:
+                conn.execute(f"PRAGMA {pragma_name} = {pragma_value}")
+        except Exception:
+            # Best-effort; ignore PRAGMA errors
+            pass
 
     return conn
 
 @contextmanager
-def get_db_connection_context(env: str = None):
+def get_db_connection_context(env: str = None, db_path: str = None):
     """
     Context manager for database connections.
 
@@ -137,7 +152,7 @@ def get_db_connection_context(env: str = None):
     """
     conn = None
     try:
-        conn = get_db_connection(env)
+        conn = get_db_connection(env, db_path)
         yield conn
     except Exception as e:
         if conn:
