@@ -296,16 +296,27 @@ class ContentAnalysisRepository:
                 
                 return tweets
             
-            # Convert tweet data to expected format
+            # Convert tweet data to expected format; support dicts, Rows, or objects
             result = []
             for tweet in tweets_data:
+                def _val(obj, key):
+                    if isinstance(obj, dict):
+                        return obj.get(key)
+                    try:
+                        return getattr(obj, key)
+                    except Exception:
+                        try:
+                            return obj[key]
+                        except Exception:
+                            return None
+
                 result.append((
-                    tweet.tweet_id,
-                    tweet.tweet_url,
-                    tweet.username,
-                    tweet.content,
-                    tweet.media_links or '',
-                    getattr(tweet, 'original_content', '') or ''
+                    _val(tweet, 'tweet_id'),
+                    _val(tweet, 'tweet_url'),
+                    _val(tweet, 'username'),
+                    _val(tweet, 'content'),
+                    _val(tweet, 'media_links') or '',
+                    _val(tweet, 'original_content') or ''
                 ))
             
             return result
@@ -401,26 +412,46 @@ class ContentAnalysisRepository:
         Returns:
             ContentAnalysis object
         """
+        # Access values robustly for sqlite3.Row, dicts, or simple mocks implementing __getitem__
+        def _g(key, default=None):
+            try:
+                return row[key]
+            except Exception:
+                try:
+                    return getattr(row, key)
+                except Exception:
+                    try:
+                        # Mapping-like get
+                        return row.get(key, default)  # type: ignore[attr-defined]
+                    except Exception:
+                        return default
+
+        verification_data_raw = _g('verification_data')
+        analysis_json_raw = _g('analysis_json')
+        categories_detected_raw = _g('categories_detected')
+        media_urls_raw = _g('media_urls')
+        verification_confidence_val = _g('verification_confidence', 0.0) or 0.0
+
         return ContentAnalysis(
-            post_id=row['post_id'],
-            post_url=row['post_url'],
-            author_username=row['author_username'],
-            post_content=row['post_content'],
-            analysis_timestamp=row['analysis_timestamp'],
-            category=row['category'],
-            categories_detected=json.loads(row['categories_detected'] or '[]'),
-            llm_explanation=row['llm_explanation'],
-            analysis_method=row['analysis_method'],
-            media_urls=json.loads(row['media_urls'] or '[]'),
-            media_analysis=row['media_analysis'],
-            media_type=row['media_type'],
-            multimodal_analysis=bool(row['multimodal_analysis']),
-            pattern_matches=json.loads(row['analysis_json']).get('pattern_matches', []) if row['analysis_json'] else [],
-            topic_classification=json.loads(row['analysis_json']).get('topic_classification', {}) if row['analysis_json'] else {},
-            analysis_json=row['analysis_json'],
+            post_id=_g('post_id'),
+            post_url=_g('post_url'),
+            author_username=_g('author_username'),
+            post_content=_g('post_content'),
+            analysis_timestamp=_g('analysis_timestamp'),
+            category=_g('category'),
+            categories_detected=json.loads(categories_detected_raw or '[]'),
+            llm_explanation=_g('llm_explanation'),
+            analysis_method=_g('analysis_method'),
+            media_urls=json.loads(media_urls_raw or '[]'),
+            media_analysis=_g('media_analysis'),
+            media_type=_g('media_type'),
+            multimodal_analysis=bool(_g('multimodal_analysis')),
+            pattern_matches=json.loads(analysis_json_raw).get('pattern_matches', []) if analysis_json_raw else [],
+            topic_classification=json.loads(analysis_json_raw).get('topic_classification', {}) if analysis_json_raw else {},
+            analysis_json=analysis_json_raw,
             analysis_time_seconds=0.0,  # Not stored in DB
             model_used="",  # Not stored in DB
             tokens_used=0,  # Not stored in DB
-            verification_data=json.loads(row['verification_data']) if row['verification_data'] else None,
-            verification_confidence=row['verification_confidence'] or 0.0
+            verification_data=json.loads(verification_data_raw) if verification_data_raw else None,
+            verification_confidence=verification_confidence_val
         )

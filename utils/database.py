@@ -101,6 +101,14 @@ def get_db_connection(env: str = None) -> sqlite3.Connection:
     if enable_foreign_keys:
         conn.execute("PRAGMA foreign_keys = ON")
 
+    # Always set a reasonable busy timeout for concurrent writers/readers
+    # This helps avoid immediate 'database is locked' errors under parallel tasks
+    try:
+        conn.execute("PRAGMA busy_timeout = 30000")  # 30 seconds
+    except Exception:
+        # Best-effort; ignore if not supported
+        pass
+
     # Environment-specific optimizations
     if env == 'production':
         # Production optimizations
@@ -113,8 +121,8 @@ def get_db_connection(env: str = None) -> sqlite3.Connection:
         conn.execute("PRAGMA synchronous = OFF")
         conn.execute("PRAGMA cache_size = -1000")  # 1MB cache
     elif env == 'development':
-        # Development optimizations - balanced performance and durability
-        conn.execute("PRAGMA journal_mode = DELETE")
+        # Development optimizations with WAL for better concurrent writes
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA synchronous = NORMAL")
         conn.execute("PRAGMA cache_size = -8000")  # 8MB cache
 

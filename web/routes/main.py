@@ -9,6 +9,8 @@ import math
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 
+from flask_caching import Cache
+
 from web.utils.decorators import rate_limit, handle_db_errors, validate_input, ANALYSIS_CATEGORIES
 from web.utils.helpers import (
     get_db_connection, get_all_accounts, get_user_profile_data,
@@ -46,10 +48,15 @@ def index() -> str:
         accounts_data['accounts'] = filtered_accounts
 
     # Overall statistics - simplified to just accounts and analyzed posts (with caching)
-    from flask_caching import Cache
-    cache = main_bp.config.get('cache') if hasattr(main_bp, 'config') else None
+    cache = getattr(current_app, 'cache', None)
+    if not cache:
+        # Fallback: create cache instance if not available
+        cache = Cache(current_app, config={
+            'CACHE_TYPE': current_app.config.get('CACHE_TYPE', 'null'),
+            'CACHE_DEFAULT_TIMEOUT': current_app.config.get('CACHE_DEFAULT_TIMEOUT', 300)
+        })
 
-    @cache.memoize(timeout=600) if cache else lambda f: f  # Cache for 10 minutes
+    @cache.memoize(timeout=600)
     def get_overall_stats_cached():
         conn = get_db_connection()
         overall_stats = conn.execute("""
@@ -62,7 +69,7 @@ def index() -> str:
         conn.close()
         return dict(overall_stats) if overall_stats else {}
 
-    @cache.memoize(timeout=600) if cache else lambda f: f  # Cache for 10 minutes
+    @cache.memoize(timeout=600)
     def get_analysis_distribution_cached():
         conn = get_db_connection()
         analysis_distribution = conn.execute("""

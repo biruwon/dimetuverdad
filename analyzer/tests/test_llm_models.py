@@ -116,6 +116,12 @@ class TestLLMModelConfig:
             config = LLMModelConfig.MODELS[model_name]
             assert config.get("pipeline_type") == "ollama"
 
+    def test_get_recommended_model_unknown_priority(self):
+        """Test get_recommended_model handles unknown priority gracefully."""
+        config = LLMModelConfig.get_recommended_model("generation", "unknown")
+        assert isinstance(config, dict)
+        # Should still return a valid config (defaults to balanced behavior)
+
 
 class TestResponseParser:
     """Test ResponseParser class methods."""
@@ -206,6 +212,156 @@ class TestResponseParser:
         response = [{"data": "test"}]
         result = ResponseParser.parse_response(response, "unknown")
         assert result is None
+
+    # Additional detailed ResponseParser tests from unit test file
+    def test_parse_classification_response_empty_input(self):
+        """Test parse_classification_response with empty input."""
+        result = ResponseParser.parse_classification_response(None)
+        expected = {"llm_categories": []}
+        assert result == expected
+
+    def test_parse_classification_response_empty_list(self):
+        """Test parse_classification_response with empty list."""
+        result = ResponseParser.parse_classification_response([])
+        expected = {"llm_categories": []}
+        assert result == expected
+
+    def test_parse_classification_response_hate_speech_high_score(self):
+        """Test parse_classification_response detects hate speech with high score."""
+        response = [
+            [
+                {"label": "hate", "score": 0.8},
+                {"label": "normal", "score": 0.2}
+            ]
+        ]
+        result = ResponseParser.parse_classification_response(response)
+        assert Categories.HATE_SPEECH in result["llm_categories"]
+
+    def test_parse_classification_response_toxic_content_high_score(self):
+        """Test parse_classification_response detects toxic content with high score."""
+        response = [
+            [
+                {"label": "toxic", "score": 0.7},
+                {"label": "normal", "score": 0.3}
+            ]
+        ]
+        result = ResponseParser.parse_classification_response(response)
+        assert "toxic_content" in result["llm_categories"]
+
+    def test_parse_classification_response_normal_content_high_score(self):
+        """Test parse_classification_response detects normal content."""
+        response = [
+            [
+                {"label": "positive", "score": 0.8},
+                {"label": "hate", "score": 0.1}
+            ]
+        ]
+        result = ResponseParser.parse_classification_response(response)
+        assert "normal_content" in result["llm_categories"]
+
+    def test_parse_classification_response_low_scores_fallback_to_general(self):
+        """Test parse_classification_response falls back to general with low scores."""
+        response = [
+            [
+                {"label": "hate", "score": 0.2},
+                {"label": "normal", "score": 0.4}
+            ]
+        ]
+        result = ResponseParser.parse_classification_response(response)
+        assert result["llm_categories"] == [Categories.GENERAL]
+
+    def test_parse_classification_response_exception_handling(self):
+        """Test parse_classification_response handles exceptions gracefully."""
+        response = "invalid_response_format"
+        result = ResponseParser.parse_classification_response(response)
+        expected = {"llm_categories": []}
+        assert result == expected
+
+    def test_parse_text_generation_response_empty_input(self):
+        """Test parse_text_generation_response with empty input."""
+        result = ResponseParser.parse_text_generation_response(None)
+        assert result is None
+
+    def test_parse_text_generation_response_empty_list(self):
+        """Test parse_text_generation_response with empty list."""
+        result = ResponseParser.parse_text_generation_response([])
+        assert result is None
+
+    def test_parse_text_generation_response_dict_with_generated_text(self):
+        """Test parse_text_generation_response with dict containing generated_text."""
+        response = [{"generated_text": "This is generated text"}]
+        result = ResponseParser.parse_text_generation_response(response)
+        assert result == "This is generated text"
+
+    def test_parse_text_generation_response_dict_with_prompt_removal(self):
+        """Test parse_text_generation_response removes prompt when configured."""
+        response = [{"generated_text": "Prompt text: This is the response"}]
+        model_config = {"prompt_removal_strategy": "remove_prompt"}
+        result = ResponseParser.parse_text_generation_response(response, "Prompt text:", model_config)
+        assert result == "This is the response"
+
+    def test_parse_text_generation_response_string_response(self):
+        """Test parse_text_generation_response with string response."""
+        response = ["Direct string response"]
+        result = ResponseParser.parse_text_generation_response(response)
+        assert result == "Direct string response"
+
+    def test_parse_text_generation_response_exception_handling(self):
+        """Test parse_text_generation_response handles exceptions gracefully."""
+        # Use an input that will actually cause an exception in the parsing logic
+        response = [{"invalid_key": "no_generated_text"}]
+        result = ResponseParser.parse_text_generation_response(response)
+        # The function falls back to str(response[0]) when expected keys are missing
+        assert result == str(response[0])
+
+    def test_parse_text2text_generation_response_empty_input(self):
+        """Test parse_text2text_generation_response with empty input."""
+        result = ResponseParser.parse_text2text_generation_response(None)
+        assert result is None
+
+    def test_parse_text2text_generation_response_dict_with_generated_text(self):
+        """Test parse_text2text_generation_response with dict containing generated_text."""
+        response = [{"generated_text": "T5 generated text"}]
+        result = ResponseParser.parse_text2text_generation_response(response)
+        assert result == "T5 generated text"
+
+    def test_parse_text2text_generation_response_dict_with_text_key(self):
+        """Test parse_text2text_generation_response with dict containing text key."""
+        response = [{"text": "Alternative text key"}]
+        result = ResponseParser.parse_text2text_generation_response(response)
+        assert result == "Alternative text key"
+
+    def test_parse_text2text_generation_response_string_response(self):
+        """Test parse_text2text_generation_response with string response."""
+        response = ["String response"]
+        result = ResponseParser.parse_text2text_generation_response(response)
+        assert result == "String response"
+
+    def test_parse_text2text_generation_response_exception_handling(self):
+        """Test parse_text2text_generation_response handles exceptions gracefully."""
+        # Use an input that will actually cause an exception in the parsing logic
+        response = [{"invalid_key": "no_generated_text"}]
+        result = ResponseParser.parse_text2text_generation_response(response)
+        # The function falls back to str(response[0]) when expected keys are missing
+        assert result == str(response[0])
+
+    def test_parse_response_classification_type(self):
+        """Test parse_response with classification parser type."""
+        response = [[{"label": "hate", "score": 0.8}]]
+        result = ResponseParser.parse_response(response, "classification")
+        assert Categories.HATE_SPEECH in result["llm_categories"]
+
+    def test_parse_response_text_generation_type(self):
+        """Test parse_response with text_generation parser type."""
+        response = [{"generated_text": "Generated response"}]
+        result = ResponseParser.parse_response(response, "text_generation")
+        assert result == "Generated response"
+
+    def test_parse_response_text2text_generation_type(self):
+        """Test parse_response with text2text_generation parser type."""
+        response = [{"generated_text": "T5 response"}]
+        result = ResponseParser.parse_response(response, "text2text_generation")
+        assert result == "T5 response"
 
 
 class TestEnhancedLLMPipeline:

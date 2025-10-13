@@ -32,6 +32,8 @@ class AnalyzerConfig:
     database_timeout: float = ConfigDefaults.DATABASE_TIMEOUT
     download_timeout: float = ConfigDefaults.DOWNLOAD_TIMEOUT
     request_timeout: float = ConfigDefaults.REQUEST_TIMEOUT
+    max_concurrency: int = ConfigDefaults.MAX_CONCURRENCY
+    max_llm_concurrency: int = ConfigDefaults.MAX_LLM_CONCURRENCY
 
     # External dependencies (for dependency injection)
     db_path: Optional[str] = None
@@ -64,6 +66,11 @@ class AnalyzerConfig:
         if self.model_priority not in ["fast", "balanced", "quality"]:
             raise ValueError("model_priority must be one of: fast, balanced, quality")
 
+        if self.max_concurrency <= 0:
+            raise ValueError("max_concurrency must be positive")
+        if self.max_llm_concurrency <= 0:
+            raise ValueError("max_llm_concurrency must be positive")
+
     @classmethod
     def from_dict(cls, config_dict: dict) -> 'AnalyzerConfig':
         """Create configuration from dictionary."""
@@ -81,6 +88,8 @@ class AnalyzerConfig:
             'database_timeout': self.database_timeout,
             'download_timeout': self.download_timeout,
             'request_timeout': self.request_timeout,
+            'max_concurrency': self.max_concurrency,
+            'max_llm_concurrency': self.max_llm_concurrency,
             'db_path': self.db_path,
             # Don't include llm_pipeline in dict representation
         }

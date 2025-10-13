@@ -32,6 +32,9 @@ def create_app(config_name=None):
         'CACHE_DEFAULT_TIMEOUT': app.config['CACHE_DEFAULT_TIMEOUT']
     })
 
+    # Make cache available through app
+    app.cache = cache
+
     # Register error handlers
     register_error_handlers(app)
 

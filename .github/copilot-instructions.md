@@ -188,10 +188,10 @@ python quick_test.py --llm "Complex content requiring deep analysis"
    - **NEVER delay** testing until "later" - test NOW
 
 2. **Test Identification by Module** (Run Targeted Tests IMMEDIATELY):
-   - `analyzer/analyzer.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_analyzer.py -v`
+   - `analyzer/analyzer_twitter.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/analyze_twitter.py -v`
    - `analyzer/gemini_multimodal.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_gemini_multimodal.py -v`
    - `analyzer/prompts.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_prompts.py -v`
-   - `analyzer/llm_models.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_analyzer.py -v` (uses LLM pipeline)
+   - `analyzer/llm_models.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_llm_models.py -v` (uses LLM pipeline)
    - `fetcher/db.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_db.py -v`
    - `fetcher/parsers.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_parsers.py -v`
    - `fetcher/fetch_tweets.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_fetch_tweets.py -v`

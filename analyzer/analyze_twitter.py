@@ -35,7 +35,7 @@ from .repository import ContentAnalysisRepository
 from .text_analyzer import TextAnalyzer
 from .multimodal_analyzer import MultimodalAnalyzer
 from .models import ContentAnalysis
-from .constants import AnalysisMethods, ErrorMessages
+from .constants import AnalysisMethods, ErrorMessages, ConfigDefaults
 
 # Import retrieval integration
 from retrieval.integration.analyzer_hooks import AnalyzerHooks, create_analyzer_hooks
@@ -108,13 +108,16 @@ class Analyzer:
         analysis_start_time = time.time()
 
         try:
-            # Route to appropriate analyzer
+            # Route to appropriate analyzer (execute in thread to avoid blocking event loop)
+            import asyncio as _asyncio
             if media_urls and len(media_urls) > 0:
-                result = self.multimodal_analyzer.analyze_with_media(
+                result = await _asyncio.to_thread(
+                    self.multimodal_analyzer.analyze_with_media,
                     tweet_id, tweet_url, username, content, media_urls
                 )
             else:
-                result = self.text_analyzer.analyze(
+                result = await _asyncio.to_thread(
+                    self.text_analyzer.analyze,
                     tweet_id, tweet_url, username, content
                 )
 
@@ -436,46 +439,94 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
     print(f"🔧 Analysis Mode: LLM + Patterns")
     print()
 
-    # Analyze each tweet
+    # Analyze each tweet with bounded concurrency
     results = []
     category_counts = {}
 
-    for i, (tweet_id, tweet_url, tweet_username, content, media_links, original_content) in enumerate(tweets, 1):
-        print(f"📝 [{i:2d}/{len(tweets)}] Analyzing: {tweet_id}")
+    # Tunables from configuration, with safe fallbacks for mocked analyzers
+    cfg = getattr(analyzer_instance, 'config', None)
+    raw_max_conc = getattr(cfg, 'max_concurrency', None) if cfg is not None else None
+    raw_max_llm_conc = getattr(cfg, 'max_llm_concurrency', None) if cfg is not None else None
 
-        # Combine main content with quoted content if available
+    def _coerce_positive_int(val, default):
+        try:
+            iv = int(val)
+            return iv if iv > 0 else default
+        except Exception:
+            return default
+
+    max_concurrency = _coerce_positive_int(raw_max_conc, ConfigDefaults.MAX_CONCURRENCY)
+    max_llm_concurrency = _coerce_positive_int(raw_max_llm_conc, ConfigDefaults.MAX_LLM_CONCURRENCY)
+
+    import asyncio
+    analysis_sema = asyncio.Semaphore(max_concurrency)
+    llm_sema = asyncio.Semaphore(max_llm_concurrency)
+
+    # Retry/backoff tunables with safe fallbacks
+    raw_max_retries = getattr(cfg, 'max_retries', None) if cfg is not None else None
+    raw_retry_delay = getattr(cfg, 'retry_delay', None) if cfg is not None else None
+    max_retries = _coerce_positive_int(raw_max_retries, ConfigDefaults.MAX_RETRIES)
+    # allow 0 for retry_delay, so special-case non-negative int coercion
+    try:
+        retry_delay = int(raw_retry_delay)
+        if retry_delay < 0:
+            retry_delay = ConfigDefaults.RETRY_DELAY
+    except Exception:
+        retry_delay = ConfigDefaults.RETRY_DELAY
+
+    async def analyze_one(idx: int, entry):
+        (tw_id, tw_url, tw_user, content, media_links, original_content) = entry
+        ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        print(f"{ts} 📝 [{idx:2d}/{len(tweets)}] Analyzing: {tw_id}")
+
+        # Combine content with quoted content if available
         analysis_content = content
         if original_content and original_content.strip():
             analysis_content = f"{content}\n\n[Contenido citado]: {original_content}"
-            print(f"    📎 Including quoted tweet content")
+            print("    📎 Including quoted tweet content")
 
         # Parse media URLs
         media_urls = []
         if media_links:
-            media_urls = [url.strip() for url in media_links.split(',') if url.strip()]
-
+            media_urls = [u.strip() for u in media_links.split(',') if u.strip()]
         if media_urls:
             print(f"    🖼️ Found {len(media_urls)} media files")
 
         try:
-            # Run analysis (suppress verbose output)
-            result = await analyzer_instance.analyze_content(
-                tweet_id=tweet_id,
-                tweet_url=tweet_url,
-                username=tweet_username,
-                content=analysis_content,
-                media_urls=media_urls
-            )
+            async with analysis_sema:
+                # Guard heavy I/O phases (LLM, multimodal, retrieval)
+                async with llm_sema:
+                    # Basic retry honoring config
+                    attempts = 0
+                    last_exc = None
+                    while attempts <= max_retries:
+                        try:
+                            result = await analyzer_instance.analyze_content(
+                                tweet_id=tw_id,
+                                tweet_url=tw_url,
+                                username=tw_user,
+                                content=analysis_content,
+                                media_urls=media_urls
+                            )
+                            break
+                        except Exception as inner_e:
+                            last_exc = inner_e
+                            attempts += 1
+                            if attempts > max_retries:
+                                raise inner_e
+                            # brief backoff
+                            import asyncio as _asyncio
+                            await _asyncio.sleep(retry_delay)
 
             # Count categories
             category = result.category
             category_counts[category] = category_counts.get(category, 0) + 1
 
-            # Create ContentAnalysis object for saving (copy all fields from result)
+            # Create ContentAnalysis object for saving
             analysis = ContentAnalysis(
-                post_id=tweet_id,
-                post_url=tweet_url,
-                author_username=tweet_username,
+                post_id=tw_id,
+                post_url=tw_url,
+                author_username=tw_user,
                 post_content=content,
                 analysis_timestamp=datetime.now().isoformat(),
                 category=result.category,
@@ -491,10 +542,10 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
                 analysis_json=getattr(result, 'analysis_json', '')
             )
 
-            # Save to database
             analyzer_instance.save_analysis(analysis)
-
-            results.append(result)
+            # Mark save completion with timestamp for concurrency visibility
+            ts_done = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+            print(f"{ts_done} 💾 Saved analysis for {tw_id}")
 
             # Show result
             category_emoji = {
@@ -509,42 +560,46 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
                 Categories.POLITICAL_GENERAL: '🗳️',
                 Categories.GENERAL: '✅'
             }.get(category, '❓')
-
             print(f"    {category_emoji} {category}")
 
-            # Show LLM explanation if available (truncated for readability)
             if result.llm_explanation and len(result.llm_explanation.strip()) > 0:
                 explanation = result.llm_explanation[:120] + "..." if len(result.llm_explanation) > 120 else result.llm_explanation
                 print(f"    💭 {explanation}")
-
-            # Show analysis method
             method_emoji = "🧠" if result.analysis_method == "llm" else "🔍"
             print(f"    {method_emoji} Method: {result.analysis_method}")
+
+            return ("ok", tw_id, category)
 
         except Exception as e:
             error_msg = f"{type(e).__name__}: {str(e)}"
             print(f"    ❌ Error analyzing tweet: {error_msg}")
-
-            # Log detailed error information
-            logger.error(f"Analysis failed for tweet {tweet_id} (@{tweet_username}): {error_msg}")
+            logger.error(f"Analysis failed for tweet {tw_id} (@{tw_user}): {error_msg}")
             logger.info(f"Tweet content: {content[:200]}...")
             if media_urls:
                 logger.info(f"Media URLs that may have caused failure: {media_urls}")
-
-            # Save failed analysis to database for debugging
             analyzer_instance.repository.save_failed_analysis(
-                tweet_id=tweet_id,
-                tweet_url=tweet_url,
-                username=tweet_username,
+                tweet_id=tw_id,
+                tweet_url=tw_url,
+                username=tw_user,
                 content=content,
                 error_message=error_msg,
                 media_urls=media_urls
             )
-
-            # Count as failed analysis
             category_counts["ERROR"] = category_counts.get("ERROR", 0) + 1
+            return ("err", tw_id, error_msg)
+        finally:
+            print()
 
-        print()
+    # Kick off tasks and wait for all to complete
+    tasks = [analyze_one(i, entry) for i, entry in enumerate(tweets, 1)]
+    outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Collect successful results for reporting compatibility
+    results = []
+    for out in outcomes:
+        if isinstance(out, tuple) and out[0] == "ok":
+            # For now we don't reconstruct full ContentAnalysis; we maintain counts and logs
+            results.append(out)
 
     # Summary
     print("📊 Analysis Complete!")

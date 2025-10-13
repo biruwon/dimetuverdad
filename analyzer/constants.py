@@ -65,6 +65,8 @@ class ConfigDefaults:
     DATABASE_TIMEOUT: Final[float] = 30.0
     DOWNLOAD_TIMEOUT: Final[float] = 120.0
     REQUEST_TIMEOUT: Final[float] = 30.0
+    MAX_CONCURRENCY: Final[int] = 4
+    MAX_LLM_CONCURRENCY: Final[int] = 2
 
 
 class MetricsKeys:

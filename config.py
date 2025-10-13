@@ -5,6 +5,9 @@ All configuration values should be defined here for easy management.
 import os
 from pathlib import Path
 
+# Import environment config
+from utils.config import config
+
 # Base directory
 BASE_DIR = Path(__file__).parent
 
@@ -33,8 +36,11 @@ DB_CHECK_SAME_THREAD = os.environ.get('DB_CHECK_SAME_THREAD', 'False').lower() =
 # CACHE SETTINGS
 # =============================================================================
 
-# Flask-Caching configuration
-CACHE_TYPE = os.environ.get('CACHE_TYPE', 'SimpleCache')
+# Flask-Caching configuration - disabled for development/testing, enabled for production
+if config.is_production():
+    CACHE_TYPE = 'SimpleCache'
+else:
+    CACHE_TYPE = 'null'  # Disabled for development/testing
 CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', '300'))  # 5 minutes
 
 # =============================================================================
