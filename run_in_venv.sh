@@ -10,7 +10,8 @@
 #   ./run_in_venv.sh test-fetch-integration       # run fetch integration tests
 #   ./run_in_venv.sh test-retrieval-integration   # run retrieval integration tests
 #   ./run_in_venv.sh test-integration             # run all integration tests
-#   ./run_in_venv.sh test-all                     # run all test files in project
+#   ./run_in_venv.sh test-unit                   # run all unit test files in project
+#   ./run_in_venv.sh test-suite                  # run complete test suite (unit + integration)
 #   ./run_in_venv.sh compare-models    # run model comparison benchmarks
 #   ./run_in_venv.sh benchmarks        # run performance benchmarks
 #   ./run_in_venv.sh full              # run fetch then analyze-twitter
@@ -98,17 +99,26 @@ test_integration(){
   ensure_venv
   echo "Running all integration tests (retrieval, analyzer, fetch)..."
   echo "Running retrieval integration tests..."
-  "$PY" -m pytest "$ROOT_DIR/retrieval/tests/test_retrieval_integration.py" -v "$@"
+  "$PY" -m pytest "$ROOT_DIR/retrieval/tests/test_retrieval_integration.py" -v -n auto "$@"
   echo "Running analyzer integration tests..."
   "$PY" "$ROOT_DIR/analyzer/tests/test_analyze_twitter_integration.py" "$@"
   echo "Running fetch integration tests..."
   "$PY" "$ROOT_DIR/fetcher/tests/test_fetch_integration.py" --live-fetch
 }
 
-test_all(){
+test_unit(){
   ensure_venv
-  echo "Running all test files in the project..."
-  "$PY" -m pytest "$ROOT_DIR" -v --tb=short
+  echo "Running all unit test files in the project..."
+  "$PY" -m pytest "$ROOT_DIR" -v --tb=short -n auto -k "not integration"
+}
+
+test_suite(){
+  ensure_venv
+  echo "Running complete test suite (unit + integration tests)..."
+  echo "Running unit tests..."
+  test_unit
+  echo "Running integration tests..."
+  test_integration
 }
 
 init_db(){
@@ -165,8 +175,11 @@ case "${1-}" in
     shift
     test_integration "$@"
     ;;
-  test-all)
-    test_all
+  test-unit)
+    test_unit
+    ;;
+  test-suite)
+    test_suite
     ;;
   init-db)
     shift
@@ -201,7 +214,8 @@ case "${1-}" in
     echo "  test-fetch-integration     Run fetch integration tests"
     echo "  test-retrieval-integration Run retrieval integration tests"
     echo "  test-integration           Run all integration tests"
-    echo "  test-all                   Run all test files in project"
+    echo "  test-unit                   Run all unit test files in project"
+    echo "  test-suite                 Run complete test suite (unit + integration)"
     echo "  init-db           Initialize/reset database schema"
     echo "  compare-models    Run model comparison benchmarks"
     echo "  benchmarks        Run performance benchmarks"
@@ -214,7 +228,8 @@ case "${1-}" in
     echo "  $0 test-fetch-integration"
     echo "  $0 test-retrieval-integration"
     echo "  $0 test-integration"
-    echo "  $0 test-all"
+    echo "  $0 test-unit"
+    echo "  $0 test-suite"
     echo "  $0 analyze-twitter --username Vox_es --limit 10"
     echo "  $0 backup-db list"
     exit 1

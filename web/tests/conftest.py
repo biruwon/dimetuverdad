@@ -25,8 +25,18 @@ def app():
     os.environ['DIMETUVERDAD_ENV'] = 'testing'
 
     try:
-        # Initialize test database
-        test_db_path = init_test_database(fixtures=False)
+        # For Flask tests, use a deterministic test database path that's consistent across workers
+        import tempfile
+        worker_id = os.environ.get('PYTEST_XDIST_WORKER', 'master')
+        test_db_path = os.path.join(tempfile.gettempdir(), f'flask_test_{worker_id}.db')
+        
+        # Remove any existing test database for this worker
+        if os.path.exists(test_db_path):
+            os.remove(test_db_path)
+        
+        # Create fresh schema using the same initialization function
+        from utils.database import _create_test_database_schema
+        _create_test_database_schema(test_db_path)
 
         # Configure test app
         test_config = {
@@ -46,8 +56,7 @@ def app():
         yield flask_app
 
     finally:
-        # Cleanup test database
-        cleanup_test_databases()
+        # Clean up environment variables
         os.environ.pop('DIMETUVERDAD_ENV', None)
 
 
@@ -194,8 +203,8 @@ class TestHelpers:
         if 'category' in tweet_data:
             db_connection.execute("""
                 INSERT INTO content_analyses (
-                    tweet_id, category, llm_explanation, analysis_method,
-                    analysis_timestamp, username
+                    post_id, category, llm_explanation, analysis_method,
+                    analysis_timestamp, author_username
                 ) VALUES (?, ?, ?, ?, ?, ?)
             """, (
                 tweet_data['tweet_id'],
@@ -213,7 +222,7 @@ class TestHelpers:
         """Create a test account in the database."""
         db_connection.execute("""
             INSERT INTO accounts (
-                username, profile_pic_url, last_updated
+                username, profile_pic_url, last_scraped
             ) VALUES (?, ?, ?)
         """, (
             account_data['username'],

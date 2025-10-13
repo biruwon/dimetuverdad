@@ -1,0 +1,247 @@
+{% macro render_tweet_display(tweet, show_admin_controls=false, referrer=None, tweet_id=None) %}
+<div class="tweet-card {% if tweet.analysis_category %}analysis-{{ tweet.analysis_category }}{% endif %}{% if tweet.is_rt %} rt-{{ tweet.rt_type }}{% endif %}{% if tweet.is_deleted %} deleted{% endif %}{% if tweet.is_edited %} edited{% endif %}">
+    <div class="card-body">
+        <!-- Post Status Warnings -->
+        {% if tweet.post_status_warnings %}
+        <div class="post-status-warnings mb-3">
+            {% for warning in tweet.post_status_warnings %}
+            <div class="alert {{ warning.class }} alert-sm py-2">
+                <i class="{{ warning.icon }} me-2"></i>
+                <strong>{{ warning.message }}</strong>
+                {% if warning.type == 'deleted' %}
+                    - Mostrando contenido guardado
+                {% elif warning.type == 'edited' %}
+                    - <a href="#" class="alert-link show-versions" data-tweet-id="{{ tweet.tweet_id }}">Ver versiones anteriores</a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- RT Header (if applicable) -->
+        {% if tweet.is_rt %}
+        <div class="rt-header mb-2">
+            {% if tweet.rt_type == 'repost_other' %}
+            <div class="alert alert-info py-2">
+                <i class="fas fa-retweet me-2"></i>
+                <strong>Retweet de @{{ tweet.original_author or 'usuario' }}</strong>
+                {% if tweet.original_tweet_id %}
+                <small class="ms-2">
+                    <a href="https://x.com/i/web/status/{{ tweet.original_tweet_id }}"
+                       target="_blank" class="alert-link">
+                        Ver original <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </small>
+                {% endif %}
+            </div>
+            {% elif tweet.rt_type == 'repost_own' %}
+            <div class="alert alert-success py-2">
+                <i class="fas fa-retweet me-2"></i>
+                <strong>Retweet propio</strong>
+            </div>
+            {% elif tweet.rt_type == 'repost_reply' %}
+            <div class="alert alert-warning py-2">
+                <i class="fas fa-reply me-2"></i>
+                <strong>Repost Reply de @{{ tweet.reply_to_username or 'usuario' }}</strong>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Tweet Header -->
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+                <h6 class="mb-1">
+                    <i class="fab fa-twitter text-primary me-2"></i>
+                    @{{ tweet.username }}
+                    {% if tweet.profile_pic_url %}
+                    <img src="{{ tweet.profile_pic_url }}"
+                         alt="@{{ tweet.username }}"
+                         class="rounded-circle ms-2"
+                         width="20"
+                         height="20"
+                         style="object-fit: cover;">
+                    {% endif %}
+                </h6>
+                <small class="text-muted">
+                    <i class="fas fa-calendar me-1"></i>
+                    {% if tweet.tweet_timestamp %}
+                        {{ tweet.tweet_timestamp[:19].replace('T', ' ') }}
+                    {% endif %}
+                    {% if tweet.post_type and tweet.post_type != 'original' %}
+                        <span class="ms-2 badge bg-secondary">{{ tweet.post_type }}</span>
+                    {% endif %}
+                    {% if tweet.is_deleted %}
+                        <span class="ms-2 badge bg-danger">Eliminado</span>
+                    {% endif %}
+                    {% if tweet.is_edited %}
+                        <span class="ms-2 badge bg-warning text-dark">Editado</span>
+                    {% endif %}
+                </small>
+            </div>
+
+            <!-- Multi-Category Analysis Display -->
+            {% if tweet.categories_detected %}
+            <div class="category-badges-container mb-2">
+                {% for category in tweet.categories_detected %}
+                <span class="badge category-{{ category }} category-badge text-white me-1 {% if category == tweet.analysis_category %}primary-badge{% else %}secondary-badge{% endif %}">
+                    {% if category == 'hate_speech' %}🚫 Discurso de Odio
+                    {% elif category == 'disinformation' %}❌ Desinformación
+                    {% elif category == 'conspiracy_theory' %}🕵️ Conspiración
+                    {% elif category == 'far_right_bias' %}⚡ Sesgo Extremista
+                    {% elif category == 'call_to_action' %}📢 Llamada a Acción
+                    {% elif category == 'nationalism' %}🏴 Nacionalismo
+                    {% elif category == 'anti_government' %}🏛️ Anti-Gobierno
+                    {% elif category == 'historical_revisionism' %}📜 Revisionismo Histórico
+                    {% elif category == 'political_general' %}🗳️ Política General
+                    {% else %}✅ General
+                    {% endif %}
+                </span>
+                {% endfor %}
+
+                {% if tweet.has_multiple_categories %}
+                <small class="text-muted ms-2">
+                    <i class="fas fa-tags"></i> Múltiples categorías detectadas
+                </small>
+                {% endif %}
+            </div>
+            {% elif tweet.analysis_category %}
+            <!-- Fallback to single category for backward compatibility -->
+            <div class="category-badges-container mb-2">
+                <span class="badge category-{{ tweet.analysis_category }} category-badge text-white primary-badge">
+                    {% if tweet.analysis_category == 'hate_speech' %}🚫 Discurso de Odio
+                    {% elif tweet.analysis_category == 'disinformation' %}❌ Desinformación
+                    {% elif tweet.analysis_category == 'conspiracy_theory' %}🕵️ Conspiración
+                    {% elif tweet.analysis_category == 'far_right_bias' %}⚡ Sesgo Extremista
+                    {% elif tweet.analysis_category == 'call_to_action' %}📢 Llamada a Acción
+                    {% else %}✅ General
+                    {% endif %}
+                </span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Content Display -->
+        <div class="tweet-content-container">
+            <!-- Embedded tweet display -->
+            {% if not tweet.is_deleted %}
+            <div class="embedded-tweet-container">
+                <div class="embedded-tweet" data-tweet-url="{{ tweet.tweet_url }}">
+                    <iframe
+                        src="https://platform.twitter.com/embed/Tweet.html?id={{ tweet.tweet_url.split('/')[-1] }}&theme=light&lang=es"
+                        style="position: static; visibility: visible; width: 100%; height: auto; min-height: 600px; display: block; flex-grow: 1;"
+                        title="X Post"
+                        frameborder="0"
+                        scrolling="no"
+                        allowfullscreen>
+                    </iframe>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Analysis Explanation -->
+        {% if tweet.analysis_display %}
+        <div class="analysis-explanation">
+            <h6 class="mb-2">
+                <i class="fas fa-robot text-primary me-2"></i>
+                Análisis Automático
+                {% if tweet.analysis_method %}
+                    <span class="badge bg-{{ 'success' if tweet.analysis_method == 'llm' else 'secondary' }} ms-2">
+                        {{ 'LLM' if tweet.analysis_method == 'llm' else 'Patrones' }}
+                    </span>
+                {% endif %}
+            </h6>
+            <p class="mb-0">{{ tweet.analysis_display }}</p>
+            {% if tweet.analysis_timestamp %}
+            <small class="text-muted">
+                <i class="fas fa-clock me-1"></i>
+                Analizado: {{ tweet.analysis_timestamp[:19].replace('T', ' ') }}
+            </small>
+            {% endif %}
+
+            {% if tweet.verification_data and tweet.analysis_method != 'multimodal' %}
+            <div class="mt-3 pt-3 border-top">
+                <h6 class="mb-2">
+                    <i class="fas fa-search text-info me-2"></i>
+                    Verificación de Evidencia
+                    {% if tweet.verification_confidence %}
+                        <span class="badge bg-{{ 'success' if tweet.verification_confidence >= 0.8 else 'warning' if tweet.verification_confidence >= 0.6 else 'danger' }} ms-2">
+                            {{ "%.1f"|format(tweet.verification_confidence * 100) }}% Confianza
+                        </span>
+                    {% endif %}
+                </h6>
+
+                {% if tweet.verification_data.get('verification_report', {}).get('evidence_sources') %}
+                <div class="mb-2">
+                    <strong class="text-muted">Fuentes consultadas:</strong>
+                    <div class="mt-1">
+                        {% for source in tweet.verification_data.verification_report.evidence_sources %}
+                        <span class="badge bg-light text-dark me-1 mb-1">{{ source.get('source_name', 'Fuente') }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if tweet.verification_data.get('verification_report', {}).get('contradictions_found') %}
+                <div class="mb-2">
+                    <strong class="text-danger">Contradicciones encontradas:</strong>
+                    <ul class="list-unstyled mt-1">
+                        {% for contradiction in tweet.verification_data.verification_report.contradictions_found %}
+                        <li class="text-danger">
+                            <i class="fas fa-exclamation-triangle me-1"></i>{{ contradiction }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                {% if tweet.verification_data.get('verification_report', {}).get('claims_verified') %}
+                <div class="mb-2">
+                    <strong class="text-info">Afirmaciones verificadas:</strong>
+                    <div class="mt-1">
+                        {% for claim in tweet.verification_data.verification_report.claims_verified %}
+                        <div class="mb-2 p-2 bg-light rounded">
+                            <small class="text-muted">"{{ claim.get('claim', '') }}"</small>
+                            <br>
+                            <span class="badge bg-{{ 'success' if claim.get('verdict') == 'verified' else 'warning' if claim.get('verdict') == 'partially_verified' else 'danger' }}">
+                                {{ claim.get('verdict', 'unknown') }}
+                            </span>
+                            {% if claim.get('confidence', 0) > 0 %}
+                            <small class="text-muted ms-2">{{ "%.1f"|format(claim.confidence * 100) }}% confianza</small>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if show_admin_controls %}
+            <div class="admin-controls mt-3 border-top pt-3">
+                <h6 class="text-warning mb-2">
+                    <i class="fas fa-shield-alt me-1"></i>Admin Controls
+                </h6>
+                <a href="{{ url_for('admin.admin_edit_analysis', tweet_id=tweet_id or tweet.tweet_id, from=referrer) }}" class="btn btn-sm btn-warning">
+                    <i class="fas fa-edit me-1"></i>Editar Análisis
+                </a>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Tweet Actions -->
+        <div class="tweet-actions mt-3">
+            <a href="{{ tweet.tweet_url }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-external-link-alt me-1"></i>
+                Ver en X
+            </a>
+            <button class="btn btn-outline-info btn-sm ms-2" onclick="openFeedbackModal('{{ tweet.tweet_id }}', '{{ tweet.analysis_category or 'general' }}')">
+                <i class="fas fa-comment-dots me-1"></i>
+                Feedback
+            </button>
+        </div>
+    </div>
+</div>
+{% endmacro %}

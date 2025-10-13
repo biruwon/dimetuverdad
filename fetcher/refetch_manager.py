@@ -14,6 +14,7 @@ from fetcher import db as fetcher_db
 from fetcher import parsers as fetcher_parsers
 from fetcher.session_manager import SessionManager
 from fetcher.media_monitor import MediaMonitor
+from utils.database import get_db_connection
 from fetcher.scroller import Scroller
 from utils import paths
 # Import repository interfaces
@@ -23,11 +24,11 @@ from repositories import get_tweet_repository
 class RefetchManager:
     """Manages re-fetching operations for tweets and accounts."""
     
-    def __init__(self):
+    def __init__(self, db_path=None):
         self.session_manager = SessionManager()
         self.media_monitor = MediaMonitor()
         self.scroller = Scroller()
-        self.db_path = str(paths.get_db_path())
+        self._db_path = db_path
     
     def get_tweet_info_from_db(self, tweet_id: str) -> Tuple[Optional[str], Optional[str]]:
         """
@@ -42,8 +43,10 @@ class RefetchManager:
         Raises:
             Exception: If database error occurs
         """
-        conn = sqlite3.connect(self.db_path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
+        if self._db_path:
+            conn = get_db_connection(db_path=self._db_path)
+        else:
+            conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("SELECT username, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,))
         row = cur.fetchone()

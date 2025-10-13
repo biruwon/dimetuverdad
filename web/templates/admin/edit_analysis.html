@@ -88,80 +88,8 @@
                         </h5>
                     </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label"><strong>Usuario:</strong></label>
-                            <div>@{{ tweet.username }}</div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label"><strong>Fecha:</strong></label>
-                            <div>{{ tweet.tweet_timestamp }}</div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label"><strong>Contenido:</strong></label>
-                            
-                            <!-- Embedded Tweet Display (same as user view) -->
-                            <div class="tweet-content-container mb-3">
-                                <div class="embedded-tweet-container">
-                                    <div class="embedded-tweet" data-tweet-url="{{ tweet.tweet_url }}">
-                                        <iframe 
-                                            src="https://platform.twitter.com/embed/Tweet.html?id={{ tweet.tweet_url.split('/')[-1] }}&theme=light&lang=es"
-                                            style="position: static; visibility: visible; width: 100%; height: auto; min-height: 600px; display: block; flex-grow: 1;"
-                                            title="X Post"
-                                            frameborder="0"
-                                            scrolling="no"
-                                            allowfullscreen>
-                                        </iframe>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Fallback Content Display (if iframe fails) -->
-                            <div class="tweet-content fallback-content" style="display: none;">
-                                {% if tweet.original_content and tweet.original_content != tweet.content %}
-                                    <!-- Quoted Tweet: Show both original context and user's text -->
-                                    <div class="mb-3">
-                                        <div class="text-muted mb-2">
-                                            <i class="fas fa-quote-left me-1"></i>
-                                            <strong>Tweet citado:</strong>
-                                        </div>
-                                        <div class="p-3 border-start border-3 border-secondary bg-light rounded">
-                                            {{ tweet.original_content }}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div class="text-muted mb-2">
-                                            <i class="fas fa-user me-1"></i>
-                                            <strong>Comentario de @{{ tweet.username }}:</strong>
-                                        </div>
-                                        <div class="p-3 border-start border-3 border-primary bg-primary bg-opacity-10 rounded">
-                                            {{ tweet.content }}
-                                        </div>
-                                    </div>
-                                {% else %}
-                                    <!-- Regular Tweet -->
-                                    {{ tweet.content }}
-                                {% endif %}
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label"><strong>Categoría Actual:</strong></label>
-                            <div>
-                                <span class="badge bg-{{ 
-                                    'danger' if tweet.category == 'hate_speech' else
-                                    'warning' if tweet.category == 'disinformation' else
-                                    'dark' if tweet.category == 'conspiracy_theory' else
-                                    'primary' if tweet.category == 'far_right_bias' else
-                                    'success' if tweet.category == 'call_to_action' else
-                                    'secondary' if tweet.category == 'general' else
-                                    'info'
-                                }} fs-6">
-                                    {{ tweet.category or 'Sin categoría' }}
-                                </span>
-                            </div>
-                        </div>
+                        {% from 'components/tweet_display.html' import render_tweet_display %}
+                        {{ render_tweet_display(tweet, show_admin_controls=false, referrer=referrer, tweet_id=tweet_id) }}
                     </div>
                 </div>
             </div>

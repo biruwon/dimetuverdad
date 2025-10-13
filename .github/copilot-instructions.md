@@ -165,14 +165,14 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 
 ### MANDATORY Testing Workflow for Code Changes
 
-**ABSOLUTE REQUIREMENT**: ALL code changes MUST be tested IMMEDIATELY after making them. This is NON-NEGOTIABLE and CANNOT be skipped.
+**ABSOLUTE REQUIREMENT**: ALL code changes MUST be tested IMMEDIATELY. No exceptions. See "MANDATORY Testing Workflow" section below for enforcement details.
 
 **IMMEDIATE TESTING RULE**:
 - **EVERY CODE CHANGE** triggers immediate testing requirement
 - **NO EXCEPTIONS**: Functions, refactors, bug fixes, new features, config changes
 - **IMMEDIATE**: Test right after the change, not later, not at the end of session
 - **BLOCKING**: Cannot continue to other work until tests pass
-- **COPILOT VIOLATION**: Failing to test after code changes is a critical workflow violation
+- **COPILOT VIOLATION**: Failing to test immediately after code changes is a critical workflow violation
 
 **Testing Requirements**:
 1. **After ANY code change** (refactor, new feature, bug fix, enhancement, or modification):
@@ -231,9 +231,16 @@ python quick_test.py --llm "Complex content requiring deep analysis"
    - **Exception Handling**: Only exempt files that cannot be meaningfully tested (e.g., configuration files, scripts)
    - **Coverage Command**: Use `source venv/bin/activate && python -m pytest --cov=. --cov-report=html --cov-report=term-missing` for comprehensive coverage analysis
 
+**CRITICAL TESTING PRINCIPLES**:
+- **NEVER ADD FALLBACK CODE JUST FOR TESTS**: If tests fail due to mocking issues, fix the test mocks instead of adding production code workarounds
+- **TESTS SHOULD MIRROR PRODUCTION**: Test environments should behave as closely as possible to production environments
+- **MOCKING SHOULD BE REALISTIC**: Use proper mock objects that behave like real database rows, not just data structures
+- **PRODUCTION CODE STAYS CLEAN**: Don't pollute production code with test-specific compatibility layers
+
 **SEVERE VIOLATION CONSEQUENCES**: 
 - Code changes without IMMEDIATE testing WILL cause integration issues, break the pipeline, and create technical debt
 - **WORKFLOW VIOLATION**: Not testing immediately after code changes violates core development practices
+- **TESTING VIOLATION**: Adding fallback code just for tests creates maintenance burden and hides real issues
 - **USER TRUST VIOLATION**: User expects all changes to be properly tested before proceeding
 - **MANDATORY REMEDIATION**: If tests are not run immediately after changes, must stop all work and run tests before continuing
 
@@ -355,7 +362,7 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 
 ## Automatic Git Workflow
 
-**MANDATORY CONFIRMATION REQUIREMENT**: Before committing and pushing ANY changes to GitHub, you MUST ask the user for explicit confirmation. This includes documentation updates, code changes, configuration files, or any other modifications.
+**MANDATORY IMMEDIATE FIX REQUIREMENT**: For any model, fixes and improvements should be performed immediately without waiting for user confirmation. This applies to code changes, documentation updates, configuration files, and any other modifications. Do not wait for explicit user approval before proceeding with fixes.
 
 ### Git Automation Rules:
 1. **ALWAYS ASK FIRST**: Never commit or push without explicit user confirmation
@@ -377,7 +384,6 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 
 **EXECUTION STEPS**:
 1. Verify the complete feature/fix/refactor is finished
-2. **MANDATORY**: Run `./run_in_venv.sh test-coverage` to verify 70%+ coverage
 3. If coverage is below 70%: add tests to reach threshold before proceeding
 4. Ask user: "This feature/fix/refactor appears complete and test coverage is 70%+. Would you like me to commit and push these changes with message: '[proposed commit message]'?"
 5. **WAIT FOR USER RESPONSE** - Do not proceed without explicit confirmation
@@ -482,6 +488,15 @@ When working on this codebase, prioritize understanding the multi-stage analysis
    - The database connection uses `sqlite3.Row` factory for named column access
    - Use `row['column_name']` instead of `row[index]` to prevent indexing errors
    - This makes code robust against SQL query changes and schema modifications
+   - **NO EXCEPTIONS**: Never use fallback patterns with row[index] - always use field names
+
+### Coding Style Requirements
+
+**MANDATORY CODING STANDARDS**:
+1. **Database Access**: Always use column names, never indices (`row['column_name']`, never `row[0]`)
+2. **No Fallbacks**: Remove all try/except fallbacks for data access - use one consistent approach
+3. **Named Access Only**: Database results must be accessed by field name only, no positional indexing
+4. **Consistent Patterns**: Use single, consistent method for all database operations
 
 ### Database Initialization Confirmation Workflow:
 1. **ALWAYS ASK FIRST**: Never execute `init_database.py --force` without explicit user confirmation

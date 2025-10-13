@@ -14,7 +14,7 @@ from typing import Optional, Dict, List, Any
 
 from web.utils.decorators import admin_required, rate_limit, handle_db_errors, validate_input, ANALYSIS_CATEGORIES
 from web.utils.helpers import (
-    get_db_connection, get_tweet_data, reanalyze_tweet,
+    get_db_connection, get_tweet_data, reanalyze_tweet, reanalyze_tweet_sync,
     handle_reanalyze_action, handle_refresh_action, handle_refresh_and_reanalyze_action,
     handle_manual_update_action
 )
@@ -69,10 +69,10 @@ def admin_dashboard() -> str:
     """).fetchone()
 
     stats = {
-        'total_tweets': (stats_row['total_tweets'] if hasattr(stats_row, '__getitem__') else 0) or 0,
-        'analyzed_tweets': (stats_row['analyzed_tweets'] if hasattr(stats_row, '__getitem__') else 0) or 0,
-        'pattern_analyzed': (stats_row['pattern_analyzed'] if hasattr(stats_row, '__getitem__') else 0) or 0,
-        'llm_analyzed': (stats_row['llm_analyzed'] if hasattr(stats_row, '__getitem__') else 0) or 0,
+        'total_tweets': stats_row['total_tweets'] if stats_row and 'total_tweets' in stats_row else 0,
+        'analyzed_tweets': stats_row['analyzed_tweets'] if stats_row and 'analyzed_tweets' in stats_row else 0,
+        'pattern_analyzed': stats_row['pattern_analyzed'] if stats_row and 'pattern_analyzed' in stats_row else 0,
+        'llm_analyzed': stats_row['llm_analyzed'] if stats_row and 'llm_analyzed' in stats_row else 0,
     }
 
     # Recent analyses (last 10)
@@ -96,56 +96,20 @@ def admin_dashboard() -> str:
 
     recent_analyses = []
     for r in recent_rows or []:
-        # Handle sqlite3.Row objects properly
-        if hasattr(r, 'keys') and 'analysis_timestamp' in r:
-            # sqlite3.Row with dict-like access
-            recent_analyses.append({
-                'analysis_timestamp': r['analysis_timestamp'],
-                'category': r['category'],
-                'analysis_method': r['analysis_method'],
-                'username': r['username'],
-                'content_preview': r['content_preview']
-            })
-        else:
-            # Fallback for other row types
-            try:
-                recent_analyses.append({
-                    'analysis_timestamp': r[0],
-                    'category': r[1],
-                    'analysis_method': r[2],
-                    'username': r[3],
-                    'content_preview': r[4] if len(r) > 4 else ''
-                })
-            except (IndexError, TypeError):
-                recent_analyses.append({
-                    'analysis_timestamp': None,
-                    'category': None,
-                    'analysis_method': None,
-                    'username': None,
-                    'content_preview': ''
-                })
+        recent_analyses.append({
+            'analysis_timestamp': r['analysis_timestamp'],
+            'category': r['category'],
+            'analysis_method': r['analysis_method'],
+            'username': r['username'],
+            'content_preview': r['content_preview'] if 'content_preview' in r else r['content'][:100] if 'content' in r else ''
+        })
 
     categories = []
     for r in category_rows or []:
-        # Handle sqlite3.Row objects properly
-        if hasattr(r, 'keys') and 'category' in r:
-            # sqlite3.Row with dict-like access
-            categories.append({
-                'category': r['category'],
-                'count': r['count']
-            })
-        else:
-            # Fallback for other row types
-            try:
-                categories.append({
-                    'category': r[0],
-                    'count': r[1]
-                })
-            except (IndexError, TypeError):
-                categories.append({
-                    'category': None,
-                    'count': 0
-                })
+        categories.append({
+            'category': r['category'],
+            'count': r['count']
+        })
 
     return render_template('admin/dashboard.html', stats=stats, categories=categories, recent_analyses=recent_analyses)
 
@@ -173,7 +137,8 @@ def admin_fetch() -> str:
         try:
             # Check if user exists in database
             conn = get_db_connection()
-            user_exists = conn.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,)).fetchone()[0] > 0
+            user_exists_row = conn.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,)).fetchone()
+            user_exists = user_exists_row['COUNT(*)'] if user_exists_row and 'COUNT(*)' in user_exists_row else user_exists_row[0] if user_exists_row else 0
             conn.close()
 
             # Choose fetch strategy based on user existence
@@ -249,7 +214,7 @@ def admin_reanalyze() -> str:
                 for r in rows:
                     tweet_id = r['post_id'] if 'post_id' in r else r[0]
                     try:
-                        result = reanalyze_tweet(tweet_id)
+                        result = reanalyze_tweet_sync(tweet_id)
                         if result:
                             reanalyzed_count += 1
                             admin_bp.logger.info(f"✅ Reanálizado tweet {tweet_id}: {getattr(result, 'category', None)}")
@@ -350,7 +315,9 @@ def admin_edit_analysis(tweet_id: str) -> str:
             ca.category,
             ca.llm_explanation,
             t.tweet_url,
-            t.original_content
+            t.original_content,
+            ca.verification_data,
+            ca.verification_confidence
         FROM tweets t
         LEFT JOIN content_analyses ca ON ca.post_id = t.tweet_id
         WHERE t.tweet_id = ?
@@ -370,7 +337,9 @@ def admin_edit_analysis(tweet_id: str) -> str:
             'category': row['category'] if 'category' in row else (row[3] if len(row) > 3 else 'general'),
             'llm_explanation': row['llm_explanation'] if 'llm_explanation' in row else (row[4] if len(row) > 4 else ''),
             'tweet_url': row['tweet_url'] if 'tweet_url' in row else (row[5] if len(row) > 5 else ''),
-            'original_content': row['original_content'] if 'original_content' in row else (row[6] if len(row) > 6 else '')
+            'original_content': row['original_content'] if 'original_content' in row else (row[6] if len(row) > 6 else ''),
+            'verification_data': json.loads(row['verification_data']) if row['verification_data'] and 'verification_data' in row else None,
+            'verification_confidence': row['verification_confidence'] if 'verification_confidence' in row else (row[8] if len(row) > 8 else 0.0)
         }
     except Exception:
         # Fallback mapping for strict tuples
@@ -381,7 +350,9 @@ def admin_edit_analysis(tweet_id: str) -> str:
             'category': row[3] if len(row) > 3 else 'general',
             'llm_explanation': row[4] if len(row) > 4 else '',
             'tweet_url': row[5] if len(row) > 5 else '',
-            'original_content': row[6] if len(row) > 6 else ''
+            'original_content': row[6] if len(row) > 6 else '',
+            'verification_data': json.loads(row[7]) if row[7] and len(row) > 7 else None,
+            'verification_confidence': row[8] if len(row) > 8 else 0.0
         }
 
     from web.utils.decorators import ANALYSIS_CATEGORIES
@@ -405,7 +376,7 @@ def admin_reanalyze_single(tweet_id: str) -> str:
         print(f"🔄 Reanalizando tweet {tweet_id} de @{tweet_data.get('username', 'unknown')}")
 
         # Reanalyze the content
-        analysis_result = reanalyze_tweet(tweet_id)
+        analysis_result = reanalyze_tweet_sync(tweet_id)
 
         if analysis_result and hasattr(analysis_result, 'category') and analysis_result.category:
             flash(f'Tweet reanálizado correctamente. Nueva categoría: {analysis_result.category}', 'success')
@@ -431,7 +402,7 @@ def admin_view_category(category_name: str) -> str:
 
         # 1) Check if category exists
         exists_row = conn.execute("SELECT COUNT(*) FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
-        exists_count = (exists_row[0] if isinstance(exists_row, (list, tuple)) else exists_row['COUNT(*)'] if exists_row else 0)
+        exists_count = exists_row['COUNT(*)'] if exists_row and 'COUNT(*)' in exists_row else exists_row[0] if exists_row else 0
         if not exists_count:
             conn.close()
             flash(f'No se encontraron tweets para la categoría "{category_name}"', 'info')
@@ -439,7 +410,7 @@ def admin_view_category(category_name: str) -> str:
 
         # 2) Total count
         total_count_row = conn.execute("SELECT COUNT(*) FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
-        total_count = total_count_row[0] if isinstance(total_count_row, (list, tuple)) else (total_count_row['COUNT(*)'] if total_count_row else 0)
+        total_count = total_count_row['COUNT(*)'] if total_count_row and 'COUNT(*)' in total_count_row else total_count_row[0] if total_count_row else 0
 
         # Pagination
         offset = (page - 1) * per_page
@@ -490,47 +461,25 @@ def admin_view_category(category_name: str) -> str:
         # Build tweets list
         processed_tweets = []
         for r in recent_rows or []:
-            try:
-                processed_tweets.append({
-                    'tweet_url': r['tweet_url'],
-                    'content': r['content'],
-                    'username': r['username'],
-                    'tweet_timestamp': r['tweet_timestamp'],
-                    'tweet_id': r['tweet_id'],
-                    'category': r['category'],
-                    'llm_explanation': r['llm_explanation'],
-                    'analysis_method': r['analysis_method'],
-                    'analysis_timestamp': r['analysis_timestamp'],
-                    'is_deleted': r['is_deleted'],
-                    'is_edited': r['is_edited'],
-                    'post_type': r['post_type']
-                })
-            except Exception:
-                # Tuple fallback
-                processed_tweets.append({
-                    'tweet_url': r[0],
-                    'content': r[1],
-                    'username': r[2],
-                    'tweet_timestamp': r[3],
-                    'tweet_id': r[4],
-                    'category': r[5],
-                    'llm_explanation': r[6],
-                    'analysis_method': r[7],
-                    'analysis_timestamp': r[8],
-                    'is_deleted': r[9],
-                    'is_edited': r[10],
-                    'post_type': r[11]
-                })
+            processed_tweets.append({
+                'tweet_url': r['tweet_url'],
+                'content': r['content'],
+                'username': r['username'],
+                'tweet_timestamp': r['tweet_timestamp'],
+                'tweet_id': r['tweet_id'],
+                'category': r['category'],
+                'llm_explanation': r['llm_explanation'],
+                'analysis_method': r['analysis_method'],
+                'analysis_timestamp': r['analysis_timestamp'],
+                'is_deleted': r['is_deleted'],
+                'is_edited': r['is_edited'],
+                'post_type': r['post_type']
+            })
 
         # Category stats
-        try:
-            llm_count = stats_row['llm_count']
-            pattern_count = stats_row['pattern_count']
-            unique_users = stats_row['unique_users']
-        except Exception:
-            llm_count = stats_row[0] if stats_row else 0
-            pattern_count = stats_row[1] if stats_row and len(stats_row) > 1 else 0
-            unique_users = stats_row[2] if stats_row and len(stats_row) > 2 else 0
+        llm_count = stats_row['llm_count'] if stats_row and 'llm_count' in stats_row else 0
+        pattern_count = stats_row['pattern_count'] if stats_row and 'pattern_count' in stats_row else 0
+        unique_users = stats_row['unique_users'] if stats_row and 'unique_users' in stats_row else 0
 
         category_stats = {
             'total_tweets': total_count,
@@ -541,10 +490,7 @@ def admin_view_category(category_name: str) -> str:
 
         top_users = []
         for r in top_user_rows or []:
-            try:
-                top_users.append({'username': r['username'], 'tweet_count': r['tweet_count']})
-            except Exception:
-                top_users.append({'username': r[0], 'tweet_count': r[1]})
+            top_users.append({'username': r['username'], 'tweet_count': r['tweet_count']})
 
         pagination = {
             'page': page,
@@ -597,10 +543,9 @@ def admin_quick_edit_category(tweet_id: str) -> str:
         # Create new analysis entry
         tweet_row = conn.execute("SELECT username, content, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,)).fetchone()
         if tweet_row:
-            # Handle both dict-like and tuple-like objects (including Mock)
-            username = getattr(tweet_row, 'username', None) if hasattr(tweet_row, 'username') else (tweet_row[0] if isinstance(tweet_row, (list, tuple)) else tweet_row['username'])
-            content = getattr(tweet_row, 'content', None) if hasattr(tweet_row, 'content') else (tweet_row[1] if isinstance(tweet_row, (list, tuple)) else tweet_row['content'])
-            tweet_url = getattr(tweet_row, 'tweet_url', None) if hasattr(tweet_row, 'tweet_url') else (tweet_row[2] if isinstance(tweet_row, (list, tuple)) else tweet_row['tweet_url'])
+            username = tweet_row['username']
+            content = tweet_row['content']
+            tweet_url = tweet_row['tweet_url']
             
             conn.execute("""
                 INSERT INTO content_analyses (post_id, category, llm_explanation, analysis_method, author_username, post_content, post_url, analysis_timestamp)

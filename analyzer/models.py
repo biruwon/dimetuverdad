@@ -18,7 +18,7 @@ class ContentAnalysis:
     analysis_timestamp: str
 
     # Content categories (consolidated and multi-category support)
-    category: str  # Primary category (backward compatibility)
+    category: str  # Primary category
     categories_detected: List[str] = None  # All detected categories
 
     # Analysis results
@@ -40,6 +40,10 @@ class ContentAnalysis:
     analysis_time_seconds: float = 0.0  # Total analysis time
     model_used: str = ""                # Which model was used (gpt-oss:20b, gemini-2.5-flash, etc.)
     tokens_used: int = 0                # Approximate tokens used (if available)
+
+    # Evidence verification fields
+    verification_data: Optional[Dict] = None     # Verification results from retrieval system
+    verification_confidence: float = 0.0         # Confidence score from verification (0.0-1.0)
 
     def __post_init__(self):
         # Initialize lists to avoid None values

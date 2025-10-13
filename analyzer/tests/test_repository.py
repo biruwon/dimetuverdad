@@ -3,58 +3,39 @@ Tests for analyzer/repository.py
 Comprehensive test coverage for database operations.
 """
 
+
 import pytest
 import sqlite3
 import tempfile
 import os
+import sys
 import json
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
+
+# Ensure project root is in sys.path for test discovery
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from analyzer.repository import ContentAnalysisRepository
 from analyzer.models import ContentAnalysis
 from analyzer.categories import Categories
 from analyzer.constants import DatabaseConstants
+from utils.database import init_test_database, cleanup_test_database
 
 
 class TestContentAnalysisRepository:
     """Test the ContentAnalysisRepository class."""
 
-    def setup_method(self):
-        """Set up test database."""
-        self.db_fd, self.db_path = tempfile.mkstemp()
-        self._create_test_table()
-
-    def teardown_method(self):
-        """Clean up test database."""
-        os.close(self.db_fd)
-        os.unlink(self.db_path)
-
-    def _create_test_table(self):
-        """Create test database table."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute(f'''
-        CREATE TABLE IF NOT EXISTS {DatabaseConstants.TABLE_NAME} (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_id TEXT UNIQUE,
-            post_url TEXT,
-            author_username TEXT,
-            platform TEXT DEFAULT 'twitter',
-            post_content TEXT,
-            category TEXT,
-            llm_explanation TEXT,
-            analysis_json TEXT,
-            analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            analysis_method TEXT DEFAULT "pattern",
-            categories_detected TEXT,
-            media_urls TEXT,
-            media_analysis TEXT,
-            media_type TEXT,
-            multimodal_analysis BOOLEAN DEFAULT FALSE
-        )
-        ''')
-        conn.commit()
-        conn.close()
+    @pytest.fixture(autouse=True)
+    def setup_test_database(self):
+        """Set up test database for all tests."""
+        # Initialize test database
+        self.db_path = init_test_database()
+        yield
+        # Cleanup after all tests in this class
+        cleanup_test_database()
 
     def test_init(self):
         """Test repository initialization."""
@@ -545,7 +526,9 @@ class TestContentAnalysisRepository:
             'media_analysis': 'Test media analysis',
             'media_type': 'image',
             'multimodal_analysis': 1,
-            'analysis_json': '{"pattern_matches": [], "topic_classification": {}}'
+            'analysis_json': '{"pattern_matches": [], "topic_classification": {}}',
+            'verification_data': None,
+            'verification_confidence': 0.0
         }[key])
 
         result = repo._row_to_content_analysis(mock_row)

@@ -43,6 +43,7 @@ class ContentAnalysisRepository:
         Raises:
             sqlite3.OperationalError: If database remains locked after retries
         """
+        retry_delay = DatabaseConstants.RETRY_DELAY  # Use local variable to avoid modifying global constant
         for attempt in range(DatabaseConstants.MAX_RETRIES):
             try:
                 conn = sqlite3.connect(self.db_path, timeout=self.timeout)
@@ -52,8 +53,9 @@ class ContentAnalysisRepository:
                 INSERT OR REPLACE INTO {DatabaseConstants.TABLE_NAME}
                 (post_id, post_url, author_username, platform, post_content, category,
                  llm_explanation, analysis_method, analysis_json, analysis_timestamp,
-                 categories_detected, media_urls, media_analysis, media_type, multimodal_analysis)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 categories_detected, media_urls, media_analysis, media_type, multimodal_analysis,
+                 verification_data, verification_confidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     analysis.post_id,
                     analysis.post_url,
@@ -69,7 +71,9 @@ class ContentAnalysisRepository:
                     json.dumps(analysis.media_urls, ensure_ascii=False),
                     analysis.media_analysis,
                     analysis.media_type,
-                    analysis.multimodal_analysis
+                    analysis.multimodal_analysis,
+                    json.dumps(analysis.verification_data, ensure_ascii=False, default=str) if analysis.verification_data else None,
+                    analysis.verification_confidence
                 ))
 
                 conn.commit()
@@ -78,12 +82,12 @@ class ContentAnalysisRepository:
 
             except sqlite3.OperationalError as e:
                 if attempt < DatabaseConstants.MAX_RETRIES - 1:
-                    print(f"⚠️ Database locked, retrying in {DatabaseConstants.RETRY_DELAY}s... "
+                    print(f"⚠️ Database locked, retrying in {retry_delay}s... "
                           f"(attempt {attempt + 1}/{DatabaseConstants.MAX_RETRIES})")
                     import time
-                    time.sleep(DatabaseConstants.RETRY_DELAY)
-                    # Exponential backoff
-                    DatabaseConstants.RETRY_DELAY *= 2
+                    time.sleep(retry_delay)
+                    # Exponential backoff with local variable
+                    retry_delay *= 2
                 else:
                     print(f"❌ Database remains locked after {DatabaseConstants.MAX_RETRIES} attempts: {e}")
                     raise
@@ -416,5 +420,7 @@ class ContentAnalysisRepository:
             analysis_json=row['analysis_json'],
             analysis_time_seconds=0.0,  # Not stored in DB
             model_used="",  # Not stored in DB
-            tokens_used=0  # Not stored in DB
+            tokens_used=0,  # Not stored in DB
+            verification_data=json.loads(row['verification_data']) if row['verification_data'] else None,
+            verification_confidence=row['verification_confidence'] or 0.0
         )

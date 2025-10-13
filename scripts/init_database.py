@@ -128,6 +128,10 @@ def create_fresh_database_schema(db_path: str = None):
                 media_type TEXT,                 -- "image", "video", or ""
                 multimodal_analysis BOOLEAN DEFAULT FALSE, -- Whether media was analyzed
                 
+                -- Evidence retrieval and verification
+                verification_data TEXT,          -- JSON verification data from retrieval system
+                verification_confidence REAL DEFAULT 0.0, -- Confidence score for verification
+                
                 FOREIGN KEY (post_id) REFERENCES tweets (tweet_id),  -- Keep FK for now, will be updated
                 FOREIGN KEY (author_username) REFERENCES accounts (username),  -- Keep FK for now, will be updated
                 UNIQUE(post_id) -- One analysis per post
@@ -269,7 +273,8 @@ def verify_schema():
         ca_columns = [row['name'] for row in c.fetchall()]
         essential_ca_fields = [
             'post_id', 'author_username', 'platform', 'category', 'analysis_method', 'analysis_timestamp',
-            'categories_detected', 'media_urls', 'media_analysis', 'media_type', 'multimodal_analysis'
+            'categories_detected', 'media_urls', 'media_analysis', 'media_type', 'multimodal_analysis',
+            'verification_data', 'verification_confidence'
         ]
         
         print(f"  📋 Content analyses table columns: {len(ca_columns)} total")

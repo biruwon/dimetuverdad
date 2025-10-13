@@ -50,10 +50,33 @@ def get_tweet_data(tweet_id) -> Optional[Dict[str, Any]]:
     return None
 
 
-def reanalyze_tweet(tweet_id) -> Any:
+async def reanalyze_tweet(tweet_id) -> Any:
     """Reanalyze a single tweet and return the result."""
     from analyzer.analyze_twitter import reanalyze_tweet as analyzer_reanalyze_tweet  # Local import
-    return analyzer_reanalyze_tweet(tweet_id)
+    return await analyzer_reanalyze_tweet(tweet_id)
+
+
+def reanalyze_tweet_sync(tweet_id) -> Any:
+    """Synchronous wrapper for reanalyze_tweet that can be called from Flask routes."""
+    import asyncio
+    try:
+        # Create a new event loop if one doesn't exist
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If loop is already running, we need to use a different approach
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, reanalyze_tweet(tweet_id))
+                    return future.result(timeout=30)  # 30 second timeout
+            else:
+                return loop.run_until_complete(reanalyze_tweet(tweet_id))
+        except RuntimeError:
+            # No event loop, create a new one
+            return asyncio.run(reanalyze_tweet(tweet_id))
+    except Exception as e:
+        print(f"❌ Error in reanalyze_tweet_sync: {e}")
+        raise
 
 
 def refetch_tweet(tweet_id) -> bool:
@@ -85,7 +108,7 @@ def handle_reanalyze_action(tweet_id, referrer) -> None:
 
     # Reanalyze the content
     try:
-        analysis_result = reanalyze_tweet(tweet_id)
+        analysis_result = reanalyze_tweet_sync(tweet_id)
         print(f"🔍 Reanalyze result type: {type(analysis_result)}")
         print(f"🔍 Reanalyze result: {analysis_result is not None}")
     except Exception as reanalyze_e:
@@ -159,7 +182,7 @@ def handle_refresh_and_reanalyze_action(tweet_id, referrer) -> None:
 
     # Then reanalyze the content
     try:
-        analysis_result = reanalyze_tweet(tweet_id)
+        analysis_result = reanalyze_tweet_sync(tweet_id)
         print(f"🔍 Reanalyze result type: {type(analysis_result)}")
         print(f"🔍 Reanalyze result: {analysis_result is not None}")
     except Exception as reanalyze_e:
@@ -211,7 +234,7 @@ def handle_manual_update_action(tweet_id, new_category, new_explanation) -> None
             conn.execute("""
                 INSERT INTO content_analyses (post_id, category, llm_explanation, analysis_method, author_username, post_content, post_url, analysis_timestamp)
                 VALUES (?, ?, ?, 'manual', ?, ?, ?, CURRENT_TIMESTAMP)
-            """, (tweet_id, new_category, new_explanation, tweet_row['username'] if 'username' in tweet_row else tweet_row[0], tweet_row['content'] if 'content' in tweet_row else tweet_row[1], tweet_row['tweet_url'] if 'tweet_url' in tweet_row else tweet_row[2]))
+            """, (tweet_id, new_category, new_explanation, tweet_row['username'], tweet_row['content'], tweet_row['tweet_url']))
             conn.commit()
             success = True
         else:
@@ -335,33 +358,17 @@ def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
     total_count_row = conn.execute("SELECT COUNT(*) FROM accounts").fetchone()
     # Handle different row types: tuples, MockRow with .get(), and sqlite3.Row with dict access
     # For COUNT(*) queries, the result is typically a single unnamed column
-    if isinstance(total_count_row, (list, tuple)):
-        total_count = total_count_row[0]
-    elif hasattr(total_count_row, 'get'):
-        # MockRow in tests - try COUNT(*) first, then fall back to common keys
-        total_count = (total_count_row.get('COUNT(*)', None) or
-                      total_count_row.get('count', None) or
-                      total_count_row.get('total_accounts', 0))
-    elif total_count_row:
-        # sqlite3.Row - try COUNT(*) first, then fall back to index access
-        try:
-            total_count = total_count_row['COUNT(*)']
-        except (KeyError, TypeError):
-            # Fallback to index access for unnamed columns
-            total_count = total_count_row[0] if len(total_count_row) > 0 else 0
-    else:
-        total_count = 0
+    total_count = total_count_row['COUNT(*)'] if total_count_row and 'COUNT(*)' in total_count_row else total_count_row[0] if total_count_row else 0
 
     accounts_with_stats = []
     for r in rows:
-        try:
-            username = r['username']
-        except Exception:
-            username = r[0]
+        username = r['username']
+        profile_pic_url = r['profile_pic_url']
+        last_scraped = r['last_scraped']
 
         # Get tweet count for this account
         tweet_count_row = conn.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,)).fetchone()
-        tweet_count = tweet_count_row[0] if tweet_count_row else 0
+        tweet_count = tweet_count_row['COUNT(*)'] if tweet_count_row and 'COUNT(*)' in tweet_count_row else tweet_count_row[0] if tweet_count_row else 0
 
         # Get analyzed posts count
         analyzed_count_row = conn.execute("""
@@ -369,7 +376,7 @@ def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
             JOIN tweets t ON ca.post_id = t.tweet_id
             WHERE t.username = ?
         """, (username,)).fetchone()
-        analyzed_posts = analyzed_count_row[0] if analyzed_count_row else 0
+        analyzed_posts = analyzed_count_row['COUNT(*)'] if analyzed_count_row and 'COUNT(*)' in analyzed_count_row else analyzed_count_row[0] if analyzed_count_row else 0
 
         # Get problematic posts count (non-general categories)
         problematic_count_row = conn.execute("""
@@ -377,26 +384,16 @@ def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
             JOIN tweets t ON ca.post_id = t.tweet_id
             WHERE t.username = ? AND ca.category != 'general'
         """, (username,)).fetchone()
-        problematic_posts = problematic_count_row[0] if problematic_count_row else 0
+        problematic_posts = problematic_count_row['COUNT(*)'] if problematic_count_row and 'COUNT(*)' in problematic_count_row else problematic_count_row[0] if problematic_count_row else 0
 
-        try:
-            accounts_with_stats.append({
-                'username': username,
-                'profile_pic_url': r['profile_pic_url'],
-                'last_activity': r['last_scraped'],
-                'tweet_count': tweet_count,
-                'analyzed_posts': analyzed_posts,
-                'problematic_posts': problematic_posts
-            })
-        except Exception:
-            accounts_with_stats.append({
-                'username': username,
-                'profile_pic_url': r[1],
-                'last_activity': r[2],
-                'tweet_count': tweet_count,
-                'analyzed_posts': analyzed_posts,
-                'problematic_posts': problematic_posts
-            })
+        accounts_with_stats.append({
+            'username': username,
+            'profile_pic_url': profile_pic_url,
+            'last_activity': last_scraped,
+            'tweet_count': tweet_count,
+            'analyzed_posts': analyzed_posts,
+            'problematic_posts': problematic_posts
+        })
 
     conn.close()
 
@@ -473,7 +470,9 @@ def get_user_tweets_data(username: str, page: int, per_page: int,
                 'analysis_timestamp': analysis.get('analysis_timestamp'),
                 'categories_detected': analysis.get('categories_detected'),
                 'multimodal_analysis': analysis.get('multimodal_analysis'),
-                'media_analysis': analysis.get('media_analysis')
+                'media_analysis': analysis.get('media_analysis'),
+                'verification_data': analysis.get('verification_data'),
+                'verification_confidence': analysis.get('verification_confidence', 0.0)
             })
         else:
             tweet_with_analysis.update({
@@ -483,7 +482,9 @@ def get_user_tweets_data(username: str, page: int, per_page: int,
                 'analysis_timestamp': None,
                 'categories_detected': None,
                 'multimodal_analysis': False,
-                'media_analysis': None
+                'media_analysis': None,
+                'verification_data': None,
+                'verification_confidence': 0.0
             })
 
         filtered_tweets.append(tweet_with_analysis)
@@ -544,7 +545,9 @@ def process_tweet_row(row) -> Dict[str, Any]:
         'rt_original_analyzed': row['rt_original_analyzed'],
         'original_author': row['original_author'],
         'original_tweet_id': row['original_tweet_id'],
-        'reply_to_username': row['reply_to_username']
+        'reply_to_username': row['reply_to_username'],
+        'verification_data': json.loads(row['verification_data']) if row['verification_data'] else None,
+        'verification_confidence': row['verification_confidence'] if 'verification_confidence' in row.keys() else 0.0
     }
 
     # Post status warnings

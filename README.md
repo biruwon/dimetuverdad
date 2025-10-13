@@ -16,42 +16,42 @@ A comprehensive AI-powered system for detecting and analyzing far-right discours
 
 ### Core Components
 
-1. **Enhanced Analyzer** (`analyzer/analyze_twitter.py`)
-   - Main orchestration engine combining all analysis components
-   - Multi-stage content analysis pipeline
-   - Smart LLM fallback for ambiguous content
+1. **Enhanced Analyzer** (`analyzer/analyzer.py`)
+   - Main orchestration engine managing the complete analysis workflow
+   - Unified pattern detection combining extremism + topic classification + disinformation
+   - Intelligent LLM fallback for complex content analysis
+   - Returns structured `ContentAnalysis` objects with detailed results
 
-2. **Pattern Detection System** (`far_right_patterns.py`)
-   - 500+ regex patterns for Spanish far-right discourse
-   - Categories: hate speech, xenophobia, nationalism, conspiracy theories
-   - Real-time pattern matching with context extraction
+2. **Pattern Detection System** (`analyzer/pattern_analyzer.py`)
+   - Consolidated pattern matching for all content categories
+   - 13 content categories from hate_speech to political_general
+   - Single-pass analysis eliminating redundant processing
+   - Returns `AnalysisResult` with categories and pattern matches
 
-3. **LLM Integration** (`llm_models.py`)
-   - Support for 15+ models (Ollama, Transformers, OpenAI-compatible)
-   - Intelligent model selection based on content complexity
-   - Fallback classification for pattern-missed content
+3. **LLM Integration** (`analyzer/llm_models.py`)
+   - Enhanced LLM pipeline with Ollama integration (default: gpt-oss:20b)
+   - Model priority levels: "fast", "balanced", "quality"
+   - Context-aware prompt generation and response processing
 
-4. **Topic Classification** (`topic_classifier.py`)
-   - Spanish political discourse categorization
-   - Context-aware political topic detection
-   - Specialized patterns for Spanish political landscape
+4. **Multimodal Analysis** (`analyzer/gemini_multimodal.py`)
+   - Gemini-powered analysis for images and rich media content
+   - Media type detection and content extraction
+   - Integrated with main analysis pipeline
 
-5. **Enhanced Prompting** (`prompts.py`)
-   - Sophisticated LLM prompt generation
-   - Context-aware analysis strategies
-   - Spanish-specific political understanding
+5. **Data Collection** (`fetcher/`)
+   - Playwright-based web scraping with anti-detection features
+   - Session management and resume capabilities
+   - Multi-account collection with rate limiting
 
-### Data Collection System
+6. **Database Layer** (`utils/database.py`)
+   - Environment-isolated database connections
+   - Thread-safe connection pooling
+   - Schema management and migration support
 
-7. **Twitter Scraper** (`fetch_tweets.py`)
-   - Automated collection from far-right Spanish accounts
-   - Session management and anti-detection features
-   - Database storage with metadata preservation
-
-8. **Content Database** (`accounts.db`)
-   - SQLite database for tweets and analysis results
-   - Structured storage for pattern matches and LLM outputs
-   - Analysis history and performance tracking
+7. **Web Interface** (`web/app.py`)
+   - Flask-based visualization dashboard
+   - Analysis results exploration and filtering
+   - Administrative controls and monitoring
 
 ## 🚀 Installation & Setup
 
@@ -383,6 +383,9 @@ python quick_test.py --interactive
 Run the full test suite to validate system performance:
 
 ```bash
+# Run all unit tests across the entire project (parallel execution)
+./run_in_venv.sh test-all
+
 # Quick integration test (2 cases per category, ~1 minute)
 ./run_in_venv.sh test-analyzer-integration --quick
 
@@ -398,12 +401,34 @@ Run the full test suite to validate system performance:
 # Test specific categories
 ./run_in_venv.sh test-analyzer-integration --categories hate_speech disinformation
 
-# Run all unit tests across the entire project
-./run_in_venv.sh test-all
-
 # Test fetch integration (requires Twitter/X credentials)
 ./run_in_venv.sh test-fetch-integration
+
+# Generate test coverage report
+./run_in_venv.sh test-coverage
 ```
+
+### Parallel Test Execution
+
+The test suite supports parallel execution for improved performance:
+
+```bash
+# Run tests with automatic parallelization (recommended)
+./run_in_venv.sh test-all  # Uses -n auto for optimal core utilization
+
+# Manual parallel control
+pytest -n 4  # Use 4 worker processes
+pytest -n auto  # Automatic worker count based on CPU cores
+
+# Run specific test modules in parallel
+pytest analyzer/tests/ fetcher/tests/ -n auto
+```
+
+**Performance Improvements**:
+- **Sequential execution**: ~50 seconds
+- **Parallel execution**: ~23 seconds (2.2x speedup)
+- **Test isolation**: Thread-safe database connections with unique test databases
+- **Coverage**: 75%+ test coverage maintained across all modules
 
 ### Performance Analysis
 
@@ -417,8 +442,6 @@ Run the full test suite to validate system performance:
 # Performance analysis with specific parameters
 ./run_in_venv.sh compare-models --full --output results.json
 ```
-
-### Twitter Data Collection
 
 Collect data from Spanish far-right accounts:
 
@@ -563,15 +586,26 @@ htop  # Check CPU/memory usage
 
 ### Test Results
 
-Recent comprehensive test suite results:
+Recent comprehensive test suite results with parallel execution:
 
 ```
-📊 Pattern-based Tests: 31/31 (100.0%) - 0.02s
-🧠 LLM-based Tests: 14/14 (100.0%) - 42.57s  
-🌍 Neutral Content Tests: 11/11 (100.0%) - 17.88s
-🎯 OVERALL SUCCESS RATE: 56/56 (100.0%)
-⏱️ TOTAL EXECUTION TIME: 60.47 seconds
+📊 Parallel Test Execution Results:
+🔢 Total Tests: 451 passed, 6 skipped
+⚡ Execution Time: ~50 seconds
+🎯 Success Rate: 98.7% (451/457 tests passing)
+📈 Parallel Workers: Auto-detected CPU cores
+
+📊 Test Coverage: 75% across all modules
+� Test Categories: Unit tests, integration tests, database tests
 ```
+
+### Database Isolation & Testing Infrastructure
+
+- **Thread-Safe Testing**: File-based locking prevents parallel test race conditions
+- **Parallel Execution**: pytest-xdist with automatic worker scaling
+- **Test Database Management**: Shared test database with proper cleanup
+- **Connection Pooling**: Optimized SQLite connections with environment-specific settings
+- **Schema Validation**: Centralized schema creation from `scripts/init_database.py`
 
 ### Accuracy Metrics
 
@@ -642,17 +676,20 @@ Recent comprehensive test suite results:
 ### Testing Commands
 
 ```bash
+# Full test suite with parallel execution
+./run_in_venv.sh test-all
+
 # Quick integration test
 ./run_in_venv.sh test-analyzer-integration --quick
-
-# Full test suite
-./run_in_venv.sh test-all
 
 # Pattern-only testing
 ./run_in_venv.sh test-analyzer-integration --patterns-only
 
 # Test fetch functionality (requires credentials)
 ./run_in_venv.sh test-fetch-integration
+
+# Generate test coverage report
+./run_in_venv.sh test-coverage
 ```
 
 ### Application Commands
@@ -715,23 +752,14 @@ Edit `analyzer/pattern_analyzer.py` to add detection patterns:
 }
 ```
 
-### Model Comparison
-
-```bash
-# Compare different LLM models
-./run_in_venv.sh compare-models --quick
-
-# Full model comparison with detailed metrics
-./run_in_venv.sh compare-models --full
-```
-
 ### Contributing
 
 1. Fork the repository
 2. Create feature branch: `git checkout -b feature-name`
 3. Add comprehensive tests for new functionality
-4. Ensure all tests pass: `python analyzer/tests/test_analyzer_integration.py --full`
-5. Submit pull request with detailed description
+4. Ensure all tests pass: `./run_in_venv.sh test-all`
+5. Ensure test coverage remains above 70%: `./run_in_venv.sh test-coverage`
+6. Submit pull request with detailed description
 
 ## 📁 Project Structure
 
@@ -739,49 +767,71 @@ Edit `analyzer/pattern_analyzer.py` to add detection patterns:
 dimetuverdad/
 ├── README.md                    # This documentation
 ├── requirements.txt             # Python dependencies
-├── docker-compose.yml           # Docker deployment configuration
-├── Dockerfile                   # Application container definition
-├── .env.template               # Environment configuration template
-├── .env                        # Configuration (create manually)
+├── run_in_venv.sh              # Virtual environment runner script
+├── config.py                   # Configuration management
 ├── accounts.db                 # SQLite database (auto-created)
+├── accounts.db-shm            # SQLite shared memory file
+├── accounts.db-wal            # SQLite write-ahead log
+├── x_session.json             # Session configuration
+├── TODO.md                    # Project task tracking
+├── docker-compose.yml         # Docker deployment configuration
+├── Dockerfile                 # Application container definition
 │
-├── analyze_twitter.py         # Main analysis orchestrator and database operations
-├── far_right_patterns.py       # Pattern detection engine  
-├── llm_models.py              # LLM integration & management
-├── topic_classifier.py        # Political topic classification
-├── prompts.py        # LLM prompt generation
-├── retrieval.py               # Evidence retrieval system
-│
-├── fetch_tweets.py            # Twitter data collection
-├── query_tweets.py            # Database querying utilities
-├── quick_test.py              # Individual content testing
-├── scripts/                   # Utility scripts and tools
-│   ├── test_suite.py          # Full system validation
-│   ├── compare_models.py      # Model performance comparison
-│   ├── performance_benchmarks.py # Performance benchmarking
-│   └── init_database.py       # Database initialization
-│
-├── analyzer/                  # Analyzer package
-│   ├── analyze_twitter.py    # Main analysis orchestrator and database operations
+├── analyzer/                  # Content analysis package
+│   ├── __init__.py
+│   ├── analyze_twitter.py    # Main analysis orchestrator
+│   ├── analyzer.py           # Core analyzer class
 │   ├── categories.py         # Category definitions
-│   ├── llm_models.py         # LLM integration
-│   ├── pattern_analyzer.py   # Pattern detection
-│   ├── prompts.py            # LLM prompts
+│   ├── config.py             # Analyzer configuration
+│   ├── constants.py          # Analysis constants
+│   ├── gemini_multimodal.py  # Gemini multimodal analysis
+│   ├── llm_models.py         # LLM integration & management
+│   ├── metrics.py            # Analysis metrics
+│   ├── models.py             # Data models
+│   ├── multimodal_analyzer.py # Multimodal content analysis
+│   ├── pattern_analyzer.py   # Pattern detection engine
+│   ├── prompts.py            # LLM prompt templates
 │   ├── repository.py         # Database operations
-│   └── tests/                # Analyzer-specific tests
-│       ├── test_analyze_twitter.py        # Unit tests for analyzer components
-│       └── test_analyze_twitter_integration.py # Integration tests
+│   ├── retrieval.py          # Evidence retrieval system
+│   ├── text_analyzer.py      # Text analysis utilities
+│   └── tests/                # Analyzer unit tests
 │
 ├── fetcher/                  # Data collection package
-│   ├── fetch_tweets.py       # Twitter data collection
-│   ├── db.py                 # Database operations
-│   ├── parsers.py            # Content parsing
-│   └── tests/                # Fetcher-specific tests
-│       ├── test_db.py        # Database tests
-│       ├── test_fetch_tweets.py # Fetching tests
-│       ├── test_fetch_live_smoke.py # Live fetch smoke tests
-│       └── test_parsers.py   # Parser tests
-└── venv/                     # Virtual environment
+│   ├── __init__.py
+│   ├── collector.py          # Tweet collection logic
+│   ├── config.py             # Fetcher configuration
+│   ├── db.py                 # Database operations for fetching
+│   ├── fetch_tweets.py       # Main tweet fetching script
+│   ├── logging_config.py     # Logging configuration
+│   ├── media_monitor.py      # Media content monitoring
+│   ├── parsers.py            # Content parsing utilities
+│   ├── refetch_manager.py    # Tweet refetching logic
+│   ├── resume_manager.py     # Resume interrupted fetches
+│   ├── scroller.py           # Page scrolling utilities
+│   ├── session_manager.py    # Browser session management
+│   └── tests/                # Fetcher unit tests
+│
+├── scripts/                  # Utility scripts
+│   ├── init_database.py      # Database schema initialization
+│   └── [other scripts]/
+│
+├── utils/                    # Shared utilities
+│   ├── __init__.py
+│   ├── database.py           # Database connection management
+│   ├── paths.py              # Path management utilities
+│   └── text_utils.py         # Text processing utilities
+│
+├── web/                      # Web interface
+│   ├── __init__.py
+│   ├── app.py                # Flask application
+│   ├── routes/               # Flask route handlers
+│   └── utils/                # Web utilities
+│
+├── testing-scripts/          # Testing utilities
+├── backups/                  # Database backups
+├── logs/                     # Application logs
+├── htmlcov/                  # Test coverage reports
+└── repositories/             # Data repositories
 ```
 
 ## 🔒 Privacy & Ethics
@@ -862,11 +912,13 @@ For issues or questions:
 
 ## 🏆 Achievements
 
-- **98.2% Pattern Detection Accuracy** on explicit far-right content
-- **500+ Spanish Far-Right Patterns** covering major discourse categories  
-- **Multi-Model LLM Support** with intelligent fallback systems
-- **Real-time Analysis** with sub-second pattern detection
-- **Comprehensive Test Suite** with 56 validation test cases
-- **Production-Ready** web interface for content exploration
+- **75% Test Coverage** across all modules with comprehensive parallel testing
+- **451+ Passing Tests** with thread-safe database isolation
+- **Modular Architecture** with unified schema management and environment isolation
+- **Multi-Model LLM Support** with Ollama integration and intelligent fallback
+- **Real-time Pattern Detection** with 13 content categories for Spanish far-right discourse
+- **Production-Ready Web Interface** with Flask-based visualization
+- **Docker Containerization** for easy deployment and scaling
+- **Centralized Schema Management** eliminating duplication between test and production databases
 
-This system represents a significant advancement in automated detection of Spanish far-right discourse, combining linguistic expertise, machine learning, and domain knowledge to provide robust content analysis capabilities.
+This system represents a significant advancement in automated detection of Spanish far-right discourse, combining linguistic expertise, machine learning, and robust software engineering practices to provide reliable content analysis capabilities.

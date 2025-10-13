@@ -5,13 +5,13 @@ Tests all methods, edge cases, and integration scenarios.
 """
 
 import unittest
-import tempfile
 import os
 import sqlite3
 import json
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from datetime import datetime
 import sys
+import asyncio
 from pathlib import Path
 
 # Add project root to path
@@ -136,12 +136,16 @@ class TestAnalyzerAnalysis(unittest.TestCase):
 
     def test_analyze_content_empty(self):
         """Test analysis of empty content."""
-        result = self.analyzer.analyze_content(
-            tweet_id="test_123",
-            tweet_url="https://twitter.com/test/status/test_123",
-            username="test_user",
-            content=""
-        )
+        async def test_async():
+            result = await self.analyzer.analyze_content(
+                tweet_id="test_123",
+                tweet_url="https://twitter.com/test/status/test_123",
+                username="test_user",
+                content=""
+            )
+            return result
+
+        result = asyncio.run(test_async())
 
         self.assertEqual(result.category, Categories.GENERAL)
         # Ollama provides detailed explanation even for empty content
@@ -150,12 +154,16 @@ class TestAnalyzerAnalysis(unittest.TestCase):
 
     def test_analyze_content_short(self):
         """Test analysis of very short content."""
-        result = self.analyzer.analyze_content(
-            tweet_id="test_123",
-            tweet_url="https://twitter.com/test/status/test_123",
-            username="test_user",
-            content="Hi"
-        )
+        async def test_async():
+            result = await self.analyzer.analyze_content(
+                tweet_id="test_123",
+                tweet_url="https://twitter.com/test/status/test_123",
+                username="test_user",
+                content="Hi"
+            )
+            return result
+
+        result = asyncio.run(test_async())
 
         self.assertEqual(result.category, Categories.GENERAL)
         # Ollama provides detailed explanation even for short content
@@ -176,12 +184,16 @@ class TestAnalyzerAnalysis(unittest.TestCase):
         analyzer = Analyzer(config=AnalyzerConfig(use_llm=False))
         analyzer.text_analyzer.pattern_analyzer = mock_instance
 
-        result = analyzer.analyze_content(
-            tweet_id="test_123",
-            tweet_url="https://twitter.com/test/status/test_123",
-            username="test_user",
-            content="Test content with hate speech"
-        )
+        async def test_async():
+            result = await analyzer.analyze_content(
+                tweet_id="test_123",
+                tweet_url="https://twitter.com/test/status/test_123",
+                username="test_user",
+                content="Test content with hate speech"
+            )
+            return result
+
+        result = asyncio.run(test_async())
 
         self.assertEqual(result.category, Categories.HATE_SPEECH)
         self.assertEqual(result.analysis_method, "pattern")
@@ -201,12 +213,16 @@ class TestAnalyzerAnalysis(unittest.TestCase):
         analyzer = Analyzer(config=AnalyzerConfig(use_llm=False))
 
         # Analyze content
-        result = analyzer.analyze_content(
-            tweet_id="test_123",
-            tweet_url="https://twitter.com/test/status/test_123",
-            username="test_user",
-            content="Test content with hate speech"
-        )
+        async def test_async():
+            result = await analyzer.analyze_content(
+                tweet_id="test_123",
+                tweet_url="https://twitter.com/test/status/test_123",
+                username="test_user",
+                content="Test content with hate speech"
+            )
+            return result
+
+        result = asyncio.run(test_async())
 
         # Check that metrics were updated
         summary = analyzer.metrics.get_summary()
@@ -450,47 +466,20 @@ class TestDatabaseFunctions(unittest.TestCase):
     """Test database-related functions."""
 
     def setUp(self):
-        """Set up temporary database for testing."""
-        self.db_fd, self.db_path = tempfile.mkstemp()
-        # Override the DB_PATH for testing
-        import analyzer.repository
-        analyzer.repository.DB_PATH = self.db_path
+        """Set up test database for testing."""
+        from utils.database import init_test_database
+        self.test_db_path = init_test_database(fixtures=False)
 
     def tearDown(self):
-        """Clean up temporary database."""
-        os.close(self.db_fd)
-        os.unlink(self.db_path)
+        """Clean up test database."""
+        import os
+        if os.path.exists(self.test_db_path):
+            os.unlink(self.test_db_path)
 
     def test_save_content_analysis(self):
         """Test saving content analysis to database."""
         # Create repository instance
-        repo = ContentAnalysisRepository(self.db_path)
-        
-        # Create table manually for test
-        conn = sqlite3.connect(self.db_path)
-        c = conn.cursor()
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS content_analyses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_id TEXT UNIQUE,
-            post_url TEXT,
-            author_username TEXT,
-            platform TEXT DEFAULT 'twitter',
-            post_content TEXT,
-            category TEXT,
-            llm_explanation TEXT,
-            analysis_json TEXT,
-            analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            analysis_method TEXT DEFAULT "pattern",
-            categories_detected TEXT,
-            media_urls TEXT,
-            media_analysis TEXT,
-            media_type TEXT,
-            multimodal_analysis BOOLEAN DEFAULT FALSE
-        )
-        ''')
-        conn.commit()
-        conn.close()
+        repo = ContentAnalysisRepository(self.test_db_path)
 
         analysis = ContentAnalysis(
             post_id="test_123",
@@ -506,7 +495,7 @@ class TestDatabaseFunctions(unittest.TestCase):
 
         repo.save(analysis)
 
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.test_db_path)
         conn.row_factory = sqlite3.Row  # Enable named column access
         c = conn.cursor()
 
@@ -524,33 +513,7 @@ class TestDatabaseFunctions(unittest.TestCase):
     def test_save_content_analysis_duplicate(self):
         """Test saving duplicate content analysis (should replace)."""
         # Create repository instance
-        repo = ContentAnalysisRepository(self.db_path)
-        
-        # Create table manually for test
-        conn = sqlite3.connect(self.db_path)
-        c = conn.cursor()
-        c.execute('''
-        CREATE TABLE IF NOT EXISTS content_analyses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_id TEXT UNIQUE,
-            post_url TEXT,
-            author_username TEXT,
-            platform TEXT DEFAULT 'twitter',
-            post_content TEXT,
-            category TEXT,
-            llm_explanation TEXT,
-            analysis_json TEXT,
-            analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            analysis_method TEXT DEFAULT "pattern",
-            categories_detected TEXT,
-            media_urls TEXT,
-            media_analysis TEXT,
-            media_type TEXT,
-            multimodal_analysis BOOLEAN DEFAULT FALSE
-        )
-        ''')
-        conn.commit()
-        conn.close()
+        repo = ContentAnalysisRepository(self.test_db_path)
 
         analysis1 = ContentAnalysis(
             post_id="test_123",
@@ -573,7 +536,7 @@ class TestDatabaseFunctions(unittest.TestCase):
         repo.save(analysis1)
         repo.save(analysis2)  # Should replace
 
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.test_db_path)
         c = conn.cursor()
 
         c.execute("SELECT COUNT(*) FROM content_analyses WHERE post_id = ?", ("test_123",))
@@ -662,13 +625,17 @@ class TestAnalyzerMultimodal(unittest.TestCase):
             )
             mock_text_only.return_value = mock_result
 
-            result = self.analyzer.analyze_content(
-                tweet_id="test_123",
-                tweet_url="https://twitter.com/test/status/test_123",
-                username="test_user",
-                content="Test content",
-                media_urls=[]
-            )
+            async def test_async():
+                result = await self.analyzer.analyze_content(
+                    tweet_id="test_123",
+                    tweet_url="https://twitter.com/test/status/test_123",
+                    username="test_user",
+                    content="Test content",
+                    media_urls=[]
+                )
+                return result
+
+            result = asyncio.run(test_async())
 
             self.assertEqual(result, mock_result)
             mock_text_only.assert_called_once()
@@ -687,13 +654,17 @@ class TestAnalyzerMultimodal(unittest.TestCase):
             )
             mock_multimodal.return_value = mock_result
 
-            result = self.analyzer.analyze_content(
-                tweet_id="test_123",
-                tweet_url="https://twitter.com/test/status/test_123",
-                username="test_user",
-                content="Test content",
-                media_urls=["https://example.com/image.jpg"]
-            )
+            async def test_async():
+                result = await self.analyzer.analyze_content(
+                    tweet_id="test_123",
+                    tweet_url="https://twitter.com/test/status/test_123",
+                    username="test_user",
+                    content="Test content",
+                    media_urls=["https://example.com/image.jpg"]
+                )
+                return result
+
+            result = asyncio.run(test_async())
 
             self.assertEqual(result, mock_result)
             mock_multimodal.assert_called_once()
@@ -767,7 +738,7 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.analysis_method = "llm"
 
         with patch('analyzer.analyze_twitter.reanalyze_tweet', return_value=mock_result):
-            analyze_tweets_from_db(tweet_id='123456789')
+            asyncio.run(analyze_tweets_from_db(tweet_id='123456789'))
 
         mock_create_analyzer.assert_called_once()
 
@@ -779,7 +750,7 @@ class TestCLIFunctions(unittest.TestCase):
         mock_create_analyzer.return_value = mock_create_analyzer
 
         with patch('analyzer.analyze_twitter.reanalyze_tweet', return_value=None):
-            analyze_tweets_from_db(tweet_id='123456789')
+            asyncio.run(analyze_tweets_from_db(tweet_id='123456789'))
 
         mock_create_analyzer.assert_called_once()
 
@@ -792,7 +763,7 @@ class TestCLIFunctions(unittest.TestCase):
         mock_analyzer.repository.get_tweets_for_analysis.return_value = []
         mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
 
-        analyze_tweets_from_db()
+        asyncio.run(analyze_tweets_from_db())
 
         mock_create_analyzer.assert_called_once()
 
@@ -816,9 +787,9 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.llm_explanation = "Hate speech detected"
         mock_result.analysis_method = "llm"
         mock_result.multimodal_analysis = False
-        mock_analyzer.analyze_content.return_value = mock_result
+        mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        analyze_tweets_from_db(max_tweets=1)
+        asyncio.run(analyze_tweets_from_db(max_tweets=1))
 
         mock_create_analyzer.assert_called_once()
         mock_analyzer.analyze_content.assert_called_once()
@@ -843,9 +814,9 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.analysis_method = "multimodal"
         mock_result.multimodal_analysis = True
         mock_result.media_type = "image"
-        mock_analyzer.analyze_content.return_value = mock_result
+        mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        analyze_tweets_from_db(max_tweets=1)
+        asyncio.run(analyze_tweets_from_db(max_tweets=1))
 
         # Verify media URLs were parsed correctly
         call_args = mock_analyzer.analyze_content.call_args
@@ -868,9 +839,9 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.category = Categories.GENERAL
         mock_result.llm_explanation = "Normal content"
         mock_result.analysis_method = "llm"
-        mock_analyzer.analyze_content.return_value = mock_result
+        mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        analyze_tweets_from_db(max_tweets=1)
+        asyncio.run(analyze_tweets_from_db(max_tweets=1))
 
         # Verify quoted content was combined
         call_args = mock_analyzer.analyze_content.call_args
@@ -890,9 +861,9 @@ class TestCLIFunctions(unittest.TestCase):
         mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
         mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
 
-        mock_analyzer.analyze_content.side_effect = Exception("Analysis failed")
+        mock_analyzer.analyze_content = AsyncMock(side_effect=Exception("Analysis failed"))
 
-        analyze_tweets_from_db(max_tweets=1)
+        asyncio.run(analyze_tweets_from_db(max_tweets=1))
 
         # Should save failed analysis
         mock_analyzer.repository.save_failed_analysis.assert_called_once()
@@ -914,9 +885,9 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.category = Categories.GENERAL
         mock_result.llm_explanation = "Reanalyzed content"
         mock_result.analysis_method = "llm"
-        mock_analyzer.analyze_content.return_value = mock_result
+        mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        analyze_tweets_from_db(force_reanalyze=True, max_tweets=1)
+        asyncio.run(analyze_tweets_from_db(force_reanalyze=True, max_tweets=1))
 
         mock_create_analyzer.assert_called_once()
         mock_analyzer.analyze_content.assert_called_once()
@@ -937,9 +908,9 @@ class TestCLIFunctions(unittest.TestCase):
 
         mock_result = Mock()
         mock_result.category = Categories.GENERAL
-        mock_analyzer.analyze_content.return_value = mock_result
+        mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        analyze_tweets_from_db(username='specificuser', max_tweets=1)
+        asyncio.run(analyze_tweets_from_db(username='specificuser', max_tweets=1))
 
         mock_analyzer.repository.get_tweets_for_analysis.assert_called_once_with(
             username='specificuser',
@@ -974,9 +945,9 @@ class TestUtilityFunctions(unittest.TestCase):
         mock_analyzer.repository.get_tweet_data.return_value = mock_tweet_data
 
         mock_analysis_result = Mock()
-        mock_analyzer.analyze_content.return_value = mock_analysis_result
+        mock_analyzer.analyze_content = AsyncMock(return_value=mock_analysis_result)
 
-        result = reanalyze_tweet('123', analyzer=mock_analyzer)
+        result = asyncio.run(reanalyze_tweet('123', analyzer=mock_analyzer))
 
         assert result == mock_analysis_result
         mock_analyzer.repository.get_tweet_data.assert_called_once_with('123')
@@ -991,7 +962,7 @@ class TestUtilityFunctions(unittest.TestCase):
         mock_create_analyzer.return_value = mock_create_analyzer
         mock_analyzer.repository.get_tweet_data.return_value = None
 
-        result = reanalyze_tweet('123', analyzer=mock_analyzer)
+        result = asyncio.run(reanalyze_tweet('123', analyzer=mock_analyzer))
         assert result is None
 
     @patch('analyzer.analyze_twitter.analyze_tweets_from_db')

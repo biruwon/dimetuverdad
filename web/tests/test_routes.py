@@ -16,12 +16,44 @@ class TestMainRoutes:
         """Test the main dashboard route."""
         mock_cursor = mock_database.cursor.return_value
 
-        # Set up simple return values
-        mock_cursor.fetchone.return_value = MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
-        mock_cursor.fetchall.return_value = [
-            MockRow({'category': 'general', 'count': 30, 'percentage': 60.0}),
-            MockRow({'category': 'hate_speech', 'count': 10, 'percentage': 20.0})
-        ]
+        # Set up mock to return different data for different queries
+        def mock_fetchall():
+            # This will be called multiple times, return appropriate data based on call count
+            if not hasattr(mock_fetchall, 'call_count'):
+                mock_fetchall.call_count = 0
+            mock_fetchall.call_count += 1
+            
+            if mock_fetchall.call_count == 1:
+                # get_all_accounts query - return account data
+                return [
+                    MockRow({'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'})
+                ]
+            elif mock_fetchall.call_count == 2:
+                # get_analysis_distribution_cached query - return category data
+                return [
+                    MockRow({'category': 'general', 'count': 30, 'percentage': 60.0}),
+                    MockRow({'category': 'hate_speech', 'count': 10, 'percentage': 20.0})
+                ]
+            else:
+                return []
+
+        def mock_fetchone():
+            # This will be called multiple times
+            if not hasattr(mock_fetchone, 'call_count'):
+                mock_fetchone.call_count = 0
+            mock_fetchone.call_count += 1
+            
+            if mock_fetchone.call_count == 1:
+                # get_all_accounts total count query
+                return (1,)
+            elif mock_fetchone.call_count == 2:
+                # get_overall_stats_cached query
+                return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
+            else:
+                return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
+
+        mock_cursor.fetchone.side_effect = mock_fetchone
+        mock_cursor.fetchall.side_effect = mock_fetchall
 
         response = client.get('/')
         assert response.status_code == 200
@@ -61,50 +93,24 @@ class TestMainRoutes:
         assert response.status_code == 200
         assert b'Filtrado por: Hate_speech' in response.data
 
-    def test_user_page_exists(self, client, sample_tweet_data):
+    def test_user_page_exists(self, client, app, sample_tweet_data):
         """Test user page for existing account."""
-        # Create test data in the database using the database connection
+        # Use the test database that's already set up by the fixtures
         from utils.database import get_db_connection
-        
-        conn = get_db_connection()
-        c = conn.cursor()
-        
-        try:
-            # Insert test account
-            c.execute('''
-                INSERT INTO accounts (username, profile_pic_url, last_scraped)
-                VALUES (?, ?, ?)
-            ''', ('testuser', 'https://example.com/avatar.jpg', '2024-01-01 12:00:00'))
-            
-            # Insert test tweet
-            c.execute('''
-                INSERT INTO tweets (tweet_id, tweet_url, username, content, tweet_timestamp)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (
-                sample_tweet_data['tweet_id'],
-                sample_tweet_data['tweet_url'], 
-                'testuser',
-                sample_tweet_data['content'],
-                sample_tweet_data['tweet_timestamp']
-            ))
-            
-            # Insert test analysis
-            c.execute('''
-                INSERT INTO content_analyses (post_id, author_username, category, llm_explanation, analysis_method, analysis_timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (
-                sample_tweet_data['tweet_id'],
-                'testuser',
-                sample_tweet_data['category'],
-                sample_tweet_data['llm_explanation'],
-                sample_tweet_data['analysis_method'],
-                '2024-01-01 12:00:00'
-            ))
-            
-            conn.commit()
-            
-        finally:
-            conn.close()
+        from web.tests.conftest import TestHelpers
+
+        with app.app_context():
+            conn = get_db_connection()
+            try:
+                # Create test data using helper methods
+                TestHelpers.create_test_account(conn, {
+                    'username': 'testuser',
+                    'profile_pic_url': 'https://example.com/avatar.jpg',
+                    'last_activity': '2024-01-01 12:00:00'
+                })
+                TestHelpers.create_test_tweet(conn, sample_tweet_data)
+            finally:
+                conn.close()
 
         response = client.get('/user/testuser')
         assert response.status_code == 200
@@ -118,54 +124,28 @@ class TestMainRoutes:
         assert response.status_code == 404
         assert b'Usuario no encontrado' in response.data
 
-    def test_user_page_with_filters(self, client, sample_tweet_data):
-        """Test user page with category and post type filters."""
-        # Create test data in the database using the database connection
+    def test_user_page_with_filters(self, client, app, sample_tweet_data):
+        """Test user page with category filtering."""
         from utils.database import get_db_connection
-        
-        conn = get_db_connection()
-        c = conn.cursor()
-        
-        try:
-            # Insert test account (use different username to avoid UNIQUE constraint)
-            c.execute('''
-                INSERT INTO accounts (username, profile_pic_url, last_scraped)
-                VALUES (?, ?, ?)
-            ''', ('testuser2', 'https://example.com/avatar.jpg', '2024-01-01 12:00:00'))
-            
-            # Insert test tweet (use different tweet_id to avoid UNIQUE constraint)
-            c.execute('''
-                INSERT INTO tweets (tweet_id, tweet_url, username, content, tweet_timestamp)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (
-                '1234567891',  # Different tweet_id
-                sample_tweet_data['tweet_url'], 
-                'testuser2',
-                sample_tweet_data['content'],
-                sample_tweet_data['tweet_timestamp']
-            ))
-            
-            # Insert test analysis
-            c.execute('''
-                INSERT INTO content_analyses (post_id, author_username, category, llm_explanation, analysis_method, analysis_timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (
-                '1234567891',  # Same different tweet_id
-                'testuser2',
-                sample_tweet_data['category'],
-                sample_tweet_data['llm_explanation'],
-                sample_tweet_data['analysis_method'],
-                '2024-01-01 12:00:00'
-            ))
-            
-            conn.commit()
-            
-        finally:
-            conn.close()
+        from web.tests.conftest import TestHelpers
 
-        response = client.get('/user/testuser2?category=hate_speech&post_type=original')
+        with app.app_context():
+            conn = get_db_connection()
+            try:
+                # Create test data
+                TestHelpers.create_test_account(conn, {
+                    'username': 'testuser',
+                    'profile_pic_url': 'https://example.com/avatar.jpg',
+                    'last_activity': '2024-01-01 12:00:00'
+                })
+                TestHelpers.create_test_tweet(conn, sample_tweet_data)
+            finally:
+                conn.close()
+
+        response = client.get('/user/testuser?category=general')
         assert response.status_code == 200
-        assert b'@testuser2' in response.data
+        assert b'@testuser' in response.data
+        assert b'Filtrado: General' in response.data
 
     def test_loading_routes(self, client):
         """Test loading page routes."""
@@ -274,42 +254,34 @@ class TestAdminRoutes:
 class TestAPIEndpoints:
     """Test API endpoints."""
 
-    def test_tweet_status_api(self, client):
+    def test_tweet_status_api(self, client, app):
         """Test tweet status API endpoint."""
-        # Create a test tweet in the database
+        # Use the test database that's already set up by the fixtures
         from utils.database import get_db_connection
-        
-        conn = get_db_connection()
-        c = conn.cursor()
-        
-        try:
-            c.execute('''
-                INSERT INTO tweets (tweet_id, tweet_url, username, content, tweet_timestamp)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (
-                '9999999999',
-                'https://twitter.com/testuser/status/9999999999',
-                'testuser',
-                'Test tweet content',
-                '2024-01-01 12:00:00'
-            ))
-            
-            c.execute('''
-                INSERT INTO content_analyses (post_id, author_username, category, llm_explanation, analysis_method, analysis_timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (
-                '9999999999',
-                'testuser',
-                'general',
-                'Test explanation',
-                'pattern',
-                '2024-01-01 12:00:00'
-            ))
-            
-            conn.commit()
-            
-        finally:
-            conn.close()
+        from web.tests.conftest import TestHelpers
+
+        with app.app_context():
+            conn = get_db_connection()
+            try:
+                # Create test account first to satisfy FK constraint
+                TestHelpers.create_test_account(conn, {
+                    'username': 'testuser',
+                    'profile_pic_url': 'https://example.com/avatar.jpg',
+                    'last_activity': '2024-01-01 12:00:00'
+                })
+                # Now create test tweet
+                TestHelpers.create_test_tweet(conn, {
+                    'tweet_id': '9999999999',
+                    'content': 'Test tweet content',
+                    'username': 'testuser',
+                    'tweet_timestamp': '2024-01-01 12:00:00',
+                    'tweet_url': 'https://twitter.com/testuser/status/9999999999',
+                    'category': 'general',
+                    'llm_explanation': 'Test explanation',
+                    'analysis_method': 'pattern'
+                })
+            finally:
+                conn.close()
 
         response = client.get('/api/tweet-status/9999999999')
         assert response.status_code == 200

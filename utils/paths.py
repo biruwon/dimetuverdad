@@ -49,16 +49,10 @@ def get_db_path(env: Optional[str] = None, test_mode: bool = False) -> str:
     if env is None:
         env = get_environment()
 
-    # Test mode override
-    if test_mode or env == 'testing':
-        # Use ephemeral test database
-        import tempfile
-        temp_dir = tempfile.gettempdir()
-        return f"{temp_dir}/dimetuverdad_test_{os.getpid()}.db"
-
     # Environment-specific database paths
     db_names = {
         'development': 'accounts.db',
+        'testing': 'test_accounts.db',
         'production': 'accounts.db'
     }
 

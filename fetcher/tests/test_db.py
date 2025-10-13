@@ -4,76 +4,38 @@ import tempfile
 import pytest
 from datetime import datetime
 from fetcher import db
+from utils.database import init_test_database, cleanup_test_database
 
 
 # ===== TEST HELPERS =====
 
-@pytest.fixture
-def temp_db():
-    """Create a temporary database for testing"""
-    fd, path = tempfile.mkstemp(suffix='.db')
-    os.close(fd)
+@pytest.fixture(scope="class")
+def test_db():
+    """Create a test database for all tests in this class"""
+    # Initialize test database
+    db_path = init_test_database()
+    yield db_path
+    # Cleanup after all tests in this class
+    cleanup_test_database()
 
-    # Create tables
-    conn = sqlite3.connect(path)
-    c = conn.cursor()
 
-    # Create tweets table with ALL required columns
-    c.execute('''
-        CREATE TABLE tweets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tweet_id TEXT UNIQUE NOT NULL,
-            content TEXT,
-            username TEXT,
-            tweet_url TEXT,
-            tweet_timestamp TEXT,
-            post_type TEXT DEFAULT 'original',
-            original_author TEXT,
-            original_tweet_id TEXT,
-            media_links TEXT,
-            media_count INTEGER DEFAULT 0,
-            media_types TEXT,
-            engagement_likes INTEGER DEFAULT 0,
-            engagement_retweets INTEGER DEFAULT 0,
-            engagement_replies INTEGER DEFAULT 0,
-            external_links TEXT,
-            original_content TEXT,
-            is_pinned INTEGER DEFAULT 0
-        )
-    ''')
-
-    # Create accounts table
-    c.execute('''
-        CREATE TABLE accounts (
-            username TEXT PRIMARY KEY,
-            profile_pic_url TEXT,
-            profile_pic_updated TEXT,
-            last_scraped TEXT
-        )
-    ''')
-
-    conn.commit()
-    conn.close()
-
-    # Override DB_PATH for testing
+@pytest.fixture(autouse=True)
+def override_db_path(test_db):
+    """Override DB_PATH for all tests"""
     original_path = db.DB_PATH
-    db.DB_PATH = path
-
-    yield path
-
-    # Cleanup
+    db.DB_PATH = test_db
+    yield
     db.DB_PATH = original_path
-    os.remove(path)
 
 
-def get_test_connection(db_path):
+def get_test_connection():
     """Get a connection to the test database"""
-    return sqlite3.connect(db_path, timeout=10.0)
+    return db.get_connection()
 
 
 # ===== DATABASE CONNECTION TESTS =====
 
-def test_get_connection(temp_db):
+def test_get_connection():
     """Test database connection creation"""
     conn = db.get_connection()
     assert conn is not None
@@ -82,9 +44,9 @@ def test_get_connection(temp_db):
 
 # ===== SAVE TWEET TESTS =====
 
-def test_save_tweet_new_tweet(temp_db):
+def test_save_tweet_new_tweet():
     """Test saving a new tweet"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
 
     tweet_data = {
         'tweet_id': '123',
@@ -104,15 +66,15 @@ def test_save_tweet_new_tweet(temp_db):
     row = c.fetchone()
     assert row is not None
     assert row[1] == '123'  # tweet_id
-    assert row[2] == 'Hello world'  # content
+    assert row[4] == 'Hello world'  # content
     assert row[3] == 'testuser'  # username
 
     conn.close()
 
 
-def test_save_tweet_duplicate_no_changes(temp_db):
+def test_save_tweet_duplicate_no_changes():
     """Test saving duplicate tweet with no changes"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
 
     tweet_data = {
         'tweet_id': '123',
@@ -134,9 +96,9 @@ def test_save_tweet_duplicate_no_changes(temp_db):
     conn.close()
 
 
-def test_save_tweet_update_content(temp_db):
+def test_save_tweet_update_content():
     """Test updating tweet content"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
 
     tweet_data = {
         'tweet_id': '123',
@@ -164,9 +126,9 @@ def test_save_tweet_update_content(temp_db):
     conn.close()
 
 
-def test_save_tweet_update_post_type(temp_db):
+def test_save_tweet_update_post_type():
     """Test updating tweet post type"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
 
     tweet_data = {
         'tweet_id': '123',
@@ -194,9 +156,9 @@ def test_save_tweet_update_post_type(temp_db):
     conn.close()
 
 
-def test_save_tweet_invalid_tweet_id(temp_db):
+def test_save_tweet_invalid_tweet_id():
     """Test saving tweet with invalid tweet_id"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
 
     # Test with None tweet_id
     tweet_data = {
@@ -216,11 +178,11 @@ def test_save_tweet_invalid_tweet_id(temp_db):
 
 # ===== TWEET EXISTENCE CHECKS =====
 
-def test_check_if_tweet_exists_tweet_exists(temp_db):
+def test_check_if_tweet_exists_tweet_exists():
     """Test checking if tweet exists when it does"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO tweets (tweet_id, username) VALUES (?, ?)", ('123', 'testuser'))
+    c.execute("INSERT INTO tweets (tweet_id, username, tweet_url, content) VALUES (?, ?, ?, ?)", ('123', 'testuser', 'https://x.com/testuser/status/123', 'test'))
     conn.commit()
     conn.close()
 
@@ -228,17 +190,17 @@ def test_check_if_tweet_exists_tweet_exists(temp_db):
     assert result is True
 
 
-def test_check_if_tweet_exists_tweet_not_exists(temp_db):
+def test_check_if_tweet_exists_tweet_not_exists():
     """Test checking if tweet exists when it doesn't"""
     result = db.check_if_tweet_exists('testuser', '123')
     assert result is False
 
 
-def test_check_if_tweet_exists_wrong_user(temp_db):
+def test_check_if_tweet_exists_wrong_user():
     """Test checking if tweet exists for wrong user"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO tweets (tweet_id, username) VALUES (?, ?)", ('123', 'testuser'))
+    c.execute("INSERT INTO tweets (tweet_id, username, tweet_url, content) VALUES (?, ?, ?, ?)", ('123', 'testuser', 'https://x.com/testuser/status/123', 'test'))
     conn.commit()
     conn.close()
 
@@ -248,9 +210,9 @@ def test_check_if_tweet_exists_wrong_user(temp_db):
 
 # ===== ACCOUNT PROFILE TESTS =====
 
-def test_save_account_profile_info_new_account(temp_db, capsys):
+def test_save_account_profile_info_new_account(capsys):
     """Test saving profile info for new account"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
 
     db.save_account_profile_info(conn, 'testuser', 'https://example.com/pic.jpg')
 
@@ -259,10 +221,10 @@ def test_save_account_profile_info_new_account(temp_db, capsys):
     c.execute("SELECT * FROM accounts WHERE username = ?", ('testuser',))
     row = c.fetchone()
     assert row is not None
-    assert row[0] == 'testuser'
-    assert row[1] == 'https://example.com/pic.jpg'
-    assert row[2] is not None  # profile_pic_updated
-    assert row[3] is not None  # last_scraped
+    assert row[1] == 'testuser'  # username is at index 1
+    assert row[3] == 'https://example.com/pic.jpg'  # profile_pic_url is at index 3
+    assert row[4] is not None  # profile_pic_updated
+    assert row[5] is not None  # last_scraped
 
     # Check output
     captured = capsys.readouterr()
@@ -271,9 +233,9 @@ def test_save_account_profile_info_new_account(temp_db, capsys):
     conn.close()
 
 
-def test_save_account_profile_info_update_existing(temp_db):
+def test_save_account_profile_info_update_existing():
     """Test updating profile info for existing account"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
     c = conn.cursor()
 
     # Insert existing account
@@ -292,9 +254,9 @@ def test_save_account_profile_info_update_existing(temp_db):
     conn.close()
 
 
-def test_save_account_profile_info_no_url(temp_db):
+def test_save_account_profile_info_no_url():
     """Test saving profile info with no URL (should do nothing)"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
 
     db.save_account_profile_info(conn, 'testuser', None)
 
@@ -307,9 +269,9 @@ def test_save_account_profile_info_no_url(temp_db):
     conn.close()
 
 
-def test_save_account_profile_info_empty_url(temp_db):
+def test_save_account_profile_info_empty_url():
     """Test saving profile info with empty URL (should do nothing)"""
-    conn = get_test_connection(temp_db)
+    conn = get_test_connection()
 
     db.save_account_profile_info(conn, 'testuser', '')
 

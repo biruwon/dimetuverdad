@@ -369,36 +369,3 @@ class PatternAnalyzer:
                     context.append(f"{entity_type}:{entity}")
         
         return context[:10]  # Limit context items
-
-
-# Convenience functions for backward compatibility
-def analyze_far_right_content(text: str) -> Dict:
-    """Backward compatibility function for far-right analysis."""
-    analyzer = PatternAnalyzer()
-    result = analyzer.analyze_content(text)
-    
-    return {
-        'categories': result.categories,
-        'pattern_matches': [
-            {
-                'category': m.category,
-                'matched_text': m.matched_text,
-                'description': m.description,
-                'context': m.context
-            }
-            for m in result.pattern_matches
-        ],
-        'has_patterns': len(result.pattern_matches) > 0
-    }
-
-def classify_political_topic(text: str) -> Dict:
-    """Backward compatibility function for topic classification."""
-    analyzer = PatternAnalyzer()
-    result = analyzer.analyze_content(text)
-    
-    return {
-        'primary_category': result.primary_category,
-        'all_categories': result.categories,
-        'political_context': result.political_context,
-        'keywords': result.keywords
-    }

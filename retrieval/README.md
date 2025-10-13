@@ -352,7 +352,6 @@ try:
         # Continue with original analysis
 except Exception as e:
     logger.error(f"Unexpected error: {e}")
-    # Fallback behavior
 ```
 
 ## Performance Considerations

@@ -18,7 +18,7 @@ class TestAdminEditAnalysis:
 
     def test_edit_analysis_get_existing_tweet(self, admin_client, mock_database, sample_tweet_data):
         """Test GET request for editing existing tweet analysis."""
-        # Mock database to return tweet data
+        # Mock database to return tweet data (9 columns as per the actual query)
         mock_database.execute.return_value.fetchone.return_value = (
             sample_tweet_data['content'],
             sample_tweet_data['username'],
@@ -26,12 +26,14 @@ class TestAdminEditAnalysis:
             sample_tweet_data['category'],
             sample_tweet_data['llm_explanation'],
             sample_tweet_data['tweet_url'],
-            None  # original_content
+            None,  # original_content
+            None,  # verification_data
+            0.0    # verification_confidence
         )
 
         response = admin_client.get('/admin/edit-analysis/1234567890')
         assert response.status_code == 200
-        assert sample_tweet_data['content'].encode('utf-8') in response.data
+        assert sample_tweet_data['tweet_url'].encode('utf-8') in response.data
         assert sample_tweet_data['username'].encode('utf-8') in response.data
 
     def test_edit_analysis_get_nonexistent_tweet(self, admin_client, mock_database):

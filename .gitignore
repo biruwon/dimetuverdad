@@ -31,3 +31,4 @@ scripts/performance_benchmarks_*.json
 
 # Tests
 .coverage
+test_dbs/

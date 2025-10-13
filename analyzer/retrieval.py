@@ -4,6 +4,11 @@ from urllib.parse import quote_plus
 import re
 import time
 from typing import List, Dict
+import warnings
+from bs4 import XMLParsedAsHTMLWarning
+
+# Suppress XMLParsedAsHTMLWarning for RSS parsing
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 # Minimal Spanish stopwords list (small and conservative)
 SPANISH_STOPWORDS = {
@@ -143,7 +148,16 @@ def fetch_links_from_search_url(url: str, max_links: int = 3, timeout: int = 6) 
             try:
                 r2 = requests.get(it['url'], headers=headers, timeout=timeout)
                 r2.raise_for_status()
-                text = BeautifulSoup(r2.text, 'html.parser').get_text(separator=' ', strip=True).lower()
+                # Try to detect content type and use appropriate parser
+                content_type = r2.headers.get('content-type', '').lower()
+                if 'xml' in content_type or 'rss' in content_type or '<rss' in r2.text[:200].lower():
+                    # Use XML parser for XML content
+                    soup = BeautifulSoup(r2.text, 'xml')
+                    text = soup.get_text(separator=' ', strip=True).lower()
+                else:
+                    # Use HTML parser for HTML content
+                    soup = BeautifulSoup(r2.text, 'html.parser')
+                    text = soup.get_text(separator=' ', strip=True).lower()
                 snippet = text[:300]
                 for k in DEBUNK_KEYWORDS:
                     if k in text:

@@ -168,6 +168,7 @@ class TestFetchLinksFromSearchUrl:
 
         # Mock article page response with debunk keywords
         mock_article_response = Mock()
+        mock_article_response.headers = {'content-type': 'text/html'}
         mock_article_response.text = '''
         <html>
             <body>

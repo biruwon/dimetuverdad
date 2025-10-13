@@ -37,6 +37,9 @@ from .multimodal_analyzer import MultimodalAnalyzer
 from .models import ContentAnalysis
 from .constants import AnalysisMethods, ErrorMessages
 
+# Import retrieval integration
+from retrieval.integration.analyzer_hooks import AnalyzerHooks, create_analyzer_hooks
+
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
 
@@ -77,6 +80,9 @@ class Analyzer:
         self.text_analyzer = TextAnalyzer(config=self.config, verbose=verbose)
         self.multimodal_analyzer = MultimodalAnalyzer(verbose=verbose)
 
+        # Initialize retrieval integration
+        self.retrieval_hooks = create_analyzer_hooks()
+
         if self.verbose:
             print("🚀 Iniciando Analyzer con componentes modulares...")
             print("Componentes cargados:")
@@ -84,18 +90,20 @@ class Analyzer:
             print("- ✓ Analizador multimodal para medios")
             print("- ✓ Recolector de métricas de rendimiento")
             print("- ✓ Repositorio de análisis de contenido")
+            print("- ✓ Integración de recuperación de evidencia")
             print(f"- ✓ Configuración: {self.config.model_priority} priority")
 
-    def analyze_content(self,
+    async def analyze_content(self,
                        tweet_id: str,
                        tweet_url: str,
                        username: str,
                        content: str,
                        media_urls: List[str] = None) -> ContentAnalysis:
         """
-        Main content analysis pipeline with conditional multimodal analysis.
+        Main content analysis pipeline with conditional multimodal analysis and evidence retrieval.
 
-        Routes to appropriate analyzer based on content type.
+        Routes to appropriate analyzer based on content type, then conditionally triggers
+        evidence retrieval for verification.
         """
         analysis_start_time = time.time()
 
@@ -109,6 +117,22 @@ class Analyzer:
                 result = self.text_analyzer.analyze(
                     tweet_id, tweet_url, username, content
                 )
+
+            # Check if evidence retrieval should be triggered
+            if self._should_trigger_evidence_retrieval(result, content):
+                if self.verbose:
+                    print("🔍 Triggering evidence retrieval for verification...")
+
+                # Perform evidence retrieval and enhance explanation
+                enhanced_result = await self._enhance_with_evidence_retrieval(result, content)
+
+                # Update result with enhanced explanation and verification data
+                result.llm_explanation = enhanced_result.llm_explanation
+                result.verification_data = enhanced_result.verification_data
+                result.verification_confidence = enhanced_result.verification_confidence
+
+                if self.verbose:
+                    print("✅ Evidence retrieval completed and explanation enhanced")
 
             # Track metrics
             analysis_time = time.time() - analysis_start_time
@@ -134,20 +158,131 @@ class Analyzer:
                 traceback.print_exc()
 
             # Return error result
-            return ContentAnalysis(
-                post_id=tweet_id,
-                post_url=tweet_url,
-                author_username=username,
-                post_content=content,
-                analysis_timestamp=datetime.now().isoformat(),
-                category=Categories.GENERAL,
-                categories_detected=[Categories.GENERAL],
-                llm_explanation=ErrorMessages.ANALYSIS_FAILED.format(error=str(e)),
-                analysis_method=AnalysisMethods.ERROR.value,
-                pattern_matches=[],
-                topic_classification={},
-                analysis_json=json.dumps({'error': str(e)}, ensure_ascii=False)
+    def _should_trigger_evidence_retrieval(self, analysis_result: ContentAnalysis, content: str) -> bool:
+        """
+        Determine if evidence retrieval should be triggered based on analysis results and content.
+
+        Triggers verification for text-only analyses with:
+        1. High-confidence disinformation detection
+        2. Conspiracy theory content
+        3. Content with numerical/statistical claims
+        4. Far-right bias content with potential factual claims
+
+        Note: Multimodal analyses are excluded as they already include media-based verification.
+        """
+        # Skip verification for multimodal analyses (they already include media verification)
+        if analysis_result.analysis_method == AnalysisMethods.MULTIMODAL.value:
+            return False
+
+        # Convert ContentAnalysis to dict format expected by analyzer hooks
+        analyzer_result_dict = {
+            'category': analysis_result.category,
+            'confidence': getattr(analysis_result, 'confidence', 0.5),  # Default confidence
+            'explanation': analysis_result.llm_explanation,
+            'analysis_method': analysis_result.analysis_method
+        }
+
+        # Use the analyzer hooks to determine if verification should be triggered
+        should_trigger, reason = self.retrieval_hooks.should_trigger_verification(
+            content, analyzer_result_dict
+        )
+
+        if self.verbose and should_trigger:
+            print(f"🔍 Evidence retrieval triggered: {reason}")
+
+        return should_trigger
+
+    async def _enhance_with_evidence_retrieval(self, analysis_result: ContentAnalysis, content: str):
+        """
+        Enhance analysis result with evidence retrieval and verification.
+
+        Args:
+            analysis_result: Original analysis result
+            content: Original content text
+
+        Returns:
+            Enhanced analysis result with verification data
+        """
+        try:
+            # Convert ContentAnalysis to dict format for analyzer hooks
+            original_result_dict = {
+                'category': analysis_result.category,
+                'confidence': getattr(analysis_result, 'confidence', 0.5),
+                'explanation': analysis_result.llm_explanation,
+                'analysis_method': analysis_result.analysis_method
+            }
+
+            # Perform analysis with verification
+            enhanced_result = await self.retrieval_hooks.analyze_with_verification(
+                content, original_result_dict
             )
+
+            # Convert verification data to dict for JSON serialization
+            verification_data_dict = None
+            if enhanced_result.verification_data:
+                verification_data_dict = dict(enhanced_result.verification_data)  # Convert to regular dict
+                
+                # Handle nested VerificationReport object
+                if 'verification_report' in verification_data_dict and hasattr(verification_data_dict['verification_report'], 'overall_verdict'):
+                    report = verification_data_dict['verification_report']
+                    
+                    # Safely serialize claims_verified
+                    claims_verified = []
+                    for claim in getattr(report, 'claims_verified', []):
+                        if hasattr(claim, '__dict__'):
+                            claim_dict = dict(claim.__dict__)
+                            # Convert enum values to strings
+                            if 'verdict' in claim_dict and hasattr(claim_dict['verdict'], 'value'):
+                                claim_dict['verdict'] = claim_dict['verdict'].value
+                            elif 'verdict' in claim_dict:
+                                claim_dict['verdict'] = str(claim_dict['verdict'])
+                            claims_verified.append(claim_dict)
+                        else:
+                            claims_verified.append(str(claim))
+                    
+                    verification_data_dict['verification_report'] = {
+                        'overall_verdict': report.overall_verdict.value if hasattr(report.overall_verdict, 'value') else str(report.overall_verdict),
+                        'confidence_score': report.confidence_score,
+                        'claims_verified': claims_verified,
+                        'evidence_sources': [{'source_name': s.source_name, 'source_type': getattr(s, 'source_type', 'unknown'), 'reliability_score': getattr(s, 'reliability_score', 0.5)} for s in getattr(report, 'evidence_sources', [])],
+                        'temporal_consistency': getattr(report, 'temporal_consistency', True),
+                        'contradictions_found': getattr(report, 'contradictions_found', []),
+                        'processing_time': getattr(report, 'processing_time', 0.0),
+                        'verification_method': getattr(report, 'verification_method', 'unknown')
+                    }
+
+            # Create enhanced ContentAnalysis with verification data
+            enhanced_analysis = ContentAnalysis(
+                post_id=analysis_result.post_id,
+                post_url=analysis_result.post_url,
+                author_username=analysis_result.author_username,
+                post_content=analysis_result.post_content,
+                analysis_timestamp=analysis_result.analysis_timestamp,
+                category=analysis_result.category,
+                categories_detected=analysis_result.categories_detected,
+                llm_explanation=enhanced_result.explanation_with_verification,
+                analysis_method=analysis_result.analysis_method,
+                media_urls=analysis_result.media_urls,
+                media_analysis=analysis_result.media_analysis,
+                media_type=analysis_result.media_type,
+                multimodal_analysis=analysis_result.multimodal_analysis,
+                pattern_matches=analysis_result.pattern_matches,
+                topic_classification=analysis_result.topic_classification,
+                analysis_json=analysis_result.analysis_json,
+                analysis_time_seconds=analysis_result.analysis_time_seconds,
+                model_used=analysis_result.model_used,
+                tokens_used=analysis_result.tokens_used,
+                verification_data=verification_data_dict,
+                verification_confidence=verification_data_dict.get('verification_confidence', 0.0) if verification_data_dict else 0.0
+            )
+
+            return enhanced_analysis
+
+        except Exception as e:
+            if self.verbose:
+                print(f"⚠️ Evidence retrieval failed: {e}")
+            # Return original result if verification fails
+            return analysis_result
 
     def _get_model_name(self, result: ContentAnalysis) -> str:
         """Get the model name based on analysis result."""
@@ -185,7 +320,7 @@ class Analyzer:
             ContentAnalysis if found, None otherwise
         """
         try:
-            return self.repository.get_by_tweet_id(tweet_id)
+            return self.repository.get_by_post_id(tweet_id)
         except Exception as e:
             if self.verbose:
                 print(f"❌ Error retrieving analysis: {e}")
@@ -222,7 +357,7 @@ class Analyzer:
             print(f"❌ Database: Error - {e}")
 
 
-def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False, tweet_id=None):
+async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False, tweet_id=None):
     """
     Analyze tweets from the database using the analyzer with LLM enabled.
 
@@ -245,7 +380,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
             analyzer_instance = create_analyzer(config=config, verbose=False)
             print("✅ Analyzer ready!")
 
-            result = reanalyze_tweet(tweet_id, analyzer=analyzer_instance)
+            result = await reanalyze_tweet(tweet_id, analyzer=analyzer_instance)
             if result:
                 print(f"\n📝 Tweet: {tweet_id}")
                 print(f"    🏷️ Category: {result.category}")
@@ -323,7 +458,7 @@ def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze=False
 
         try:
             # Run analysis (suppress verbose output)
-            result = analyzer_instance.analyze_content(
+            result = await analyzer_instance.analyze_content(
                 tweet_id=tweet_id,
                 tweet_url=tweet_url,
                 username=tweet_username,
@@ -445,7 +580,7 @@ def create_analyzer(config: Optional[AnalyzerConfig] = None, verbose: bool = Fal
     return Analyzer(config=config, verbose=verbose)
 
 
-def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) -> Optional[ContentAnalysis]:
+async def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) -> Optional[ContentAnalysis]:
     """Reanalyze a single tweet and return the result."""
     from utils.database import get_tweet_data
 
@@ -473,7 +608,7 @@ def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) -> Optio
             print(f"      {i+1}. {url[:50]}...")
 
     # Reanalyze
-    analysis_result = analyzer.analyze_content(
+    analysis_result = await analyzer.analyze_content(
         tweet_id=tweet_data['tweet_id'],
         tweet_url=f"https://twitter.com/placeholder/status/{tweet_data['tweet_id']}",
         username=tweet_data['username'],
@@ -510,12 +645,14 @@ Examples:
 
     args = parser.parse_args()
 
-    analyze_tweets_from_db(
+    # Run async analysis
+    import asyncio
+    asyncio.run(analyze_tweets_from_db(
         username=args.username,
         max_tweets=args.limit,
         force_reanalyze=args.force_reanalyze,
         tweet_id=args.tweet_id
-    )
+    ))
 
 
 if __name__ == '__main__':

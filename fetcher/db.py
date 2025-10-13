@@ -210,21 +210,24 @@ def init_db():
     return conn
 
 
-def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
+def update_tweet_in_database(tweet_id: str, tweet_data: dict, db_path: str = None) -> bool:
     """
     Update tweet in database with refetched data.
     
     Args:
         tweet_id: Tweet ID
         tweet_data: Complete tweet data dict
+        db_path: Optional database path (defaults to current environment path)
         
     Returns:
         bool: True if successful
     """
     try:
-        # Import here to avoid circular imports and get current DB_PATH value
-        from fetcher import fetch_tweets
-        conn = sqlite3.connect(fetch_tweets.DB_PATH, timeout=10.0)
+        # Use provided path or get current environment path
+        if db_path is None:
+            db_path = DB_PATH
+            
+        conn = sqlite3.connect(db_path, timeout=10.0)
         c = conn.cursor()
         
         # Get current media_links to combine with any new video URLs
