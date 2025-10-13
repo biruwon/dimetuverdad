@@ -399,7 +399,12 @@ class TweetCollector:
                         consecutive_empty_scrolls += 2
 
                 # Check page height
-                last_height = self.scroller.check_page_height_change(page, last_height)
+                try:
+                    last_height = self.scroller.check_page_height_change(page, last_height)
+                except Exception as e:
+                    logger.warning(f"Failed to check page height change: {e}")
+                    # Assume no height change if we can't check it
+                    last_height = last_height
 
             last_tweet_count = current_tweet_count
 

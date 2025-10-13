@@ -175,6 +175,32 @@ class Scroller:
         """
         self.random_scroll_pattern(page, deep_scroll)
 
+    def aggressive_scroll(self, page, consecutive_empty_scrolls: int) -> None:
+        """
+        Perform aggressive scrolling when having trouble finding content.
+
+        Args:
+            page: Playwright page object
+            consecutive_empty_scrolls: Number of consecutive empty scrolls
+        """
+        # Increase scroll amount based on consecutive failures
+        base_scroll = 1500
+        multiplier = min(consecutive_empty_scrolls, 5)  # Cap at 5x
+        scroll_amount = base_scroll * multiplier
+
+        try:
+            # Try multiple aggressive scrolls
+            for _ in range(3):
+                page.evaluate(f"window.scrollBy(0, {scroll_amount})")
+                # Use shorter delays in aggressive mode
+                self.delay(0.1, 0.2)
+        except Exception:
+            # Fallback to basic scroll
+            try:
+                page.evaluate("window.scrollBy(0, 2000)")
+            except Exception:
+                pass
+
 # Global scroller instance
 scroller = Scroller()
 
