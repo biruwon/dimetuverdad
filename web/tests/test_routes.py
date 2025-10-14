@@ -192,19 +192,21 @@ class TestAdminRoutes:
         # Mock admin dashboard data
         mock_cursor = mock_database.cursor.return_value
 
-        # Mock get_admin_stats query
+        # Mock get_admin_stats query (fetchone)
         mock_cursor.fetchone.side_effect = [
             MockRow({'total_tweets': 100, 'analyzed_tweets': 80, 'pattern_analyzed': 50, 'llm_analyzed': 30}),  # stats
         ]
 
-        # Mock get_category_breakdown query
+        # Mock database queries (fetchall calls)
         mock_cursor.fetchall.side_effect = [
-            [  # recent analyses (first query in admin_dashboard)
+            [  # recent analyses (first fetchall)
                 MockRow({'analysis_timestamp': '2024-01-01', 'category': 'general',
                          'analysis_method': 'pattern', 'username': 'user1',
                          'content_preview': 'Test content...'})
             ],
-            [  # categories (second query in admin_dashboard)
+            [],  # feedback_rows (second fetchall - empty)
+            [],  # fetch_rows (third fetchall - empty)
+            [  # categories (fourth fetchall)
                 MockRow({'category': 'general', 'count': 50}),
                 MockRow({'category': 'hate_speech', 'count': 30})
             ]

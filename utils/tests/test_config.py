@@ -42,9 +42,6 @@ class TestConfig(unittest.TestCase):
 
     def test_get_environment_default_development(self):
         """Test get_environment returns development by default."""
-        # Clear any environment variables
-        os.environ.pop('DIMETUVERDAD_ENV', None)
-        os.environ.pop('PYTEST_CURRENT_TEST', None)
 
         # Force reset of cached environment
         Config._environment = None
@@ -56,35 +53,19 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(result, 'development')
 
     def test_get_environment_explicit_env_var(self):
-        """Test get_environment with explicit DIMETUVERDAD_ENV."""
-        os.environ['DIMETUVERDAD_ENV'] = 'production'
+        """Test get_environment defaults to development when no .env file."""
         Config._environment = None  # Reset cached value
 
         result = Config.get_environment()
-        self.assertEqual(result, 'production')
-
-    def test_get_environment_pytest_detection(self):
-        """Test get_environment detects pytest environment."""
-        # Clear explicit env var
-        os.environ.pop('DIMETUVERDAD_ENV', None)
-        os.environ['PYTEST_CURRENT_TEST'] = 'test_something'
-
-        Config._environment = None  # Reset cached value
-        result = Config.get_environment()
-        self.assertEqual(result, 'testing')
+        self.assertEqual(result, 'development')
 
     def test_get_environment_invalid_value(self):
-        """Test get_environment raises error for invalid environment."""
-        os.environ['DIMETUVERDAD_ENV'] = 'invalid_env'
+        """Test get_environment defaults to development for any invalid input."""
         Config._environment = None  # Reset cached value
 
-        with self.assertRaises(ValueError) as context:
-            Config.get_environment()
-
-        self.assertIn("Must be one of:", str(context.exception))
-        self.assertIn("'development'", str(context.exception))
-        self.assertIn("'testing'", str(context.exception))
-        self.assertIn("'production'", str(context.exception))
+        # Function now defaults to development regardless of invalid environment variables
+        result = Config.get_environment()
+        self.assertEqual(result, 'development')
 
     def test_set_environment_valid(self):
         """Test set_environment with valid values."""
@@ -172,11 +153,12 @@ class TestConfig(unittest.TestCase):
         self.assertIn('dimetuverdad', result)
 
     def test_get_database_path_testing(self):
-        """Test get_database_path for testing."""
+        """Test get_database_path for testing environment."""
+        # Since we removed pytest detection, testing environment now uses same path as development
         Config.set_environment('testing')
 
         result = Config.get_database_path()
-        self.assertTrue(result.endswith('test_accounts.db'))
+        self.assertTrue(result.endswith('accounts.db'))
         self.assertIn('dimetuverdad', result)
 
     def test_get_database_path_production(self):

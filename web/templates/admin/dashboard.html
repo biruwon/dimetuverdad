@@ -239,30 +239,43 @@
         <div class="row">
             <div class="col-12">
                 <div class="card admin-card">
-                    <div class="card-header bg-success text-white">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">
                             <i class="fas fa-clock me-2"></i>Actividad Reciente
                         </h5>
+                        <a href="{{ url_for('admin.admin_view_feedback') }}" class="btn btn-sm btn-outline-light">
+                            <i class="fas fa-comments me-1"></i>Ver Todo el Feedback
+                        </a>
                     </div>
                     <div class="card-body recent-activity">
                         {% for analysis in recent_analyses %}
-                            <div class="border-bottom py-2 hover-bg-light" style="cursor: pointer;" {% if analysis.username and analysis.category %}onclick="window.open('{{ url_for('admin.admin_view_user_category', username=analysis.username, category=analysis.category) }}', '_blank')"{% endif %}>
+                            <div class="border-bottom py-2 hover-bg-light" style="cursor: pointer;" {% if analysis.activity_type == 'analysis' and analysis.username %}onclick="window.open('{{ url_for('admin.admin_view_user_category', username=analysis.username, category=analysis.category) }}', '_blank')"{% endif %}>
                                 <div class="row align-items-center">
                                     <div class="col-md-2">
                                         <small class="text-muted">{{ analysis.analysis_timestamp[:16].replace('T', ' ') if analysis.analysis_timestamp else '' }}</small>
                                     </div>
                                     <div class="col-md-2">
-                                        <span class="badge bg-{{ 
-                                            'danger' if analysis.category == 'hate_speech' else
-                                            'warning' if analysis.category == 'disinformation' else
-                                            'dark' if analysis.category == 'conspiracy_theory' else
-                                            'primary' if analysis.category == 'far_right_bias' else
-                                            'success' if analysis.category == 'call_to_action' else
-                                            'secondary' if analysis.category == 'general' else
-                                            'info'
-                                        }}">
-                                            {{ analysis.category }}
-                                        </span>
+                                        {% if analysis.activity_type == 'feedback' %}
+                                            <span class="badge bg-info">
+                                                <i class="fas fa-comment me-1"></i>{{ analysis.feedback_type }}
+                                            </span>
+                                        {% elif analysis.activity_type == 'fetch' %}
+                                            <span class="badge bg-success">
+                                                <i class="fas fa-download me-1"></i>Fetch
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-{{ 
+                                                'danger' if analysis.category == 'hate_speech' else
+                                                'warning' if analysis.category == 'disinformation' else
+                                                'dark' if analysis.category == 'conspiracy_theory' else
+                                                'primary' if analysis.category == 'far_right_bias' else
+                                                'success' if analysis.category == 'call_to_action' else
+                                                'secondary' if analysis.category == 'general' else
+                                                'info'
+                                            }}">
+                                                {{ analysis.category }}
+                                            </span>
+                                        {% endif %}
                                     </div>
                                     <div class="col-md-2">
                                         {% if analysis.username %}
@@ -274,11 +287,35 @@
                                         {% endif %}
                                     </div>
                                     <div class="col-md-4">
-                                        <small>{{ analysis.content_preview }}...</small>
+                                        {% if analysis.activity_type == 'feedback' %}
+                                            <small>
+                                                <strong>{{ analysis.original_category }} → {{ analysis.corrected_category }}</strong><br>
+                                                {{ analysis.content_preview }}
+                                            </small>
+                                        {% elif analysis.activity_type == 'fetch' %}
+                                            <small>
+                                                <strong>{{ analysis.tweet_count }} tweets obtenidos</strong><br>
+                                                {{ analysis.content_preview }}
+                                            </small>
+                                        {% else %}
+                                            <small>{{ analysis.content_preview }}...</small>
+                                        {% endif %}
                                     </div>
                                     <div class="col-md-2 text-end">
-                                        <span class="badge bg-light text-dark">{{ analysis.analysis_method }}</span>
-                                        <i class="fas fa-external-link-alt ms-1 text-muted small" title="Ver tweets de este usuario en esta categoría"></i>
+                                        {% if analysis.activity_type == 'feedback' %}
+                                            <span class="badge bg-light text-dark">
+                                                <i class="fas fa-user-edit me-1"></i>Feedback
+                                            </span>
+                                        {% elif analysis.activity_type == 'fetch' %}
+                                            <span class="badge bg-success text-white">
+                                                <i class="fas fa-download me-1"></i>Fetch
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">{{ analysis.analysis_method }}</span>
+                                        {% endif %}
+                                        {% if analysis.activity_type == 'analysis' %}
+                                            <i class="fas fa-external-link-alt ms-1 text-muted small" title="Ver tweets de este usuario en esta categoría"></i>
+                                        {% endif %}
                                     </div>
                                 </div>
                             </div>

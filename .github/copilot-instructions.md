@@ -172,9 +172,12 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 
 **ABSOLUTE REQUIREMENT**: ALL code changes MUST be tested IMMEDIATELY. No exceptions. See "MANDATORY Testing Workflow" section below for enforcement details.
 
+**NEW FEATURES REQUIRE TESTS**: Every new feature, endpoint, function, or significant code change MUST include comprehensive tests before the feature is considered complete. No new functionality may be added without corresponding test coverage.
+
 **IMMEDIATE TESTING RULE**:
 - **EVERY CODE CHANGE** triggers immediate testing requirement
 - **NO EXCEPTIONS**: Functions, refactors, bug fixes, new features, config changes
+- **NEW FEATURES**: Must include tests as part of the implementation - features without tests are incomplete
 - **IMMEDIATE**: Test right after the change, not later, not at the end of session
 - **BLOCKING**: Cannot continue to other work until tests pass
 - **COPILOT VIOLATION**: Failing to test immediately after code changes is a critical workflow violation

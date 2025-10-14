@@ -268,8 +268,12 @@ class TestAdminExport:
                 'analysis_timestamp': '2024-01-01 12:00:00',
                 'post_content': 'Test content',
                 'post_url': 'https://twitter.com/test/status/123',
-                'post_timestamp': '2024-01-01 12:00:00',
-                'categories_detected': None
+                'categories_detected': None,
+                'verification_data': None,
+                'verification_confidence': 0.0,
+                'tweet_content': 'Test tweet content',
+                'tweet_url': 'https://twitter.com/test/status/123',
+                'tweet_timestamp': '2024-01-01 12:00:00'
             })
         ]
         mock_database.cursor.return_value = mock_cursor
@@ -339,3 +343,87 @@ class TestAdminUserCategory:
         assert response.status_code == 302
         assert '/user/testuser' in response.headers.get('Location', '')
         assert 'category=hate_speech' in response.headers.get('Location', '')
+
+
+class TestAdminViewFeedback:
+    """Test admin feedback view functionality."""
+
+    def test_view_feedback_requires_auth(self, client):
+        """Test feedback view requires admin authentication."""
+        response = client.get('/admin/feedback')
+        assert response.status_code == 302
+
+    def test_view_feedback_success(self, admin_client, mock_database):
+        """Test successful feedback view with data."""
+        # Mock database calls for feedback view
+        mock_database.execute.side_effect = [
+            Mock(fetchone=Mock(return_value=MockRow({'cnt': 50}))),  # Total count
+            Mock(fetchall=Mock(return_value=[
+                MockRow({
+                    'id': 1,
+                    'post_id': '1234567890',
+                    'feedback_type': 'correction',
+                    'original_category': 'general',
+                    'corrected_category': 'hate_speech',
+                    'user_comment': 'This should be hate speech',
+                    'user_ip': '192.168.1.1',
+                    'submitted_at': '2024-01-01 12:00:00',
+                    'username': 'testuser',
+                    'content': 'Test tweet content',
+                    'tweet_url': 'https://twitter.com/test/status/123'
+                })
+            ])),  # Feedback submissions
+            Mock(fetchone=Mock(return_value=MockRow({
+                'total_feedback': 50,
+                'corrections': 30,
+                'improvements': 15,
+                'bug_reports': 5,
+                'unique_posts': 45
+            })))  # Feedback stats
+        ]
+
+        response = admin_client.get('/admin/feedback')
+        assert response.status_code == 200
+        assert b'feedback' in response.data.lower()
+        assert b'correction' in response.data.lower()
+
+    def test_view_feedback_pagination(self, admin_client, mock_database):
+        """Test feedback view pagination."""
+        mock_database.execute.side_effect = [
+            Mock(fetchone=Mock(return_value=MockRow({'cnt': 100}))),  # Total count
+            Mock(fetchall=Mock(return_value=[])),  # Empty results for page 2
+            Mock(fetchone=Mock(return_value=MockRow({
+                'total_feedback': 100,
+                'corrections': 60,
+                'improvements': 30,
+                'bug_reports': 10,
+                'unique_posts': 90
+            })))  # Feedback stats
+        ]
+
+        response = admin_client.get('/admin/feedback?page=2')
+        assert response.status_code == 200
+
+    def test_view_feedback_empty(self, admin_client, mock_database):
+        """Test feedback view with no feedback submissions."""
+        mock_database.execute.side_effect = [
+            Mock(fetchone=Mock(return_value=MockRow({'cnt': 0}))),  # No feedback
+            Mock(fetchall=Mock(return_value=[])),  # Empty results
+            Mock(fetchone=Mock(return_value=MockRow({
+                'total_feedback': 0,
+                'corrections': 0,
+                'improvements': 0,
+                'bug_reports': 0,
+                'unique_posts': 0
+            })))  # Empty stats
+        ]
+
+        response = admin_client.get('/admin/feedback')
+        assert response.status_code == 200
+
+    def test_view_feedback_database_error(self, admin_client, mock_database):
+        """Test feedback view handles database errors gracefully."""
+        mock_database.execute.side_effect = Exception("Database connection failed")
+
+        response = admin_client.get('/admin/feedback')
+        assert response.status_code == 302  # Redirect to dashboard on error

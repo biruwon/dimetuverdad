@@ -85,6 +85,26 @@ def admin_dashboard() -> str:
         LIMIT 10
     """).fetchall()
 
+    # Recent feedback submissions (last 5)
+    feedback_rows = conn.execute("""
+        SELECT uf.submitted_at, uf.feedback_type, uf.original_category, uf.corrected_category,
+               uf.user_comment, uf.post_id, t.username, t.content
+        FROM user_feedback uf
+        LEFT JOIN tweets t ON t.tweet_id = uf.post_id
+        ORDER BY uf.submitted_at DESC
+        LIMIT 5
+    """).fetchall()
+
+    # Recent fetch operations (last 5 users with recent activity)
+    fetch_rows = conn.execute("""
+        SELECT username, COUNT(*) as tweet_count, MAX(scraped_at) as latest_scraped
+        FROM tweets
+        WHERE scraped_at >= datetime('now', '-7 days')
+        GROUP BY username
+        ORDER BY latest_scraped DESC
+        LIMIT 5
+    """).fetchall()
+
     # Category distribution
     category_rows = conn.execute("""
         SELECT category, COUNT(*) as count
@@ -101,8 +121,40 @@ def admin_dashboard() -> str:
             'category': r['category'],
             'analysis_method': r['analysis_method'],
             'username': r['username'],
-            'content_preview': r['content_preview'] if 'content_preview' in r else r['content'][:100] if 'content' in r else ''
+            'content_preview': r['content_preview'] if 'content_preview' in r else r['content'][:100] if 'content' in r else '',
+            'activity_type': 'analysis'
         })
+
+    # Add feedback submissions to recent activity
+    for r in feedback_rows or []:
+        recent_analyses.append({
+            'analysis_timestamp': r['submitted_at'],
+            'category': f"{r['original_category']} → {r['corrected_category']}",
+            'analysis_method': f"feedback ({r['feedback_type']})",
+            'username': r['username'] or 'unknown',
+            'content_preview': r['user_comment'][:100] if r['user_comment'] else (r['content'][:100] if r['content'] else ''),
+            'activity_type': 'feedback',
+            'feedback_type': r['feedback_type'],
+            'original_category': r['original_category'],
+            'corrected_category': r['corrected_category'],
+            'post_id': r['post_id']
+        })
+
+    # Add fetch operations to recent activity
+    for r in fetch_rows or []:
+        recent_analyses.append({
+            'analysis_timestamp': r['latest_scraped'],
+            'category': f"Fetched {r['tweet_count']} tweets",
+            'analysis_method': 'fetch',
+            'username': r['username'],
+            'content_preview': f"Content collection from @{r['username']}",
+            'activity_type': 'fetch',
+            'tweet_count': r['tweet_count']
+        })
+
+    # Sort all activities by timestamp and take the most recent 15
+    recent_analyses.sort(key=lambda x: x['analysis_timestamp'], reverse=True)
+    recent_analyses = recent_analyses[:15]
 
     categories = []
     for r in category_rows or []:
@@ -627,33 +679,32 @@ def export_json() -> str:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT 
+            SELECT
                 ca.post_id,
                 ca.author_username,
                 ca.category,
                 ca.llm_explanation,
                 ca.analysis_method,
                 ca.analysis_timestamp,
-                t.content as post_content,
-                t.tweet_url as post_url,
-                t.tweet_timestamp as post_timestamp,
-                ca.categories_detected
+                ca.post_content,
+                ca.post_url,
+                ca.categories_detected,
+                ca.verification_data,
+                ca.verification_confidence,
+                t.content as tweet_content,
+                t.tweet_url,
+                t.tweet_timestamp
             FROM content_analyses ca
-            JOIN tweets t ON t.tweet_id = ca.post_id
+            LEFT JOIN tweets t ON t.tweet_id = ca.post_id
             ORDER BY ca.analysis_timestamp DESC
         """)
         rows = cursor.fetchall()
         conn.close()
 
         # Convert to JSON-serializable format
-        export_data = {
-            'export_timestamp': datetime.now().isoformat(),
-            'total_records': len(rows),
-            'data': []
-        }
-
+        data = []
         for r in rows:
-            record = {
+            data.append({
                 'post_id': r['post_id'],
                 'author_username': r['author_username'],
                 'category': r['category'],
@@ -662,14 +713,19 @@ def export_json() -> str:
                 'analysis_timestamp': r['analysis_timestamp'],
                 'post_content': r['post_content'],
                 'post_url': r['post_url'],
-                'post_timestamp': r['post_timestamp'],
-                'categories_detected': r['categories_detected']
-            }
+                'categories_detected': json.loads(r['categories_detected']) if r['categories_detected'] else None,
+                'verification_data': json.loads(r['verification_data']) if r['verification_data'] else None,
+                'verification_confidence': r['verification_confidence']
+            })
 
-            export_data['data'].append(record)
+        # Create JSON response
+        json_data = json.dumps({
+            'export_timestamp': datetime.now().isoformat(),
+            'total_records': len(data),
+            'data': data
+        }, indent=2, ensure_ascii=False)
 
         # Create response
-        json_data = json.dumps(export_data, indent=2, ensure_ascii=False)
         response = Response(
             json_data,
             mimetype='application/json',
@@ -682,4 +738,92 @@ def export_json() -> str:
     except Exception as e:
         admin_bp.logger.error(f"Error exporting JSON: {str(e)}")
         flash(f'Error exporting JSON: {str(e)}', 'error')
+        return redirect(url_for('admin.admin_dashboard'))
+
+@admin_bp.route('/feedback')
+@admin_required
+def admin_view_feedback() -> str:
+    """View all submitted feedback (admin only)."""
+    page = request.args.get('page', 1, type=int)
+    per_page = config.get_pagination_limit('admin_category')
+
+    try:
+        conn = get_db_connection()
+
+        # Total count
+        total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM user_feedback").fetchone()
+        total_count = total_count_row['cnt'] if total_count_row else 0
+
+        # Pagination
+        offset = (page - 1) * per_page
+
+        # Get feedback submissions
+        feedback_rows = conn.execute("""
+            SELECT uf.id, uf.post_id, uf.feedback_type, uf.original_category, uf.corrected_category,
+                   uf.user_comment, uf.user_ip, uf.submitted_at, t.username, t.content, t.tweet_url
+            FROM user_feedback uf
+            LEFT JOIN tweets t ON t.tweet_id = uf.post_id
+            ORDER BY uf.submitted_at DESC
+            LIMIT ? OFFSET ?
+        """, (per_page, offset)).fetchall()
+
+        # Feedback stats
+        stats_row = conn.execute("""
+            SELECT
+                COUNT(*) as total_feedback,
+                SUM(CASE WHEN feedback_type = 'correction' THEN 1 ELSE 0 END) as corrections,
+                SUM(CASE WHEN feedback_type = 'improvement' THEN 1 ELSE 0 END) as improvements,
+                SUM(CASE WHEN feedback_type = 'bug_report' THEN 1 ELSE 0 END) as bug_reports,
+                COUNT(DISTINCT post_id) as unique_posts
+            FROM user_feedback
+        """).fetchone()
+
+        conn.close()
+
+        # Process feedback
+        feedback_list = []
+        for r in feedback_rows or []:
+            feedback_list.append({
+                'id': r['id'],
+                'post_id': r['post_id'],
+                'feedback_type': r['feedback_type'],
+                'original_category': r['original_category'],
+                'corrected_category': r['corrected_category'],
+                'user_comment': r['user_comment'],
+                'user_ip': r['user_ip'],
+                'submitted_at': r['submitted_at'],
+                'username': r['username'],
+                'tweet_content': r['content'],
+                'tweet_url': r['tweet_url']
+            })
+
+        # Stats
+        feedback_stats = {
+            'total_feedback': stats_row['total_feedback'] if stats_row else 0,
+            'corrections': stats_row['corrections'] if stats_row else 0,
+            'improvements': stats_row['improvements'] if stats_row else 0,
+            'bug_reports': stats_row['bug_reports'] if stats_row else 0,
+            'unique_posts': stats_row['unique_posts'] if stats_row else 0
+        }
+
+        pagination = {
+            'page': page,
+            'per_page': per_page,
+            'total': total_count,
+            'total_pages': math.ceil(total_count / per_page) if total_count > 0 else 1
+        }
+
+        # Calculate pagination range for template
+        start_page = max(1, page - 2)
+        end_page = min(pagination['total_pages'] + 1, page + 3)
+        pagination['page_range'] = list(range(start_page, end_page))
+
+        return render_template('admin/feedback_view.html',
+                               feedback=feedback_list,
+                               pagination=pagination,
+                               feedback_stats=feedback_stats)
+
+    except Exception as e:
+        admin_bp.logger.error(f"Error in admin_view_feedback: {str(e)}")
+        flash('No se pudo cargar la información de feedback. Inténtalo de nuevo.', 'error')
         return redirect(url_for('admin.admin_dashboard'))

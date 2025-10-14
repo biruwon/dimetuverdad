@@ -30,7 +30,7 @@ def submit_feedback() -> str:
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
-        tweet_id = data.get('tweet_id')
+        tweet_id = data.get('tweet_id') or data.get('post_id')
         feedback_type = data.get('feedback_type', 'correction')
         original_category = data.get('original_category')
         corrected_category = data.get('corrected_category')
@@ -38,7 +38,7 @@ def submit_feedback() -> str:
 
         # Validate required fields
         if not tweet_id:
-            return jsonify({'error': 'tweet_id is required'}), 400
+            return jsonify({'error': 'tweet_id or post_id is required'}), 400
 
         if feedback_type == 'correction' and not corrected_category:
             return jsonify({'error': 'corrected_category is required for correction feedback'}), 400
@@ -59,7 +59,7 @@ def submit_feedback() -> str:
         # Check for recent feedback from this IP for this tweet (rate limiting)
         recent_feedback = conn.execute("""
             SELECT id FROM user_feedback
-            WHERE tweet_id = ? AND user_ip = ? AND submitted_at > datetime('now', '-1 hour')
+            WHERE post_id = ? AND user_ip = ? AND submitted_at > datetime('now', '-1 hour')
         """, (tweet_id, user_ip)).fetchone()
 
         if recent_feedback:
@@ -68,7 +68,7 @@ def submit_feedback() -> str:
 
         # Insert feedback
         conn.execute("""
-            INSERT INTO user_feedback (tweet_id, feedback_type, original_category, corrected_category, user_comment, user_ip)
+            INSERT INTO user_feedback (post_id, feedback_type, original_category, corrected_category, user_comment, user_ip)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (tweet_id, feedback_type, original_category, corrected_category, user_comment, user_ip))
 

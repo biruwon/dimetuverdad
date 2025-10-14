@@ -5,10 +5,30 @@ Provides common test data setup and database management.
 
 import pytest
 import sqlite3
+import os
+import glob
 from typing import Dict, Any
 from analyzer.models import ContentAnalysis
 from analyzer.categories import Categories
 from utils.database import init_test_database, cleanup_test_database
+from utils import paths
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_databases():
+    """Clean up test databases at the end of the test session."""
+    yield  # Run tests first
+
+    # Clean up all test databases after tests complete
+    base_db_path = paths.get_db_path(env='testing')
+    test_pattern = f"{base_db_path}.pid_*"
+
+    for db_file in glob.glob(test_pattern):
+        try:
+            os.remove(db_file)
+            print(f"🗑️  Cleaned up test database: {os.path.basename(db_file)}")
+        except OSError as e:
+            print(f"⚠️  Could not remove test database {db_file}: {e}")
 
 
 @pytest.fixture

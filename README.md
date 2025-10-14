@@ -129,19 +129,9 @@ The project supports multiple environments (development, testing, production) wi
 **Default Environment**: `development`
 
 **Switch Environments:**
-```bash
-# Development (default)
-./run_in_venv.sh analyze-twitter
-
-# Testing environment
-DIMETUVERDAD_ENV=testing ./run_in_venv.sh analyze-twitter
-
-# Production environment
-DIMETUVERDAD_ENV=production ./run_in_venv.sh analyze-twitter
-```
+TODO
 
 **Environment Priority:**
-1. `DIMETUVERDAD_ENV` environment variable
 2. Environment-specific `.env.{environment}` file
 3. Fallback to `.env` file
 4. Auto-detection (pytest → testing, otherwise development)

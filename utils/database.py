@@ -217,7 +217,7 @@ def init_test_database(fixtures: bool = False) -> str:
 
     # Create fresh schema directly
     _create_test_database_schema(test_db_path)
-    
+
     # Ensure proper permissions for test database
     try:
         import stat
@@ -234,9 +234,10 @@ def init_test_database(fixtures: bool = False) -> str:
         try:
             if os.path.exists(test_db_path):
                 os.remove(test_db_path)
+                print(f"🗑️  Cleaned up test database: {os.path.basename(test_db_path)}")
         except OSError:
             pass
-    
+
     atexit.register(cleanup_this_db)
 
     return test_db_path

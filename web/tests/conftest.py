@@ -6,6 +6,7 @@ Comprehensive testing for Flask application routes, templates, and functionality
 import pytest
 import tempfile
 import os
+import atexit
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
@@ -18,48 +19,57 @@ from config import ADMIN_TOKEN
 from utils.database import init_test_database, cleanup_test_databases
 
 
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_web_test_databases():
+    """Clean up web test databases at the end of the test session."""
+    yield  # Run tests first
+
+    # Clean up Flask test databases in temp directory
+    temp_dir = tempfile.gettempdir()
+    flask_test_pattern = os.path.join(temp_dir, 'flask_test_*.db')
+
+    import glob
+    for db_file in glob.glob(flask_test_pattern):
+        try:
+            os.remove(db_file)
+            print(f"🗑️  Cleaned up Flask test database: {os.path.basename(db_file)}")
+        except OSError as e:
+            print(f"⚠️  Could not remove Flask test database {db_file}: {e}")
+
+
 @pytest.fixture
 def app():
     """Create and configure a test app instance."""
-    # Set testing environment
-    os.environ['DIMETUVERDAD_ENV'] = 'testing'
 
-    try:
-        # For Flask tests, use a deterministic test database path that's consistent across workers
-        import tempfile
-        worker_id = os.environ.get('PYTEST_XDIST_WORKER', 'master')
-        test_db_path = os.path.join(tempfile.gettempdir(), f'flask_test_{worker_id}.db')
-        
-        # Remove any existing test database for this worker
-        if os.path.exists(test_db_path):
-            os.remove(test_db_path)
-        
-        # Create fresh schema using the same initialization function
-        from utils.database import _create_test_database_schema
-        _create_test_database_schema(test_db_path)
+    # For Flask tests, use a deterministic test database path that's consistent across workers
+    import tempfile
+    worker_id = os.environ.get('PYTEST_XDIST_WORKER', 'master')
+    test_db_path = os.path.join(tempfile.gettempdir(), f'flask_test_{worker_id}.db')
 
-        # Configure test app
-        test_config = {
-            'TESTING': True,
-            'DATABASE_PATH': test_db_path,
-            'SECRET_KEY': 'test-secret-key',
-            'ADMIN_TOKEN': 'test-admin-token',
-            'CACHE_TYPE': 'SimpleCache',
-            'CACHE_DEFAULT_TIMEOUT': 300,
-            'DB_TIMEOUT': 30.0,
-            'DB_CHECK_SAME_THREAD': False
-        }
+    # Remove any existing test database for this worker
+    if os.path.exists(test_db_path):
+        os.remove(test_db_path)
 
-        flask_app = create_app()
-        flask_app.config.update(test_config)
+    # Create fresh schema using the same initialization function
+    from utils.database import _create_test_database_schema
+    _create_test_database_schema(test_db_path)
 
-        yield flask_app
+    # Configure test app
+    test_config = {
+        'TESTING': True,
+        'DATABASE_PATH': test_db_path,
+        'SECRET_KEY': 'test-secret-key',
+        'ADMIN_TOKEN': 'test-admin-token',
+        'CACHE_TYPE': 'SimpleCache',
+        'CACHE_DEFAULT_TIMEOUT': 300,
+        'DB_TIMEOUT': 30.0,
+        'DB_CHECK_SAME_THREAD': False
+    }
 
-    finally:
-        # Clean up environment variables
-        os.environ.pop('DIMETUVERDAD_ENV', None)
+    flask_app = create_app()
+    flask_app.config.update(test_config)
 
-
+    yield flask_app
 @pytest.fixture
 def client(app):
     """A test client for the app."""

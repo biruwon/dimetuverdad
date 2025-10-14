@@ -48,21 +48,8 @@ class Config:
     @classmethod
     def _get_environment_no_load(cls) -> str:
         """Get environment without loading .env files (to avoid recursion)."""
-        # Priority order: explicit env var > auto-detection > default
-        env = os.environ.get('DIMETUVERDAD_ENV', '').strip().lower()
-
-        # Auto-detect testing environment
-        if not env:
-            if (os.environ.get('PYTEST_CURRENT_TEST') or
-                'pytest' in os.sys.argv[0] or
-                'test' in os.sys.argv[0]):
-                env = 'testing'
-
         # Default to development
-        if not env:
-            env = 'development'
-
-        return env
+        return 'development'
 
     @classmethod
     def _load_env_file_manual(cls, env_file: Path) -> None:
@@ -87,12 +74,8 @@ class Config:
         # Load environment files first
         cls._load_env_file()
 
-        # Priority order: explicit env var > auto-detection > default
-        env = os.environ.get('DIMETUVERDAD_ENV', '').strip().lower()
-
         # Default to development
-        if not env:
-            env = 'development'
+        env = 'development'
 
         # Validate
         valid_envs = {'development', 'testing', 'production'}
