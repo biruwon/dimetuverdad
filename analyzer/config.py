@@ -3,11 +3,8 @@ Configuration management for the analyzer module.
 """
 
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .llm_models import EnhancedLLMPipeline
-
+from typing import Optional
+from .llm_models import EnhancedLLMPipeline
 from .constants import ConfigDefaults
 
 
@@ -36,7 +33,6 @@ class AnalyzerConfig:
     max_llm_concurrency: int = ConfigDefaults.MAX_LLM_CONCURRENCY
 
     # External dependencies (for dependency injection)
-    db_path: Optional[str] = None
     llm_pipeline: Optional['EnhancedLLMPipeline'] = None  # Forward reference to avoid circular import
 
     def __post_init__(self):
@@ -90,7 +86,6 @@ class AnalyzerConfig:
             'request_timeout': self.request_timeout,
             'max_concurrency': self.max_concurrency,
             'max_llm_concurrency': self.max_llm_concurrency,
-            'db_path': self.db_path,
             # Don't include llm_pipeline in dict representation
         }
 

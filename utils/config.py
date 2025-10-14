@@ -74,8 +74,13 @@ class Config:
         # Load environment files first
         cls._load_env_file()
 
-        # Default to development
-        env = 'development'
+        # Check if running in pytest (testing environment)
+        import os
+        if os.environ.get('PYTEST_CURRENT_TEST') or os.environ.get('PYTEST_VERSION'):
+            env = 'testing'
+        else:
+            # Default to development
+            env = 'development'
 
         # Validate
         valid_envs = {'development', 'testing', 'production'}

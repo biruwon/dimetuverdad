@@ -17,18 +17,14 @@ from fetcher.media_monitor import MediaMonitor
 from utils.database import get_db_connection
 from fetcher.scroller import Scroller
 from utils import paths
-# Import repository interfaces
-from repositories import get_tweet_repository
-
 
 class RefetchManager:
     """Manages re-fetching operations for tweets and accounts."""
     
-    def __init__(self, db_path=None):
+    def __init__(self):
         self.session_manager = SessionManager()
         self.media_monitor = MediaMonitor()
         self.scroller = Scroller()
-        self._db_path = db_path
     
     def get_tweet_info_from_db(self, tweet_id: str) -> Tuple[Optional[str], Optional[str]]:
         """
@@ -43,21 +39,16 @@ class RefetchManager:
         Raises:
             Exception: If database error occurs
         """
-        if self._db_path:
-            conn = sqlite3.connect(self._db_path, timeout=30.0)
-            conn.row_factory = sqlite3.Row
-        else:
-            from utils.database import get_db_connection
-            conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT username, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,))
-        row = cur.fetchone()
-        conn.close()
-        
-        if not row:
-            return None, None
-        
-        return row['username'], row['tweet_url']
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT username, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,))
+            row = cur.fetchone()
+            
+            if not row:
+                return None, None
+            
+            return row['username'], row['tweet_url']
 
     def extract_and_update_tweet(self, page, tweet_id: str, username: str, tweet_url: str) -> bool:
         """

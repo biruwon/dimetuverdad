@@ -251,11 +251,10 @@ def verify_schema():
     print("🔍 Verifying database schema...")
     
     # Import get_db_connection lazily to avoid circular imports
-    from utils.database import get_db_connection
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    try:
+    from utils.database import get_db_connection_context
+    with get_db_connection_context() as conn:
+        c = conn.cursor()
+        
         # Check tables exist
         c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = [row['name'] for row in c.fetchall()]
@@ -288,12 +287,6 @@ def verify_schema():
         
         print("✅ Database schema verification passed!")
         return True
-        
-    except Exception as e:
-        print(f"❌ Schema verification failed: {e}")
-        return False
-    finally:
-        conn.close()
 
 def show_usage():
     """Show how to use this script."""

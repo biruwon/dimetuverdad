@@ -79,8 +79,12 @@ class TestDatabaseFunctions(unittest.TestCase):
 
     @patch('utils.database.sqlite3.connect')
     @patch('utils.database.DatabaseConfig')
-    def test_get_db_connection(self, mock_config_class, mock_connect):
+    @patch('utils.database.config.get_environment')
+    def test_get_db_connection(self, mock_get_env, mock_config_class, mock_connect):
         """Test get_db_connection function."""
+        # Mock the environment detection to return 'testing'
+        mock_get_env.return_value = 'testing'
+        
         # Mock the database config
         mock_config = MagicMock()
         mock_config.get_connection_params.return_value = {
@@ -100,7 +104,7 @@ class TestDatabaseFunctions(unittest.TestCase):
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn
 
-        result = get_db_connection('testing')
+        result = get_db_connection()
 
         mock_connect.assert_called_once()
         args, kwargs = mock_connect.call_args
@@ -120,7 +124,7 @@ class TestDatabaseFunctions(unittest.TestCase):
         mock_conn = MagicMock()
         mock_get_conn.return_value = mock_conn
 
-        with get_db_connection_context('testing') as conn:
+        with get_db_connection_context() as conn:
             self.assertEqual(conn, mock_conn)
 
         # Connection should be closed after context
@@ -133,7 +137,7 @@ class TestDatabaseFunctions(unittest.TestCase):
         mock_get_conn.return_value = mock_conn
 
         with self.assertRaises(ValueError):
-            with get_db_connection_context('testing') as conn:
+            with get_db_connection_context() as conn:
                 raise ValueError("Test exception")
 
         # Connection should be rolled back and closed

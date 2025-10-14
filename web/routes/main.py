@@ -33,18 +33,18 @@ def index() -> str:
     # Filter accounts by category if specified
     if category_filter and category_filter != 'all':
         filtered_accounts = []
-        conn = get_db_connection()
-        for account in accounts_data['accounts']:
-            # Check if account has posts in this category
-            has_category = conn.execute("""
-                SELECT COUNT(*) FROM content_analyses ca
-                JOIN tweets t ON ca.post_id = t.tweet_id
-                WHERE t.username = ? AND ca.category = ?
-            """, (account['username'], category_filter)).fetchone()[0]
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            for account in accounts_data['accounts']:
+                # Check if account has posts in this category
+                has_category = conn.execute("""
+                    SELECT COUNT(*) FROM content_analyses ca
+                    JOIN tweets t ON ca.post_id = t.tweet_id
+                    WHERE t.username = ? AND ca.category = ?
+                """, (account['username'], category_filter)).fetchone()[0]
 
-            if has_category > 0:
-                filtered_accounts.append(account)
-        conn.close()
+                if has_category > 0:
+                    filtered_accounts.append(account)
         accounts_data['accounts'] = filtered_accounts
 
     # Overall statistics - simplified to just accounts and analyzed posts (with caching)
@@ -58,30 +58,30 @@ def index() -> str:
 
     @cache.memoize(timeout=600)
     def get_overall_stats_cached():
-        conn = get_db_connection()
-        overall_stats = conn.execute("""
-        SELECT
-            COUNT(DISTINCT t.username) as total_accounts,
-            COUNT(CASE WHEN ca.post_id IS NOT NULL THEN 1 END) as analyzed_tweets
-        FROM tweets t
-        LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
-        """).fetchone()
-        conn.close()
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            overall_stats = conn.execute("""
+            SELECT
+                COUNT(DISTINCT t.username) as total_accounts,
+                COUNT(CASE WHEN ca.post_id IS NOT NULL THEN 1 END) as analyzed_tweets
+            FROM tweets t
+            LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
+            """).fetchone()
         return dict(overall_stats) if overall_stats else {}
 
     @cache.memoize(timeout=600)
     def get_analysis_distribution_cached():
-        conn = get_db_connection()
-        analysis_distribution = conn.execute("""
-        SELECT
-            category,
-            COUNT(*) as count,
-            COUNT(*) * 100.0 / (SELECT COUNT(*) FROM content_analyses) as percentage
-        FROM content_analyses
-        GROUP BY category
-        ORDER BY count DESC
-        """).fetchall()
-        conn.close()
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            analysis_distribution = conn.execute("""
+            SELECT
+                category,
+                COUNT(*) as count,
+                COUNT(*) * 100.0 / (SELECT COUNT(*) FROM content_analyses) as percentage
+            FROM content_analyses
+            GROUP BY category
+            ORDER BY count DESC
+            """).fetchall()
         return [dict(row) for row in analysis_distribution]
 
     overall_stats = get_overall_stats_cached()

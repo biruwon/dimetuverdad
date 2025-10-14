@@ -29,7 +29,6 @@ class TweetCollector:
         self.config = get_config()
         self.scroller = get_scroller()
         self.media_monitor = get_media_monitor()
-        self.db_path = str(paths.get_db_path())
 
     def setup_media_url_monitoring(self, page) -> List[str]:
         """
@@ -214,17 +213,17 @@ class TweetCollector:
             error: Exception that occurred
         """
         try:
-            conn = sqlite3.connect(self.db_path, timeout=self.config.db_timeout)
-            cur = conn.cursor()
-            cur.execute("INSERT INTO scrape_errors (username, tweet_id, error, context, timestamp) VALUES (?, ?, ?, ?, ?)", (
-                username,
-                tweet_id if tweet_id else None,
-                str(error),
-                'processing_article',
-                datetime.now().isoformat()
-            ))
-            conn.commit()
-            conn.close()
+            from utils.database import get_db_connection_context
+            with get_db_connection_context() as conn:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO scrape_errors (username, tweet_id, error, context, timestamp) VALUES (?, ?, ?, ?, ?)", (
+                    username,
+                    tweet_id if tweet_id else None,
+                    str(error),
+                    'processing_article',
+                    datetime.now().isoformat()
+                ))
+                conn.commit()
         except Exception:
             pass  # Don't log logging errors
 

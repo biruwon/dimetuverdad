@@ -26,17 +26,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fetcher import db as fetcher_db
 from fetcher import parsers as fetcher_parsers
-from fetcher.config import FetcherConfig, get_config, DEFAULT_HANDLES
-from fetcher.logging_config import setup_logging, get_logger
+from fetcher.config import get_config, DEFAULT_HANDLES
+from fetcher.logging_config import setup_logging
 from fetcher.session_manager import SessionManager
 from fetcher.scroller import Scroller
 from fetcher.collector import TweetCollector
 from fetcher.media_monitor import MediaMonitor
 from fetcher.resume_manager import ResumeManager
 from fetcher.refetch_manager import RefetchManager
-from dotenv import load_dotenv
 from utils import paths
-from fetcher.parsers import human_delay  # type: ignore
 from repositories import get_tweet_repository
 from playwright.sync_api import sync_playwright, TimeoutError
 from datetime import datetime
@@ -58,8 +56,6 @@ USERNAME = config.username
 PASSWORD = config.password
 EMAIL_OR_PHONE = config.email_or_phone
 USER_AGENTS = config.user_agents
-DB_PATH = str(paths.get_db_path())
-
 
 def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size: int = 800) -> List[Dict]:
     """

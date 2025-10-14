@@ -41,31 +41,41 @@ class TestConfig(unittest.TestCase):
         Config._env_loaded = False
 
     def test_get_environment_default_development(self):
-        """Test get_environment returns development by default."""
+        """Test get_environment returns testing when running under pytest."""
 
         # Force reset of cached environment
         Config._environment = None
         Config._env_loaded = False
 
-        # Mock the _get_environment_no_load to return development
-        with patch.object(Config, '_get_environment_no_load', return_value='development'):
-            result = Config.get_environment()
-            self.assertEqual(result, 'development')
+        result = Config.get_environment()
+        # When running tests, we should be in testing environment
+        self.assertEqual(result, 'testing')
 
     def test_get_environment_explicit_env_var(self):
-        """Test get_environment defaults to development when no .env file."""
+        """Test get_environment returns testing when running under pytest."""
         Config._environment = None  # Reset cached value
 
         result = Config.get_environment()
-        self.assertEqual(result, 'development')
+        # When running tests, we should be in testing environment
+        self.assertEqual(result, 'testing')
 
     def test_get_environment_invalid_value(self):
-        """Test get_environment defaults to development for any invalid input."""
+        """Test get_environment returns testing when running under pytest."""
         Config._environment = None  # Reset cached value
 
-        # Function now defaults to development regardless of invalid environment variables
         result = Config.get_environment()
-        self.assertEqual(result, 'development')
+        # When running tests, we should be in testing environment
+        self.assertEqual(result, 'testing')
+
+    def test_get_environment_pytest_detection(self):
+        """Test get_environment detects pytest and returns testing environment."""
+        Config._environment = None  # Reset cached value
+
+        # Mock os.environ.get to simulate running under pytest
+        with patch('os.environ.get') as mock_get:
+            mock_get.side_effect = lambda key: 'test_session' if key == 'PYTEST_CURRENT_TEST' else None
+            result = Config.get_environment()
+            self.assertEqual(result, 'testing')
 
     def test_set_environment_valid(self):
         """Test set_environment with valid values."""

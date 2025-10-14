@@ -216,27 +216,27 @@ def handle_manual_update_action(tweet_id, new_category, new_explanation) -> None
         flash('Categoría y explicación son requeridas', 'error')
         return
 
-    conn = get_db_connection()
-    # Check if analysis exists
-    row = conn.execute("SELECT post_id FROM content_analyses WHERE post_id = ?", (tweet_id,)).fetchone()
-    if row:
-        # Update existing analysis
-        conn.execute("UPDATE content_analyses SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = CURRENT_TIMESTAMP WHERE post_id = ?", (new_category, new_explanation, tweet_id))
-        conn.commit()
-        success = True
-    else:
-        # Create new analysis entry
-        tweet_row = conn.execute("SELECT username, content, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,)).fetchone()
-        if tweet_row:
-            conn.execute("""
-                INSERT INTO content_analyses (post_id, category, llm_explanation, analysis_method, author_username, post_content, post_url, analysis_timestamp)
-                VALUES (?, ?, ?, 'manual', ?, ?, ?, CURRENT_TIMESTAMP)
-            """, (tweet_id, new_category, new_explanation, tweet_row['username'], tweet_row['content'], tweet_row['tweet_url']))
+    from utils.database import get_db_connection_context
+    with get_db_connection_context() as conn:
+        # Check if analysis exists
+        row = conn.execute("SELECT post_id FROM content_analyses WHERE post_id = ?", (tweet_id,)).fetchone()
+        if row:
+            # Update existing analysis
+            conn.execute("UPDATE content_analyses SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = CURRENT_TIMESTAMP WHERE post_id = ?", (new_category, new_explanation, tweet_id))
             conn.commit()
             success = True
         else:
-            success = False
-    conn.close()
+            # Create new analysis entry
+            tweet_row = conn.execute("SELECT username, content, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,)).fetchone()
+            if tweet_row:
+                conn.execute("""
+                    INSERT INTO content_analyses (post_id, category, llm_explanation, analysis_method, author_username, post_content, post_url, analysis_timestamp)
+                    VALUES (?, ?, ?, 'manual', ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (tweet_id, new_category, new_explanation, tweet_row['username'], tweet_row['content'], tweet_row['tweet_url']))
+                conn.commit()
+                success = True
+            else:
+                success = False
 
     if success:
         flash('Análisis actualizado correctamente', 'success')
@@ -345,53 +345,52 @@ def get_account_statistics(username) -> Dict[str, Any]:
 def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
     """Get list of all accounts with basic stats, paginated and sorted by non-general posts."""
     # Use direct SQL for test compatibility
-    conn = get_db_connection()
-    rows = conn.execute("""
-        SELECT username, profile_pic_url, last_scraped
-        FROM accounts
-        ORDER BY last_scraped DESC
-        LIMIT ? OFFSET ?
-    """, (per_page, (page - 1) * per_page)).fetchall()
-    total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM accounts").fetchone()
-    # Handle different row types: tuples, MockRow with .get(), and sqlite3.Row with dict access
-    total_count = total_count_row['cnt'] if total_count_row and hasattr(total_count_row, '__getitem__') and 'cnt' in total_count_row else 0
+    from utils.database import get_db_connection_context
+    with get_db_connection_context() as conn:
+        rows = conn.execute("""
+            SELECT username, profile_pic_url, last_scraped
+            FROM accounts
+            ORDER BY last_scraped DESC
+            LIMIT ? OFFSET ?
+        """, (per_page, (page - 1) * per_page)).fetchall()
+        total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM accounts").fetchone()
+        # Handle different row types: tuples, MockRow with .get(), and sqlite3.Row with dict access
+        total_count = total_count_row['cnt'] if total_count_row and hasattr(total_count_row, '__getitem__') and 'cnt' in total_count_row else 0
 
-    accounts_with_stats = []
-    for r in rows:
-        username = r['username']
-        profile_pic_url = r['profile_pic_url']
-        last_scraped = r['last_scraped']
+        accounts_with_stats = []
+        for r in rows:
+            username = r['username']
+            profile_pic_url = r['profile_pic_url']
+            last_scraped = r['last_scraped']
 
-        # Get tweet count for this account
-        tweet_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
-        tweet_count = tweet_count_row['cnt'] if tweet_count_row and hasattr(tweet_count_row, '__getitem__') and 'cnt' in tweet_count_row else 0
+            # Get tweet count for this account
+            tweet_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
+            tweet_count = tweet_count_row['cnt'] if tweet_count_row and hasattr(tweet_count_row, '__getitem__') and 'cnt' in tweet_count_row else 0
 
-        # Get analyzed posts count
-        analyzed_count_row = conn.execute("""
-            SELECT COUNT(*) AS cnt FROM content_analyses ca
-            JOIN tweets t ON ca.post_id = t.tweet_id
-            WHERE t.username = ?
-        """, (username,)).fetchone()
-        analyzed_posts = analyzed_count_row['cnt'] if analyzed_count_row and hasattr(analyzed_count_row, '__getitem__') and 'cnt' in analyzed_count_row else 0
+            # Get analyzed posts count
+            analyzed_count_row = conn.execute("""
+                SELECT COUNT(*) AS cnt FROM content_analyses ca
+                JOIN tweets t ON ca.post_id = t.tweet_id
+                WHERE t.username = ?
+            """, (username,)).fetchone()
+            analyzed_posts = analyzed_count_row['cnt'] if analyzed_count_row and hasattr(analyzed_count_row, '__getitem__') and 'cnt' in analyzed_count_row else 0
 
-        # Get problematic posts count (non-general categories)
-        problematic_count_row = conn.execute("""
-            SELECT COUNT(*) AS cnt FROM content_analyses ca
-            JOIN tweets t ON ca.post_id = t.tweet_id
-            WHERE t.username = ? AND ca.category != 'general'
-        """, (username,)).fetchone()
-        problematic_posts = problematic_count_row['cnt'] if problematic_count_row and hasattr(problematic_count_row, '__getitem__') and 'cnt' in problematic_count_row else 0
+            # Get problematic posts count (non-general categories)
+            problematic_count_row = conn.execute("""
+                SELECT COUNT(*) AS cnt FROM content_analyses ca
+                JOIN tweets t ON ca.post_id = t.tweet_id
+                WHERE t.username = ? AND ca.category != 'general'
+            """, (username,)).fetchone()
+            problematic_posts = problematic_count_row['cnt'] if problematic_count_row and hasattr(problematic_count_row, '__getitem__') and 'cnt' in problematic_count_row else 0
 
-        accounts_with_stats.append({
-            'username': username,
-            'profile_pic_url': profile_pic_url,
-            'last_activity': last_scraped,
-            'tweet_count': tweet_count,
-            'analyzed_posts': analyzed_posts,
-            'problematic_posts': problematic_posts
-        })
-
-    conn.close()
+            accounts_with_stats.append({
+                'username': username,
+                'profile_pic_url': profile_pic_url,
+                'last_activity': last_scraped,
+                'tweet_count': tweet_count,
+                'analyzed_posts': analyzed_posts,
+                'problematic_posts': problematic_posts
+            })
 
     return {
         'accounts': accounts_with_stats,

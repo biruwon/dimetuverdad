@@ -6,7 +6,6 @@ Provides common test data setup and database management.
 import pytest
 import sqlite3
 import os
-import glob
 from typing import Dict, Any
 from analyzer.models import ContentAnalysis
 from analyzer.categories import Categories
@@ -19,53 +18,25 @@ def cleanup_test_databases():
     """Clean up test databases at the end of the test session."""
     yield  # Run tests first
 
-    # Clean up all test databases after tests complete
-    base_db_path = paths.get_db_path(env='testing')
-    test_pattern = f"{base_db_path}.session_*"
-
-    for db_file in glob.glob(test_pattern):
+    # Clean up test database after tests complete
+    import os
+    test_db_path = paths.get_db_path(env='testing')
+    if os.path.exists(test_db_path):
         try:
-            os.remove(db_file)
-            print(f"🗑️  Cleaned up test database: {os.path.basename(db_file)}")
+            os.remove(test_db_path)
+            print(f"🗑️  Cleaned up test database: {os.path.basename(test_db_path)}")
         except OSError as e:
-            print(f"⚠️  Could not remove test database {db_file}: {e}")
+            print(f"⚠️  Could not remove test database {test_db_path}: {e}")
 
 
 @pytest.fixture(scope="session")
-def session_db_path():
-    """Create a single test database for the entire test session."""
-    import os
-    import tempfile
-    import threading
-    import uuid
-
-    # Create unique test database per session
-    process_id = os.getpid()
-    session_id = str(uuid.uuid4())[:8]
-
-    # Get base test database path
-    base_db_path = paths.get_db_path(env='testing')
-    session_db_path = f"{base_db_path}.session_{process_id}_{session_id}"
-
-    # Clean up any existing database
-    if os.path.exists(session_db_path):
-        try:
-            os.remove(session_db_path)
-        except OSError:
-            pass
-
-    # Create fresh schema
-    from utils.database import _create_test_database_schema
-    _create_test_database_schema(session_db_path)
-
-    yield session_db_path
-
-    # Clean up after session
-    try:
-        if os.path.exists(session_db_path):
-            os.remove(session_db_path)
-    except OSError:
-        pass
+def session_db_path(tmp_path_factory):
+    """Provide a unique database path for the entire test session."""
+    # Create a unique database path for this test session
+    db_dir = tmp_path_factory.getbasetemp() / "test_dbs"
+    db_dir.mkdir(exist_ok=True)
+    db_path = db_dir / "test_accounts.db"
+    return str(db_path)
 
 
 @pytest.fixture
@@ -75,6 +46,27 @@ def test_db_path(session_db_path):
 
 
 @pytest.fixture(autouse=True)
+def setup_test_database(test_db_path):
+    """Set up the test database environment for each test."""
+    # Set the DATABASE_PATH environment variable to point to our test database
+    old_db_path = os.environ.get('DATABASE_PATH')
+    os.environ['DATABASE_PATH'] = test_db_path
+
+    # Ensure database exists and has schema
+    if not os.path.exists(test_db_path):
+        from utils.database import _create_test_database_schema
+        _create_test_database_schema(test_db_path)
+
+    yield
+
+    # Restore original DATABASE_PATH if it existed
+    if old_db_path is not None:
+        os.environ['DATABASE_PATH'] = old_db_path
+    elif 'DATABASE_PATH' in os.environ:
+        del os.environ['DATABASE_PATH']
+
+
+@pytest.fixture
 def test_db(test_db_path):
     """Provide a test database connection for each test."""
     conn = sqlite3.connect(test_db_path)

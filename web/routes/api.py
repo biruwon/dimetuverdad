@@ -47,33 +47,31 @@ def submit_feedback() -> str:
         user_ip = request.remote_addr
 
         # Check if tweet exists
-        conn = get_db_connection()
-        tweet_exists = conn.execute("""
-            SELECT tweet_id FROM tweets WHERE tweet_id = ?
-        """, (tweet_id,)).fetchone()
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            tweet_exists = conn.execute("""
+                SELECT tweet_id FROM tweets WHERE tweet_id = ?
+            """, (tweet_id,)).fetchone()
 
-        if not tweet_exists:
-            conn.close()
-            return jsonify({'error': 'Tweet not found'}), 404
+            if not tweet_exists:
+                return jsonify({'error': 'Tweet not found'}), 404
 
-        # Check for recent feedback from this IP for this tweet (rate limiting)
-        recent_feedback = conn.execute("""
-            SELECT id FROM user_feedback
-            WHERE post_id = ? AND user_ip = ? AND submitted_at > datetime('now', '-1 hour')
-        """, (tweet_id, user_ip)).fetchone()
+            # Check for recent feedback from this IP for this tweet (rate limiting)
+            recent_feedback = conn.execute("""
+                SELECT id FROM user_feedback
+                WHERE post_id = ? AND user_ip = ? AND submitted_at > datetime('now', '-1 hour')
+            """, (tweet_id, user_ip)).fetchone()
 
-        if recent_feedback:
-            conn.close()
-            return jsonify({'error': 'Feedback already submitted recently for this tweet'}), 429
+            if recent_feedback:
+                return jsonify({'error': 'Feedback already submitted recently for this tweet'}), 429
 
-        # Insert feedback
-        conn.execute("""
-            INSERT INTO user_feedback (post_id, feedback_type, original_category, corrected_category, user_comment, user_ip)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (tweet_id, feedback_type, original_category, corrected_category, user_comment, user_ip))
+            # Insert feedback
+            conn.execute("""
+                INSERT INTO user_feedback (post_id, feedback_type, original_category, corrected_category, user_comment, user_ip)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (tweet_id, feedback_type, original_category, corrected_category, user_comment, user_ip))
 
-        conn.commit()
-        conn.close()
+            conn.commit()
 
         api_bp.logger.info(f"Feedback submitted for tweet {tweet_id}: {feedback_type}")
 
@@ -91,33 +89,30 @@ def submit_feedback() -> str:
 def get_tweet_versions(tweet_id: str) -> str:
     """API endpoint to get version history for edited tweets."""
     try:
-        conn = get_db_connection()
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            # Get current tweet data
+            current_tweet = conn.execute("""
+                SELECT
+                    t.content, t.username, t.tweet_timestamp, t.tweet_url,
+                    ca.category, ca.llm_explanation
+                FROM tweets t
+                LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
+                WHERE t.tweet_id = ?
+            """, (tweet_id,)).fetchone()
 
-        # Get current tweet data
-        current_tweet = conn.execute("""
-            SELECT
-                t.content, t.username, t.tweet_timestamp, t.tweet_url,
-                ca.category, ca.llm_explanation
-            FROM tweets t
-            LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
-            WHERE t.tweet_id = ?
-        """, (tweet_id,)).fetchone()
+            if not current_tweet:
+                return jsonify({'error': 'Tweet not found'}), 404
 
-        if not current_tweet:
-            conn.close()
-            return jsonify({'error': 'Tweet not found'}), 404
-
-        # Get version history from edit_history table
-        versions = conn.execute("""
-            SELECT
-                version_number, content, hashtags, mentions, media_links,
-                media_count, external_links, detected_at
-            FROM edit_history
-            WHERE original_tweet_id = ?
-            ORDER BY version_number DESC
-        """, (tweet_id,)).fetchall()
-
-        conn.close()
+            # Get version history from edit_history table
+            versions = conn.execute("""
+                SELECT
+                    version_number, content, hashtags, mentions, media_links,
+                    media_count, external_links, detected_at
+                FROM edit_history
+                WHERE original_tweet_id = ?
+                ORDER BY version_number DESC
+            """, (tweet_id,)).fetchall()
 
         # Format response
         version_history = []
@@ -158,19 +153,17 @@ def get_tweet_versions(tweet_id: str) -> str:
 def get_tweet_status(tweet_id: str) -> str:
     """API endpoint to check if a tweet exists and get basic status."""
     try:
-        conn = get_db_connection()
-        
-        # Check if tweet exists
-        tweet = conn.execute("""
-            SELECT 
-                t.tweet_id, t.username, t.content,
-                ca.category, ca.analysis_method
-            FROM tweets t
-            LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
-            WHERE t.tweet_id = ?
-        """, (tweet_id,)).fetchone()
-        
-        conn.close()
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            # Check if tweet exists
+            tweet = conn.execute("""
+                SELECT 
+                    t.tweet_id, t.username, t.content,
+                    ca.category, ca.analysis_method
+                FROM tweets t
+                LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
+                WHERE t.tweet_id = ?
+            """, (tweet_id,)).fetchone()
         
         if tweet:
             return jsonify({
@@ -193,18 +186,18 @@ def get_tweet_status(tweet_id: str) -> str:
 def get_usernames() -> str:
     """API endpoint to get list of usernames for autocomplete."""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            cursor = conn.cursor()
 
-        # Get distinct usernames from tweets table
-        cursor.execute("""
-            SELECT DISTINCT username
-            FROM tweets
-            ORDER BY username
-        """)
+            # Get distinct usernames from tweets table
+            cursor.execute("""
+                SELECT DISTINCT username
+                FROM tweets
+                ORDER BY username
+            """)
 
-        usernames = [row['username'] for row in cursor.fetchall()]
-        conn.close()
+            usernames = [row['username'] for row in cursor.fetchall()]
 
         return jsonify(usernames)
 

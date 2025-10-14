@@ -9,11 +9,15 @@ Top priority:
 - [L] Allow people to submit account to analyze or post to analyze
 - [M] Improve LLM explanation
 - [M] Automate fetcher between new accounts vs latest
-- [L] Blog/instagram explanining how disinformation works easier to understand
+- [L] Blog explanining how disinformation works easier to understand
+- [L] Instagram videos with avatar explaning disinformation
 - [L] Detect topic of the day/week: which accounts promote it, real data, what do they target
-
 - [M] **Pattern refinement**: Review and improve pattern matching rules based on analysis results
 - [L] **A/B testing framework**: Compare different LLM models and prompting strategies
+
+Random ideas:
+
+- Avatar que discute contigo sobre política sin sesgos
 
 ### Model & Analysis Quality
 - [M] **False positive reduction**: Improve classification accuracy, especially for political_general vs extremist categories

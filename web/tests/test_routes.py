@@ -96,12 +96,11 @@ class TestMainRoutes:
     def test_user_page_exists(self, client, app, sample_tweet_data):
         """Test user page for existing account."""
         # Use the test database that's already set up by the fixtures
-        from utils.database import get_db_connection
+        from utils.database import get_db_connection_context
         from web.tests.conftest import TestHelpers
 
         with app.app_context():
-            conn = get_db_connection()
-            try:
+            with get_db_connection_context() as conn:
                 # Create test data using helper methods
                 TestHelpers.create_test_account(conn, {
                     'username': 'testuser',
@@ -109,8 +108,6 @@ class TestMainRoutes:
                     'last_activity': '2024-01-01 12:00:00'
                 })
                 TestHelpers.create_test_tweet(conn, sample_tweet_data)
-            finally:
-                conn.close()
 
         response = client.get('/user/testuser')
         assert response.status_code == 200
@@ -126,12 +123,11 @@ class TestMainRoutes:
 
     def test_user_page_with_filters(self, client, app, sample_tweet_data):
         """Test user page with category filtering."""
-        from utils.database import get_db_connection
+        from utils.database import get_db_connection_context
         from web.tests.conftest import TestHelpers
 
         with app.app_context():
-            conn = get_db_connection()
-            try:
+            with get_db_connection_context() as conn:
                 # Create test data
                 TestHelpers.create_test_account(conn, {
                     'username': 'testuser',
@@ -139,8 +135,6 @@ class TestMainRoutes:
                     'last_activity': '2024-01-01 12:00:00'
                 })
                 TestHelpers.create_test_tweet(conn, sample_tweet_data)
-            finally:
-                conn.close()
 
         response = client.get('/user/testuser?category=general')
         assert response.status_code == 200
@@ -259,12 +253,11 @@ class TestAPIEndpoints:
     def test_tweet_status_api(self, client, app):
         """Test tweet status API endpoint."""
         # Use the test database that's already set up by the fixtures
-        from utils.database import get_db_connection
+        from utils.database import get_db_connection_context
         from web.tests.conftest import TestHelpers
 
         with app.app_context():
-            conn = get_db_connection()
-            try:
+            with get_db_connection_context() as conn:
                 # Create test account first to satisfy FK constraint
                 TestHelpers.create_test_account(conn, {
                     'username': 'testuser',
@@ -282,8 +275,6 @@ class TestAPIEndpoints:
                     'llm_explanation': 'Test explanation',
                     'analysis_method': 'pattern'
                 })
-            finally:
-                conn.close()
 
         response = client.get('/api/tweet-status/9999999999')
         assert response.status_code == 200
@@ -331,9 +322,9 @@ class TestErrorHandlers:
 
     def test_500_error(self, client):
         """Test 500 error handler."""
-        # Mock get_db_connection to raise a database error
-        with patch('web.utils.helpers.get_db_connection') as mock_get_db:
-            mock_get_db.side_effect = sqlite3.OperationalError("Database is locked")
+        # Mock get_db_connection_context to raise a database error
+        with patch('utils.database.get_db_connection_context') as mock_get_db:
+            mock_get_db.side_effect = sqlite3.OperationalError("database is locked")
 
             response = client.get('/')
             assert response.status_code == 503  # Should trigger database locked error handler

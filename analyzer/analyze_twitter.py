@@ -47,11 +47,6 @@ warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# DB path (same as other scripts)
-from utils.paths import get_db_path
-DB_PATH = get_db_path()
-
-
 class Analyzer:
     """
     Uses specialized components for different analysis types:
@@ -74,7 +69,7 @@ class Analyzer:
 
         # Initialize components
         self.metrics = MetricsCollector()
-        self.repository = ContentAnalysisRepository(DB_PATH)
+        self.repository = ContentAnalysisRepository()
 
         # Initialize analysis components
         self.text_analyzer = TextAnalyzer(config=self.config, verbose=verbose)
@@ -350,12 +345,11 @@ class Analyzer:
 
         # Check database
         try:
-            from utils.database import get_db_connection
-            conn = get_db_connection()
-            c = conn.cursor()
-            c.execute("SELECT COUNT(*) FROM content_analyses")
-            count = c.fetchone()[0]
-            conn.close()
+            from utils.database import get_db_connection_context
+            with get_db_connection_context() as conn:
+                c = conn.cursor()
+                c.execute("SELECT COUNT(*) FROM content_analyses")
+                count = c.fetchone()[0]
             print(f"📊 Database: {count} analyses stored")
         except Exception as e:
             print(f"❌ Database: Error - {e}")

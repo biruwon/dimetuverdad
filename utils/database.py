@@ -72,6 +72,10 @@ class DatabaseConfig:
 
     def get_db_path(self) -> str:
         """Get the database path for the current environment."""
+        # Check if DATABASE_PATH environment variable is set (for testing)
+        env_db_path = os.environ.get('DATABASE_PATH')
+        if env_db_path:
+            return env_db_path
         return self.db_path
 
 def _get_flask_database_path() -> Optional[str]:
@@ -87,19 +91,14 @@ def _get_flask_database_path() -> Optional[str]:
     
     return None
 
-def get_db_connection(env: str = None, db_path: str = None) -> sqlite3.Connection:
+def get_db_connection() -> sqlite3.Connection:
     """
-    Get a database connection for the specified environment or database path.
-
-    Args:
-        env: Environment name ('development', 'testing', 'production')
-        db_path: Direct database path (overrides environment-based path resolution)
+    Get a database connection using automatic environment detection.
 
     Returns:
         SQLite database connection
     """
-    if env is None:
-        env = config.get_environment()
+    env = config.get_environment()
 
     config_obj = DatabaseConfig(env)
     params = config_obj.get_connection_params().copy()
@@ -107,12 +106,11 @@ def get_db_connection(env: str = None, db_path: str = None) -> sqlite3.Connectio
     enable_foreign_keys = params.pop('enable_foreign_keys', True)
     pragma_settings = params.pop('pragma_settings', {})
 
-    # Determine db_path with priority: direct db_path > TEST_DATABASE_PATH env var > Flask config > environment-based path
-    test_db_path = os.environ.get('TEST_DATABASE_PATH')
+    # Determine db_path with priority: Flask config > environment-based path
     flask_db_path = _get_flask_database_path()
     env_db_path = config_obj.get_db_path()
     
-    final_db_path = db_path or test_db_path or flask_db_path or env_db_path
+    final_db_path = flask_db_path or env_db_path
     conn = sqlite3.connect(final_db_path, **params)
 
     # Always enable row factory for dict-like access
@@ -144,7 +142,7 @@ def get_db_connection(env: str = None, db_path: str = None) -> sqlite3.Connectio
     return conn
 
 @contextmanager
-def get_db_connection_context(env: str = None, db_path: str = None):
+def get_db_connection_context():
     """
     Context manager for database connections.
 
@@ -152,7 +150,7 @@ def get_db_connection_context(env: str = None, db_path: str = None):
     """
     conn = None
     try:
-        conn = get_db_connection(env, db_path)
+        conn = get_db_connection()
         yield conn
     except Exception as e:
         if conn:
@@ -255,8 +253,7 @@ def _load_test_fixtures(db_path: str):
 # Legacy compatibility - keep old functions for now
 def get_tweet_data(tweet_id: str, timeout: float = 30.0) -> Optional[dict]:
     """Get tweet data for analysis (legacy compatibility)."""
-    conn = get_db_connection()
-    try:
+    with get_db_connection_context() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT tweet_id, content, username, media_links FROM tweets WHERE tweet_id = ?
@@ -272,8 +269,6 @@ def get_tweet_data(tweet_id: str, timeout: float = 30.0) -> Optional[dict]:
                 data['media_urls'] = []
             return data
         return None
-    finally:
-        conn.close()
 
 def cleanup_test_database():
     """Clean up the test database by removing it entirely."""

@@ -468,10 +468,10 @@ class TestDatabaseFunctions(unittest.TestCase):
 class TestDatabaseFunctions:
     """Test database-related functions."""
 
-    def test_save_content_analysis(self, test_db_path, test_tweet):
+    def test_save_content_analysis(self, test_tweet):
         """Test saving content analysis to database."""
         # Create repository instance
-        repo = ContentAnalysisRepository(test_db_path)
+        repo = ContentAnalysisRepository()
 
         analysis = ContentAnalysis(
             post_id=test_tweet['tweet_id'],
@@ -487,25 +487,23 @@ class TestDatabaseFunctions:
 
         repo.save(analysis)
 
-        conn = sqlite3.connect(test_db_path)
-        conn.row_factory = sqlite3.Row  # Enable named column access
-        c = conn.cursor()
+        # Verify the data was saved using the repository's database connection
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            c.execute("SELECT * FROM content_analyses WHERE post_id = ?", (test_tweet['tweet_id'],))
+            row = c.fetchone()
 
-        c.execute("SELECT * FROM content_analyses WHERE post_id = ?", (test_tweet['tweet_id'],))
-        row = c.fetchone()
+            assert row is not None
+            assert row['post_id'] == test_tweet['tweet_id']
+            assert row['category'] == Categories.HATE_SPEECH
+            assert row['llm_explanation'] == "Test explanation"
+            assert row['analysis_method'] == "pattern"
 
-        assert row is not None
-        assert row['post_id'] == test_tweet['tweet_id']
-        assert row['category'] == Categories.HATE_SPEECH
-        assert row['llm_explanation'] == "Test explanation"
-        assert row['analysis_method'] == "pattern"
-
-        conn.close()
-
-    def test_save_content_analysis_duplicate(self, test_db_path, test_tweet):
+    def test_save_content_analysis_duplicate(self, test_tweet):
         """Test saving duplicate content analysis (should replace)."""
         # Create repository instance
-        repo = ContentAnalysisRepository(test_db_path)
+        repo = ContentAnalysisRepository()
 
         analysis1 = ContentAnalysis(
             post_id=test_tweet['tweet_id'],
@@ -528,18 +526,18 @@ class TestDatabaseFunctions:
         repo.save(analysis1)
         repo.save(analysis2)  # Should replace
 
-        conn = sqlite3.connect(test_db_path)
-        c = conn.cursor()
+        # Verify the data was saved using the repository's database connection
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
 
-        c.execute("SELECT COUNT(*) FROM content_analyses WHERE post_id = ?", (test_tweet['tweet_id'],))
-        count = c.fetchone()[0]
-        assert count == 1
+            c.execute("SELECT COUNT(*) FROM content_analyses WHERE post_id = ?", (test_tweet['tweet_id'],))
+            count = c.fetchone()[0]
+            assert count == 1
 
-        c.execute("SELECT category FROM content_analyses WHERE post_id = ?", (test_tweet['tweet_id'],))
-        category = c.fetchone()[0]
-        assert category == Categories.DISINFORMATION
-
-        conn.close()
+            c.execute("SELECT category FROM content_analyses WHERE post_id = ?", (test_tweet['tweet_id'],))
+            category = c.fetchone()[0]
+            assert category == Categories.DISINFORMATION
 
 
 class TestAnalyzerMultimodal(unittest.TestCase):

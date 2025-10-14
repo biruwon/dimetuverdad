@@ -2,16 +2,16 @@
 Database operations for content analysis storage and retrieval.
 """
 
+import os
 import sqlite3
 import json
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
+from contextlib import contextmanager
 from .models import ContentAnalysis
 from .constants import DatabaseConstants
 from repositories import get_tweet_repository, get_content_analysis_repository
 from utils.database import get_db_connection_context
-from utils.paths import get_db_path
-
 
 class ContentAnalysisRepository:
     """
@@ -21,23 +21,21 @@ class ContentAnalysisRepository:
     content analysis results with proper error handling and retries.
     """
 
-    def __init__(self, db_path: str, timeout: float = DatabaseConstants.CONNECTION_TIMEOUT):
+    def __init__(self, timeout: float = DatabaseConstants.CONNECTION_TIMEOUT):
         """
-        Initialize repository with database path.
+        Initialize repository with automatic database detection.
 
         Args:
-            db_path: Path to SQLite database file
             timeout: Database connection timeout in seconds
         """
-        self.db_path = db_path
-        self.timeout = timeout
+        self.timeout = timeout        
         # Initialize standardized repositories
         self.tweet_repo = get_tweet_repository()
         self.content_analysis_repo = get_content_analysis_repository()
 
     def _get_connection(self):
         """Get database connection context manager with proper path."""
-        return get_db_connection_context(db_path=self.db_path)
+        return get_db_connection_context()
 
     def save(self, analysis: ContentAnalysis) -> None:
         """

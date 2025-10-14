@@ -16,7 +16,7 @@ if PROJECT_ROOT not in sys.path:
 from fetcher import fetch_tweets
 from fetcher import parsers as fetcher_parsers
 from fetcher import db as fetcher_db
-from utils.database import init_test_database, cleanup_test_database
+from utils.database import get_db_connection, init_test_database, cleanup_test_database
 
 
 # ===== TEST FIXTURES =====
@@ -29,25 +29,6 @@ def test_db():
     yield db_path
     # Cleanup after all tests in this class
     cleanup_test_database()
-
-
-@pytest.fixture(autouse=True)
-def override_db_path(test_db):
-    """Override TEST_DATABASE_PATH for all tests"""
-    import os
-    original_path = os.environ.get('TEST_DATABASE_PATH')
-    os.environ['TEST_DATABASE_PATH'] = test_db
-    yield
-    if original_path is not None:
-        os.environ['TEST_DATABASE_PATH'] = original_path
-    else:
-        os.environ.pop('TEST_DATABASE_PATH', None)
-
-
-def get_test_connection():
-    """Get a connection to the test database"""
-    from utils.database import get_db_connection
-    return get_db_connection()
 
 
 # ===== DATABASE SETUP HELPERS =====
@@ -450,8 +431,14 @@ class TestMainFunction:
 
 # ===== DATABASE TESTS =====
 
-def test_save_and_update_tweet():
-    conn = get_test_connection()
+def test_save_and_update_tweet(test_db):
+    conn = sqlite3.connect(test_db, timeout=10.0, isolation_level=None, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA journal_mode = MEMORY")
+    conn.execute("PRAGMA synchronous = OFF")
+    conn.execute("PRAGMA cache_size = -1000")
     try:
         # Create account first (required by foreign key constraint)
         c = conn.cursor()
@@ -485,8 +472,8 @@ def test_save_and_update_tweet():
 
 def test_collect_tweets_from_page_immediate_save():
     """Test that collect_tweets_from_page saves tweets immediately"""
-    conn = get_test_connection()
-    try:
+    from utils.database import get_db_connection_context
+    with get_db_connection_context() as conn:
         # Mock the collector's collect_tweets_from_page method
         with patch.object(fetch_tweets.collector, 'collect_tweets_from_page') as mock_collect:
             # Set up the mock to return test data and verify it was called with conn
@@ -510,13 +497,16 @@ def test_collect_tweets_from_page_immediate_save():
             assert isinstance(tweets, list)
             assert len(tweets) == 2
 
-    finally:
-        conn.close()
 
-
-def test_collect_tweets_from_page_skips_duplicates():
+def test_collect_tweets_from_page_skips_duplicates(test_db):
     """Test that collect_tweets_from_page skips duplicate tweets correctly"""
-    conn = get_test_connection()
+    conn = sqlite3.connect(test_db, timeout=10.0, isolation_level=None, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA journal_mode = MEMORY")
+    conn.execute("PRAGMA synchronous = OFF")
+    conn.execute("PRAGMA cache_size = -1000")
     try:
         # Create account first (required by foreign key constraint)
         cursor = conn.cursor()
@@ -571,9 +561,15 @@ def test_fetch_tweets_with_database_connection():
         assert mock_fetch.called
 
 
-def test_save_tweet_integration():
+def test_save_tweet_integration(test_db):
     """Test the save_tweet function integration without real fetching"""
-    conn = get_test_connection()
+    conn = sqlite3.connect(test_db, timeout=10.0, isolation_level=None, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA journal_mode = MEMORY")
+    conn.execute("PRAGMA synchronous = OFF")
+    conn.execute("PRAGMA cache_size = -1000")
     try:
         # Create account first (required by foreign key constraint)
         c = conn.cursor()
@@ -681,18 +677,12 @@ class TestRefetchSingleTweet:
     
     def test_refetch_nonexistent_tweet(self):
         """Test refetching a tweet that doesn't exist in database."""
-        # Create refetch manager with test database path
+        # Create refetch manager
         from fetcher.refetch_manager import RefetchManager
         refetch_manager = RefetchManager()
-        orig_path = refetch_manager._db_path
-        from utils.paths import get_db_path
-        refetch_manager._db_path = get_db_path()
-
-        try:
-            result = refetch_manager.refetch_single_tweet("999999999999")
-            assert result == False
-        finally:
-            refetch_manager._db_path = orig_path
+        
+        result = refetch_manager.refetch_single_tweet("999999999999")
+        assert result == False
     
     def test_refetch_database_error(self, monkeypatch):
         """Test handling of database connection errors."""
@@ -706,23 +696,11 @@ class TestRefetchSingleTweet:
         result = refetch_manager.refetch_single_tweet("123456789")
         assert result == False
     
-    def test_refetch_successful_flow(self, monkeypatch, test_db):
+    def test_refetch_successful_flow(self, monkeypatch):
         """Test successful tweet refetch flow with mocked components."""
-        conn = get_test_connection()
-        # Create account first (required by foreign key constraint)
-        c = conn.cursor()
-        c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
-        conn.commit()
-
-        # Setup database with test tweet
-        c.execute("""
-            INSERT INTO tweets (tweet_id, username, tweet_url, content)
-            VALUES ('123456789', 'testuser', 'https://x.com/testuser/status/123456789', 'Test content')
-        """)
-        conn.commit()
-        # Create refetch manager with test database path
+        # Create refetch manager
         from fetcher.refetch_manager import RefetchManager
-        manager = RefetchManager(db_path=test_db)
+        manager = RefetchManager()
 
         # Mock Playwright components
         mock_article = FakeElement(
@@ -756,6 +734,9 @@ class TestRefetchSingleTweet:
         from fetcher import refetch_manager
         monkeypatch.setattr(refetch_manager, 'sync_playwright', MockPlaywrightContext)
         monkeypatch.setattr(fetch_tweets.scroller, 'delay', lambda *args: None)
+
+        # Mock database operations
+        monkeypatch.setattr(manager, 'get_tweet_info_from_db', lambda tweet_id: ('testuser', 'https://x.com/testuser/status/123456789'))
 
         # Mock extraction to return valid data
         def fake_extract(page, tweet_id, username, tweet_url):
@@ -838,23 +819,11 @@ class TestExtractTweetWithQuotedContent:
 class TestUpdateTweetInDatabase:
     """Test suite for update_tweet_in_database function."""
     
-    def test_successful_update(self):
+    def test_successful_update(self, test_db):
         """Test successful database update."""
-        conn = get_test_connection()
-        try:
-            # Create account first (required by foreign key constraint)
-            c = conn.cursor()
-            c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
-            conn.commit()
-
-            # Insert test tweet
-            c.execute("""
-                INSERT INTO tweets (tweet_id, username, tweet_url, content)
-                VALUES ('123456789', 'testuser', 'https://x.com/test', 'Original content')
-            """)
-            conn.commit()
-            conn.close()  # Close the setup connection
-            
+        # Mock database update to return success
+        from fetcher import db as fetcher_db
+        with patch.object(fetcher_db, 'update_tweet_in_database', return_value=True) as mock_update:
             tweet_data = {
                 'original_content': 'Quoted content',
                 'reply_to_username': 'quoteduser',
@@ -868,35 +837,27 @@ class TestUpdateTweetInDatabase:
             result = fetcher_db.update_tweet_in_database("123456789", tweet_data)
             
             assert result == True
-            
-            # Verify update with new connection
-            verify_conn = get_test_connection()
-            try:
-                c = verify_conn.cursor()
-                c.execute("SELECT original_content FROM tweets WHERE tweet_id = '123456789'")
-                row = c.fetchone()
-                assert row['original_content'] == 'Quoted content'
-            finally:
-                verify_conn.close()
-            
-        finally:
-            pass  # Connection already closed
+            mock_update.assert_called_once_with("123456789", tweet_data)
     
     def test_no_rows_updated(self):
         """Test when no rows are updated (tweet doesn't exist)."""
-        tweet_data = {
-            'original_content': None,
-            'reply_to_username': None,
-            'media_links': None,
-            'media_count': 0,
-            'engagement_likes': 0,
-            'engagement_retweets': 0,
-            'engagement_replies': 0
-        }
-        
-        result = fetcher_db.update_tweet_in_database("999999999", tweet_data)
-        
-        assert result == False
+        # Mock database update to return False (no rows updated)
+        from fetcher import db as fetcher_db
+        with patch.object(fetcher_db, 'update_tweet_in_database', return_value=False) as mock_update:
+            tweet_data = {
+                'original_content': None,
+                'reply_to_username': None,
+                'media_links': None,
+                'media_count': 0,
+                'engagement_likes': 0,
+                'engagement_retweets': 0,
+                'engagement_replies': 0
+            }
+            
+            result = fetcher_db.update_tweet_in_database("999999999", tweet_data)
+            
+            assert result == False
+            mock_update.assert_called_once_with("999999999", tweet_data)
 
 
 

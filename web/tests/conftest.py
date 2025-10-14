@@ -242,8 +242,10 @@ def cleanup_session_db_tables(session_test_db_path):
             table_name = table[0]
             cursor.execute(f"DELETE FROM {table_name}")
 
-        # Reset auto-increment counters
-        cursor.execute("DELETE FROM sqlite_sequence")
+        # Reset auto-increment counters only if sqlite_sequence table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'")
+        if cursor.fetchone():
+            cursor.execute("DELETE FROM sqlite_sequence")
 
         # Re-enable foreign key checks
         cursor.execute("PRAGMA foreign_keys = ON")

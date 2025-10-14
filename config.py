@@ -25,9 +25,6 @@ SECRET_KEY = os.environ.get('FLASK_SECRET_KEY', os.urandom(32).hex())
 # DATABASE SETTINGS
 # =============================================================================
 
-# Database path - can be overridden via environment
-DB_PATH = os.environ.get('DATABASE_PATH', str(BASE_DIR / 'accounts.db'))
-
 # Database connection settings
 DB_TIMEOUT = float(os.environ.get('DB_TIMEOUT', '30.0'))
 DB_CHECK_SAME_THREAD = os.environ.get('DB_CHECK_SAME_THREAD', 'False').lower() == 'true'
@@ -127,7 +124,7 @@ WEB_SCRAPE_TIMEOUT = int(os.environ.get('WEB_SCRAPE_TIMEOUT', '10'))
 
 def get_db_path() -> str:
     """Get the database path from configuration."""
-    return DB_PATH
+    return os.environ.get('DATABASE_PATH', str(BASE_DIR / 'accounts.db'))
 
 def get_rate_limit(endpoint_type: str) -> dict:
     """Get rate limit configuration for an endpoint type."""

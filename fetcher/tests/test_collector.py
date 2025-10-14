@@ -70,7 +70,6 @@ class TestTweetCollector:
         assert collector.config == mock_config
         assert collector.scroller is not None
         assert collector.media_monitor is not None
-        assert collector.db_path is not None
 
     def test_setup_media_url_monitoring(self, collector, mock_page):
         """Test media URL monitoring setup."""
@@ -175,21 +174,20 @@ class TestTweetCollector:
 
         assert result is False
 
-    @patch('fetcher.collector.sqlite3.connect')
-    def test_log_processing_error(self, mock_connect, collector, mock_config):
+    @patch('utils.database.get_db_connection_context')
+    def test_log_processing_error(self, mock_get_conn, collector):
         """Test processing error logging."""
         mock_conn = Mock()
         mock_cur = Mock()
         mock_conn.cursor.return_value = mock_cur
-        mock_connect.return_value = mock_conn
+        mock_get_conn.return_value.__enter__ = Mock(return_value=mock_conn)
+        mock_get_conn.return_value.__exit__ = Mock(return_value=None)
 
         error = Exception("Test error")
         collector.log_processing_error('tweet123', 'testuser', error)
 
-        mock_connect.assert_called_once_with(collector.db_path, timeout=mock_config.db_timeout)
         mock_cur.execute.assert_called_once()
         mock_conn.commit.assert_called_once()
-        mock_conn.close.assert_called_once()
 
     @patch('fetcher.collector.sqlite3.connect')
     def test_log_processing_error_no_tweet_id(self, mock_connect, collector, mock_config):

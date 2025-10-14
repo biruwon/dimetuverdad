@@ -4,39 +4,18 @@ Tests for analyzer/repository.py - Comprehensive test coverage for database oper
 
 import pytest
 import sqlite3
-import tempfile
-import os
-import sys
-import json
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
-
-# Ensure project root is in sys.path for test discovery
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
+from unittest.mock import Mock, patch
 from analyzer.repository import ContentAnalysisRepository
 from analyzer.models import ContentAnalysis
 from analyzer.categories import Categories
 from analyzer.constants import DatabaseConstants
-from utils.database import init_test_database, cleanup_test_database
-
 
 class TestContentAnalysisRepository:
     """Test the ContentAnalysisRepository class."""
 
-    @pytest.fixture(autouse=True)
-    def setup_test_database(self, test_db_path, test_db):
-        """Set up test database for all tests."""
-        # Use the shared test database path and ensure connection is available
-        self.db_path = test_db_path
-        self.test_db = test_db
-
     def test_init(self):
         """Test repository initialization."""
-        repo = ContentAnalysisRepository(self.db_path)
-        assert repo.db_path == self.db_path
+        repo = ContentAnalysisRepository()
         assert repo.timeout == DatabaseConstants.CONNECTION_TIMEOUT
         assert hasattr(repo, 'tweet_repo')
         assert hasattr(repo, 'content_analysis_repo')
@@ -48,19 +27,34 @@ class TestContentAnalysisRepository:
         mock_tweet_repo.return_value = Mock()
         mock_content_repo.return_value = Mock()
 
-        repo = ContentAnalysisRepository(self.db_path)
+        # Create repository instance to trigger initialization
+        repo = ContentAnalysisRepository()
+
         mock_tweet_repo.assert_called_once()
         mock_content_repo.assert_called_once()
 
-    def test_save_success(self, test_tweet):
+    def test_save_success(self):
         """Test successful analysis saving."""
-        repo = ContentAnalysisRepository(self.db_path)
+        # Create test tweet data first
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            c.execute('''
+                INSERT OR REPLACE INTO tweets
+                (tweet_id, tweet_url, username, content, tweet_timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ("test_123", "https://twitter.com/test/status/test_123", "test_user", "Test content", "2024-01-01T12:00:00"))
+            conn.commit()
+
+        repo = ContentAnalysisRepository()
 
         analysis = ContentAnalysis(
-            post_id=test_tweet['tweet_id'],
-            post_url=test_tweet['tweet_url'],
-            author_username=test_tweet['username'],
-            post_content=test_tweet['content'],
+            post_id="test_123",
+            post_url="https://twitter.com/test/status/test_123",
+            author_username="test_user",
+            post_content="Test content",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH,
             categories_detected=[Categories.HATE_SPEECH],
@@ -76,24 +70,35 @@ class TestContentAnalysisRepository:
 
         repo.save(analysis)
 
-        # Verify saved
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(f'SELECT * FROM {DatabaseConstants.TABLE_NAME} WHERE post_id = ?', ("test_123",))
-        row = cursor.fetchone()
-        conn.close()
+        # Verify saved using environment-based database connection
+        with get_db_connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f'SELECT * FROM {DatabaseConstants.TABLE_NAME} WHERE post_id = ?', ("test_123",))
+            row = cursor.fetchone()
 
-        assert row is not None
-        assert row['post_id'] == "test_123"
-        assert row['category'] == Categories.HATE_SPEECH
-        assert row['llm_explanation'] == "Test explanation"
-        assert row['multimodal_analysis'] == 1
+            assert row is not None
+            assert row['post_id'] == "test_123"
+            assert row['category'] == Categories.HATE_SPEECH
+            assert row['llm_explanation'] == "Test explanation"
+            assert row['multimodal_analysis'] == 1
 
     @patch('time.sleep')
-    def test_save_retry_on_lock(self, mock_sleep, test_tweet):
+    def test_save_retry_on_lock(self, mock_sleep):
         """Test save retry logic on database lock."""
-        repo = ContentAnalysisRepository(self.db_path)
+        # Create test tweet data first
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            c.execute('''
+                INSERT OR REPLACE INTO tweets
+                (tweet_id, tweet_url, username, content, tweet_timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ("test_123", "https://twitter.com/test/status/test_123", "test_user", "Test content", "2024-01-01T12:00:00"))
+            conn.commit()
+
+        repo = ContentAnalysisRepository()
 
         # Mock sqlite3.connect to raise OperationalError on first attempts
         original_connect = sqlite3.connect
@@ -108,10 +113,10 @@ class TestContentAnalysisRepository:
 
         with patch('sqlite3.connect', side_effect=mock_connect):
             analysis = ContentAnalysis(
-                post_id=test_tweet['tweet_id'],
-                post_url=test_tweet['tweet_url'],
-                author_username=test_tweet['username'],
-                post_content=test_tweet['content'],
+                post_id="test_123",
+                post_url="https://twitter.com/test/status/test_123",
+                author_username="test_user",
+                post_content="Test content",
                 analysis_timestamp="2024-01-01T12:00:00",
                 category=Categories.GENERAL
             )
@@ -121,16 +126,29 @@ class TestContentAnalysisRepository:
         assert call_count == DatabaseConstants.MAX_RETRIES
         mock_sleep.assert_called()
 
-    def test_save_max_retries_exceeded(self, test_tweet):
+    def test_save_max_retries_exceeded(self):
         """Test save failure after max retries."""
-        repo = ContentAnalysisRepository(self.db_path)
+        # Create test tweet data first
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            c.execute('''
+                INSERT OR REPLACE INTO tweets
+                (tweet_id, tweet_url, username, content, tweet_timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ("test_123", "https://twitter.com/test/status/test_123", "test_user", "Test content", "2024-01-01T12:00:00"))
+            conn.commit()
+
+        repo = ContentAnalysisRepository()
 
         with patch('sqlite3.connect', side_effect=sqlite3.OperationalError("database is locked")):
             analysis = ContentAnalysis(
-                post_id=test_tweet['tweet_id'],
-                post_url=test_tweet['tweet_url'],
-                author_username=test_tweet['username'],
-                post_content=test_tweet['content'],
+                post_id="test_123",
+                post_url="https://twitter.com/test/status/test_123",
+                author_username="test_user",
+                post_content="Test content",
                 analysis_timestamp="2024-01-01T12:00:00",
                 category=Categories.GENERAL
             )
@@ -138,16 +156,29 @@ class TestContentAnalysisRepository:
             with pytest.raises(sqlite3.OperationalError):
                 repo.save(analysis)
 
-    def test_get_by_post_id_success(self, test_tweet):
+    def test_get_by_post_id_success(self):
         """Test successful retrieval by post ID."""
+        # Create test tweet data first
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            c.execute('''
+                INSERT OR REPLACE INTO tweets
+                (tweet_id, tweet_url, username, content, tweet_timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ("test_123", "https://twitter.com/test/status/test_123", "test_user", "Test content", "2024-01-01T12:00:00"))
+            conn.commit()
+
         # First save an analysis
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         
         analysis = ContentAnalysis(
-            post_id=test_tweet['tweet_id'],
-            post_url=test_tweet['tweet_url'],
-            author_username=test_tweet['username'],
-            post_content=test_tweet['content'],
+            post_id="test_123",
+            post_url="https://twitter.com/test/status/test_123",
+            author_username="test_user",
+            post_content="Test content",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH,
             categories_detected=[Categories.HATE_SPEECH],
@@ -163,9 +194,9 @@ class TestContentAnalysisRepository:
         repo.save(analysis)
 
         # Now retrieve it
-        retrieved = repo.get_by_post_id(test_tweet['tweet_id'])
+        retrieved = repo.get_by_post_id("test_123")
         assert retrieved is not None
-        assert retrieved.post_id == test_tweet['tweet_id']
+        assert retrieved.post_id == "test_123"
         assert retrieved.category == Categories.HATE_SPEECH
         assert retrieved.llm_explanation == "Test explanation"
         assert retrieved.multimodal_analysis == True
@@ -173,30 +204,44 @@ class TestContentAnalysisRepository:
 
     def test_get_by_post_id_not_found(self):
         """Test retrieval when post ID not found."""
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.get_by_post_id("nonexistent")
         assert result is None
 
     def test_get_by_post_id_error(self):
         """Test error handling in get_by_post_id."""
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
 
         with patch('sqlite3.connect', side_effect=Exception("Connection error")):
             result = repo.get_by_post_id("test_123")
             assert result is None
 
-    def test_get_recent_analyses(self, test_multiple_tweets):
+    def test_get_recent_analyses(self):
         """Test retrieval of recent analyses."""
-        repo = ContentAnalysisRepository(self.db_path)
+        # Create test tweet data first
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            for i in range(3):
+                c.execute('''
+                    INSERT OR REPLACE INTO tweets
+                    (tweet_id, tweet_url, username, content, tweet_timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (f"test_{i}", f"https://twitter.com/test/status/test_{i}", "test_user", f"Test content {i}", f"2024-01-01T12:0{i}:00"))
+            conn.commit()
+
+        repo = ContentAnalysisRepository()
 
         # Save multiple analyses
-        for tweet_data in test_multiple_tweets:
+        for i in range(3):
             analysis = ContentAnalysis(
-                post_id=tweet_data['tweet_id'],
-                post_url=tweet_data['tweet_url'],
-                author_username=tweet_data['username'],
-                post_content=tweet_data['content'],
-                analysis_timestamp=tweet_data['tweet_timestamp'],
+                post_id=f"test_{i}",
+                post_url=f"https://twitter.com/test/status/test_{i}",
+                author_username="test_user",
+                post_content=f"Test content {i}",
+                analysis_timestamp=f"2024-01-01T12:0{i}:00",
                 category=Categories.GENERAL
             )
             repo.save(analysis)
@@ -210,25 +255,48 @@ class TestContentAnalysisRepository:
 
     def test_get_recent_analyses_error(self):
         """Test error handling in get_recent_analyses."""
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
 
         with patch('sqlite3.connect', side_effect=Exception("Connection error")):
             result = repo.get_recent_analyses()
             assert result == []
 
-    def test_get_analyses_by_category(self, test_tweets_different_categories):
+    def test_get_analyses_by_category(self):
         """Test retrieval of analyses by category."""
-        repo = ContentAnalysisRepository(self.db_path)
+        # Clean up any existing analyses first
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            c.execute('DELETE FROM content_analyses')
+            conn.commit()
+
+        # Create test tweet data first
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            categories = [Categories.HATE_SPEECH, Categories.DISINFORMATION, Categories.HATE_SPEECH]
+            for i, category in enumerate(categories):
+                c.execute('''
+                    INSERT OR REPLACE INTO tweets
+                    (tweet_id, tweet_url, username, content, tweet_timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (f"test_{i}", f"https://twitter.com/test/status/test_{i}", "test_user", f"Test content {i}", f"2024-01-01T12:0{i}:00"))
+            conn.commit()
+
+        repo = ContentAnalysisRepository()
 
         # Save analyses with different categories
-        for tweet_data in test_tweets_different_categories:
+        categories = [Categories.HATE_SPEECH, Categories.DISINFORMATION, Categories.HATE_SPEECH]
+        for i, category in enumerate(categories):
             analysis = ContentAnalysis(
-                post_id=tweet_data['tweet_id'],
-                post_url=tweet_data['tweet_url'],
-                author_username=tweet_data['username'],
-                post_content=tweet_data['content'],
-                analysis_timestamp=tweet_data['tweet_timestamp'],
-                category=tweet_data['category']
+                post_id=f"test_{i}",
+                post_url=f"https://twitter.com/test/status/test_{i}",
+                author_username="test_user",
+                post_content=f"Test content {i}",
+                analysis_timestamp=f"2024-01-01T12:0{i}:00",
+                category=category,
+                categories_detected=[category]
             )
             repo.save(analysis)
 
@@ -239,27 +307,47 @@ class TestContentAnalysisRepository:
 
     def test_get_analyses_by_category_error(self):
         """Test error handling in get_analyses_by_category."""
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
 
         with patch('sqlite3.connect', side_effect=Exception("Connection error")):
             result = repo.get_analyses_by_category(Categories.HATE_SPEECH)
             assert result == []
 
-    def test_get_analysis_count(self, test_multiple_tweets):
+    def test_get_analysis_count(self):
         """Test getting total analysis count."""
-        repo = ContentAnalysisRepository(self.db_path)
+        # Clean up any existing analyses first
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            c.execute('DELETE FROM content_analyses')
+            conn.commit()
+
+        repo = ContentAnalysisRepository()
 
         # Initially should be 0
         assert repo.get_analysis_count() == 0
 
+        # Create test tweet data first
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            for i in range(3):
+                c.execute('''
+                    INSERT OR REPLACE INTO tweets
+                    (tweet_id, tweet_url, username, content, tweet_timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (f"test_{i}", f"https://twitter.com/test/status/test_{i}", "test_user", f"Test content {i}", f"2024-01-01T12:0{i}:00"))
+            conn.commit()
+
         # Save some analyses
-        for tweet_data in test_multiple_tweets:
+        for i in range(3):
             analysis = ContentAnalysis(
-                post_id=tweet_data['tweet_id'],
-                post_url=tweet_data['tweet_url'],
-                author_username=tweet_data['username'],
-                post_content=tweet_data['content'],
-                analysis_timestamp=tweet_data['tweet_timestamp'],
+                post_id=f"test_{i}",
+                post_url=f"https://twitter.com/test/status/test_{i}",
+                author_username="test_user",
+                post_content=f"Test content {i}",
+                analysis_timestamp=f"2024-01-01T12:0{i}:00",
                 category=Categories.GENERAL
             )
             repo.save(analysis)
@@ -268,61 +356,83 @@ class TestContentAnalysisRepository:
 
     def test_get_analysis_count_error(self):
         """Test error handling in get_analysis_count."""
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
 
         with patch('sqlite3.connect', side_effect=Exception("Connection error")):
             result = repo.get_analysis_count()
             assert result == 0
 
-    def test_save_failed_analysis(self, test_tweet):
+    def test_save_failed_analysis(self):
         """Test saving failed analysis."""
-        repo = ContentAnalysisRepository(self.db_path)
+        # Create test tweet data first
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            c.execute('''
+                INSERT OR REPLACE INTO tweets
+                (tweet_id, tweet_url, username, content, tweet_timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ("test_123", "https://twitter.com/test/status/test_123", "test_user", "Test content", "2024-01-01T12:00:00"))
+            conn.commit()
+
+        repo = ContentAnalysisRepository()
 
         repo.save_failed_analysis(
-            post_id=test_tweet['tweet_id'],
-            post_url=test_tweet['tweet_url'],
-            author_username=test_tweet['username'],
-            content=test_tweet['content'],
+            post_id="test_123",
+            post_url="https://twitter.com/test/status/test_123",
+            author_username="test_user",
+            content="Test content",
             error_message="Analysis error occurred",
             media_urls=["https://example.com/image.jpg"]
         )
 
-        # Verify saved as error
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(f'SELECT * FROM {DatabaseConstants.TABLE_NAME} WHERE post_id = ?', (test_tweet['tweet_id'],))
-        row = cursor.fetchone()
-        conn.close()
+        # Verify saved as error using environment-based database connection
+        with get_db_connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f'SELECT * FROM {DatabaseConstants.TABLE_NAME} WHERE post_id = ?', ("test_123",))
+            row = cursor.fetchone()
 
-        assert row is not None
-        assert row['category'] == "ERROR"
-        assert "Analysis error occurred" in row['llm_explanation']
-        assert row['analysis_method'] == "error"
-        assert row['multimodal_analysis'] == 1
+            assert row is not None
+            assert row['category'] == "ERROR"
+            assert "Analysis error occurred" in row['llm_explanation']
+            assert row['analysis_method'] == "error"
+            assert row['multimodal_analysis'] == 1
 
-    def test_save_failed_analysis_no_media(self, test_tweet_2):
+    def test_save_failed_analysis_no_media(self):
         """Test saving failed analysis without media."""
-        repo = ContentAnalysisRepository(self.db_path)
+        # Create test tweet data first
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            c.execute('''
+                INSERT OR REPLACE INTO tweets
+                (tweet_id, tweet_url, username, content, tweet_timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ("failed_456", "https://twitter.com/test/status/failed_456", "test_user", "Failed content", "2024-01-01T12:00:00"))
+            conn.commit()
+
+        repo = ContentAnalysisRepository()
 
         repo.save_failed_analysis(
-            post_id=test_tweet_2['tweet_id'],
-            post_url=test_tweet_2['tweet_url'],
-            author_username=test_tweet_2['username'],
-            content=test_tweet_2['content'],
+            post_id="failed_456",
+            post_url="https://twitter.com/test/status/failed_456",
+            author_username="test_user",
+            content="Failed content",
             error_message="Analysis error occurred"
         )
 
-        # Verify saved
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(f'SELECT * FROM {DatabaseConstants.TABLE_NAME} WHERE post_id = ?', (test_tweet_2['tweet_id'],))
-        row = cursor.fetchone()
-        conn.close()
+        # Verify saved using environment-based database connection
+        with get_db_connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f'SELECT * FROM {DatabaseConstants.TABLE_NAME} WHERE post_id = ?', ("failed_456",))
+            row = cursor.fetchone()
 
-        assert row is not None
-        assert row['multimodal_analysis'] == 0
+            assert row is not None
+            assert row['multimodal_analysis'] == 0
 
     @patch('analyzer.repository.get_tweet_repository')
     def test_get_tweets_for_analysis_force_reanalyze(self, mock_tweet_repo):
@@ -343,7 +453,7 @@ class TestContentAnalysisRepository:
         ]
         mock_repo.get_tweets_by_username.return_value = mock_tweets
 
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.get_tweets_for_analysis(force_reanalyze=True, max_tweets=10)
 
         assert len(result) == 1
@@ -360,7 +470,7 @@ class TestContentAnalysisRepository:
         ]
         mock_connect.return_value = mock_conn
 
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.get_tweets_for_analysis(max_tweets=10)
 
         assert len(result) == 1
@@ -377,7 +487,7 @@ class TestContentAnalysisRepository:
         """Test error handling in get_tweets_for_analysis."""
         mock_connect.side_effect = Exception("Connection error")
 
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.get_tweets_for_analysis()
 
         assert result == []
@@ -398,7 +508,7 @@ class TestContentAnalysisRepository:
         }
         mock_repo.get_tweet_by_id.return_value = mock_tweet
 
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.get_tweet_data('123')
 
         assert result is not None
@@ -412,7 +522,7 @@ class TestContentAnalysisRepository:
         mock_tweet_repo.return_value = mock_repo
         mock_repo.get_tweet_by_id.return_value = None
 
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.get_tweet_data('123')
 
         assert result is None
@@ -424,43 +534,56 @@ class TestContentAnalysisRepository:
         mock_tweet_repo.return_value = mock_repo
         mock_repo.get_tweet_by_id.side_effect = Exception("Repository error")
 
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.get_tweet_data('123')
 
         assert result is None
 
-    def test_delete_existing_analysis_success(self, test_tweet):
+    def test_delete_existing_analysis_success(self):
         """Test successful deletion of existing analysis."""
+        # Create test tweet data first
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            c.execute('''
+                INSERT OR REPLACE INTO tweets
+                (tweet_id, tweet_url, username, content, tweet_timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ("test_123", "https://twitter.com/test/status/test_123", "test_user", "Test content", "2024-01-01T12:00:00"))
+            conn.commit()
+
         # First save an analysis
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         
         analysis = ContentAnalysis(
-            post_id=test_tweet['tweet_id'],
-            post_url=test_tweet['tweet_url'],
-            author_username=test_tweet['username'],
-            post_content=test_tweet['content'],
+            post_id="test_123",
+            post_url="https://twitter.com/test/status/test_123",
+            author_username="test_user",
+            post_content="Test content",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.GENERAL
         )
         repo.save(analysis)
 
         # Now delete it
-        result = repo.delete_existing_analysis(test_tweet['tweet_id'])
+        result = repo.delete_existing_analysis("test_123")
         assert result is True
 
         # Verify deleted
-        retrieved = repo.get_by_post_id(test_tweet['tweet_id'])
+        retrieved = repo.get_by_post_id("test_123")
         assert retrieved is None
 
     def test_delete_existing_analysis_not_found(self):
         """Test deletion when analysis doesn't exist."""
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.delete_existing_analysis("nonexistent")
         assert result is False
 
     def test_delete_existing_analysis_error(self):
         """Test error handling in delete_existing_analysis."""
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
 
         with patch('sqlite3.connect', side_effect=Exception("Connection error")):
             result = repo.delete_existing_analysis("test_123")
@@ -473,7 +596,7 @@ class TestContentAnalysisRepository:
         mock_content_repo.return_value = mock_repo
         mock_repo.get_analysis_stats.return_value = {'total_analyses': 42}
 
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.get_analysis_count_by_author()
 
         assert result == 42
@@ -486,7 +609,7 @@ class TestContentAnalysisRepository:
         mock_analyses = [Mock(), Mock(), Mock()]  # 3 analyses
         mock_repo.get_analyses_by_username.return_value = mock_analyses
 
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.get_analysis_count_by_author("testuser")
 
         assert result == 3
@@ -498,14 +621,14 @@ class TestContentAnalysisRepository:
         mock_content_repo.return_value = mock_repo
         mock_repo.get_analysis_stats.side_effect = Exception("Repository error")
 
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
         result = repo.get_analysis_count_by_author()
 
         assert result == 0
 
     def test_row_to_content_analysis(self):
         """Test conversion from database row to ContentAnalysis."""
-        repo = ContentAnalysisRepository(self.db_path)
+        repo = ContentAnalysisRepository()
 
         # Create a mock row
         mock_row = Mock()

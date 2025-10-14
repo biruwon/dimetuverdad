@@ -55,64 +55,63 @@ def admin_logout() -> str:
 @admin_required
 def admin_dashboard() -> str:
     """Admin dashboard with reanalysis and management options."""
-    conn = get_db_connection()
+    from utils.database import get_db_connection_context
+    with get_db_connection_context() as conn:
+        # Basic stats for dashboard
+        stats_row = conn.execute("""
+            SELECT
+                COUNT(*) AS total_tweets,
+                SUM(CASE WHEN ca.post_id IS NOT NULL THEN 1 ELSE 0 END) AS analyzed_tweets,
+                SUM(CASE WHEN ca.analysis_method = 'pattern' THEN 1 ELSE 0 END) AS pattern_analyzed,
+                SUM(CASE WHEN ca.analysis_method = 'llm' THEN 1 ELSE 0 END) AS llm_analyzed
+            FROM tweets t
+            LEFT JOIN content_analyses ca ON ca.post_id = t.tweet_id
+        """).fetchone()
 
-    # Basic stats for dashboard
-    stats_row = conn.execute("""
-        SELECT
-            COUNT(*) AS total_tweets,
-            SUM(CASE WHEN ca.post_id IS NOT NULL THEN 1 ELSE 0 END) AS analyzed_tweets,
-            SUM(CASE WHEN ca.analysis_method = 'pattern' THEN 1 ELSE 0 END) AS pattern_analyzed,
-            SUM(CASE WHEN ca.analysis_method = 'llm' THEN 1 ELSE 0 END) AS llm_analyzed
-        FROM tweets t
-        LEFT JOIN content_analyses ca ON ca.post_id = t.tweet_id
-    """).fetchone()
+        stats = {
+            'total_tweets': stats_row['total_tweets'] if stats_row else 0,
+            'analyzed_tweets': stats_row['analyzed_tweets'] if stats_row else 0,
+            'pattern_analyzed': stats_row['pattern_analyzed'] if stats_row else 0,
+            'llm_analyzed': stats_row['llm_analyzed'] if stats_row else 0,
+        }
 
-    stats = {
-        'total_tweets': stats_row['total_tweets'] if stats_row else 0,
-        'analyzed_tweets': stats_row['analyzed_tweets'] if stats_row else 0,
-        'pattern_analyzed': stats_row['pattern_analyzed'] if stats_row else 0,
-        'llm_analyzed': stats_row['llm_analyzed'] if stats_row else 0,
-    }
+        # Recent analyses (last 10)
+        recent_rows = conn.execute("""
+            SELECT ca.analysis_timestamp, ca.category, ca.analysis_method, t.username,
+                   SUBSTR(t.content, 1, 100) AS content_preview
+            FROM content_analyses ca
+            JOIN tweets t ON t.tweet_id = ca.post_id
+            ORDER BY ca.analysis_timestamp DESC
+            LIMIT 10
+        """).fetchall()
 
-    # Recent analyses (last 10)
-    recent_rows = conn.execute("""
-        SELECT ca.analysis_timestamp, ca.category, ca.analysis_method, t.username,
-               SUBSTR(t.content, 1, 100) AS content_preview
-        FROM content_analyses ca
-        JOIN tweets t ON t.tweet_id = ca.post_id
-        ORDER BY ca.analysis_timestamp DESC
-        LIMIT 10
-    """).fetchall()
+        # Recent feedback submissions (last 5)
+        feedback_rows = conn.execute("""
+            SELECT uf.submitted_at, uf.feedback_type, uf.original_category, uf.corrected_category,
+                   uf.user_comment, uf.post_id, t.username, t.content
+            FROM user_feedback uf
+            LEFT JOIN tweets t ON t.tweet_id = uf.post_id
+            ORDER BY uf.submitted_at DESC
+            LIMIT 5
+        """).fetchall()
 
-    # Recent feedback submissions (last 5)
-    feedback_rows = conn.execute("""
-        SELECT uf.submitted_at, uf.feedback_type, uf.original_category, uf.corrected_category,
-               uf.user_comment, uf.post_id, t.username, t.content
-        FROM user_feedback uf
-        LEFT JOIN tweets t ON t.tweet_id = uf.post_id
-        ORDER BY uf.submitted_at DESC
-        LIMIT 5
-    """).fetchall()
+        # Recent fetch operations (last 5 users with recent activity)
+        fetch_rows = conn.execute("""
+            SELECT username, COUNT(*) as tweet_count, MAX(scraped_at) as latest_scraped
+            FROM tweets
+            WHERE scraped_at >= datetime('now', '-7 days')
+            GROUP BY username
+            ORDER BY latest_scraped DESC
+            LIMIT 5
+        """).fetchall()
 
-    # Recent fetch operations (last 5 users with recent activity)
-    fetch_rows = conn.execute("""
-        SELECT username, COUNT(*) as tweet_count, MAX(scraped_at) as latest_scraped
-        FROM tweets
-        WHERE scraped_at >= datetime('now', '-7 days')
-        GROUP BY username
-        ORDER BY latest_scraped DESC
-        LIMIT 5
-    """).fetchall()
-
-    # Category distribution
-    category_rows = conn.execute("""
-        SELECT category, COUNT(*) as count
-        FROM content_analyses
-        GROUP BY category
-        ORDER BY count DESC
-    """).fetchall()
-    conn.close()
+        # Category distribution
+        category_rows = conn.execute("""
+            SELECT category, COUNT(*) as count
+            FROM content_analyses
+            GROUP BY category
+            ORDER BY count DESC
+        """).fetchall()
 
     recent_analyses = []
     for r in recent_rows or []:
@@ -188,10 +187,10 @@ def admin_fetch() -> str:
     def run_user_fetch():
         try:
             # Check if user exists in database
-            conn = get_db_connection()
-            user_exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
-            user_exists = user_exists_row['cnt'] if user_exists_row else 0
-            conn.close()
+            from utils.database import get_db_connection_context
+            with get_db_connection_context() as conn:
+                user_exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
+                user_exists = user_exists_row['cnt'] if user_exists_row else 0
 
             # Choose fetch strategy based on user existence
             if user_exists:
@@ -253,9 +252,9 @@ def admin_reanalyze() -> str:
         def reanalyze_category():
             try:
                 # Get tweets from specific category
-                conn = get_db_connection()
-                rows = conn.execute("SELECT post_id FROM content_analyses WHERE category = ? LIMIT 20", (category,)).fetchall()
-                conn.close()
+                from utils.database import get_db_connection_context
+                with get_db_connection_context() as conn:
+                    rows = conn.execute("SELECT post_id FROM content_analyses WHERE category = ? LIMIT 20", (category,)).fetchall()
 
                 if not rows:
                     admin_bp.logger.warning(f"No tweets found for category: {category}")
@@ -358,23 +357,23 @@ def admin_edit_analysis(tweet_id: str) -> str:
             return redirect(referrer or url_for('admin.admin_dashboard'))
 
     # GET request - show edit form (use direct SQL to align with tests)
-    conn = get_db_connection()
-    row = conn.execute("""
-        SELECT 
-            t.content,
-            t.username,
-            t.tweet_timestamp,
-            ca.category,
-            ca.llm_explanation,
-            t.tweet_url,
-            t.original_content,
-            ca.verification_data,
-            ca.verification_confidence
-        FROM tweets t
-        LEFT JOIN content_analyses ca ON ca.post_id = t.tweet_id
-        WHERE t.tweet_id = ?
-    """, (tweet_id,)).fetchone()
-    conn.close()
+    from utils.database import get_db_connection_context
+    with get_db_connection_context() as conn:
+        row = conn.execute("""
+            SELECT 
+                t.content,
+                t.username,
+                t.tweet_timestamp,
+                ca.category,
+                ca.llm_explanation,
+                t.tweet_url,
+                t.original_content,
+                ca.verification_data,
+                ca.verification_confidence
+            FROM tweets t
+            LEFT JOIN content_analyses ca ON ca.post_id = t.tweet_id
+            WHERE t.tweet_id = ?
+        """, (tweet_id,)).fetchone()
 
     if not row:
         flash('Tweet no encontrado', 'error')
@@ -436,65 +435,63 @@ def admin_view_category(category_name: str) -> str:
     per_page = config.get_pagination_limit('admin_category')
 
     try:
-        conn = get_db_connection()
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            # 1) Check if category exists
+            exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
+            exists_count = exists_row['cnt'] if exists_row else 0
+            if not exists_count:
+                flash(f'No se encontraron tweets para la categoría "{category_name}"', 'info')
+                return redirect(url_for('admin.admin_dashboard'))
 
-        # 1) Check if category exists
-        exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
-        exists_count = exists_row['cnt'] if exists_row else 0
-        if not exists_count:
-            conn.close()
-            flash(f'No se encontraron tweets para la categoría "{category_name}"', 'info')
-            return redirect(url_for('admin.admin_dashboard'))
+            # 2) Total count
+            total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
+            total_count = total_count_row['cnt'] if total_count_row else 0
 
-        # 2) Total count
-        total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
-        total_count = total_count_row['cnt'] if total_count_row else 0
+            # Pagination
+            offset = (page - 1) * per_page
 
-        # Pagination
-        offset = (page - 1) * per_page
+            # 3) Recent analyses for page
+            recent_rows = conn.execute("""
+                SELECT 
+                    t.tweet_url,
+                    t.content,
+                    t.username,
+                    t.tweet_timestamp,
+                    t.tweet_id,
+                    ca.category,
+                    ca.llm_explanation,
+                    ca.analysis_method,
+                    ca.analysis_timestamp,
+                    t.is_deleted,
+                    t.is_edited,
+                    t.post_type
+                FROM content_analyses ca
+                JOIN tweets t ON t.tweet_id = ca.post_id
+                WHERE ca.category = ?
+                ORDER BY ca.analysis_timestamp DESC
+                LIMIT ? OFFSET ?
+            """, (category_name, per_page, offset)).fetchall()
 
-        # 3) Recent analyses for page
-        recent_rows = conn.execute("""
-            SELECT 
-                t.tweet_url,
-                t.content,
-                t.username,
-                t.tweet_timestamp,
-                t.tweet_id,
-                ca.category,
-                ca.llm_explanation,
-                ca.analysis_method,
-                ca.analysis_timestamp,
-                t.is_deleted,
-                t.is_edited,
-                t.post_type
-            FROM content_analyses ca
-            JOIN tweets t ON t.tweet_id = ca.post_id
-            WHERE ca.category = ?
-            ORDER BY ca.analysis_timestamp DESC
-            LIMIT ? OFFSET ?
-        """, (category_name, per_page, offset)).fetchall()
+            # 4) Category stats (llm vs pattern, unique users)
+            stats_row = conn.execute("""
+                SELECT 
+                    SUM(CASE WHEN analysis_method='llm' THEN 1 ELSE 0 END) AS llm_count,
+                    SUM(CASE WHEN analysis_method='pattern' THEN 1 ELSE 0 END) AS pattern_count,
+                    COUNT(DISTINCT author_username) AS unique_users
+                FROM content_analyses
+                WHERE category = ?
+            """, (category_name,)).fetchone()
 
-        # 4) Category stats (llm vs pattern, unique users)
-        stats_row = conn.execute("""
-            SELECT 
-                SUM(CASE WHEN analysis_method='llm' THEN 1 ELSE 0 END) AS llm_count,
-                SUM(CASE WHEN analysis_method='pattern' THEN 1 ELSE 0 END) AS pattern_count,
-                COUNT(DISTINCT author_username) AS unique_users
-            FROM content_analyses
-            WHERE category = ?
-        """, (category_name,)).fetchone()
-
-        # 5) Top users
-        top_user_rows = conn.execute("""
-            SELECT author_username as username, COUNT(*) as tweet_count
-            FROM content_analyses
-            WHERE category = ?
-            GROUP BY author_username
-            ORDER BY tweet_count DESC
-            LIMIT 10
-        """, (category_name,)).fetchall()
-        conn.close()
+            # 5) Top users
+            top_user_rows = conn.execute("""
+                SELECT author_username as username, COUNT(*) as tweet_count
+                FROM content_analyses
+                WHERE category = ?
+                GROUP BY author_username
+                ORDER BY tweet_count DESC
+                LIMIT 10
+            """, (category_name,)).fetchall()
 
         # Build tweets list
         processed_tweets = []
@@ -569,31 +566,31 @@ def admin_quick_edit_category(tweet_id: str) -> str:
         return redirect(request.referrer or url_for('main.index'))
 
     # Use direct SQL for quick edit
-    conn = get_db_connection()
-    # Check if analysis exists
-    row = conn.execute("SELECT post_id FROM content_analyses WHERE post_id = ?", (tweet_id,)).fetchone()
-    if row:
-        # Update existing analysis
-        conn.execute("UPDATE content_analyses SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = CURRENT_TIMESTAMP WHERE post_id = ?", (new_category, 'Categoría asignada manualmente por administrador', tweet_id))
-        conn.commit()
-        success = True
-    else:
-        # Create new analysis entry
-        tweet_row = conn.execute("SELECT username, content, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,)).fetchone()
-        if tweet_row:
-            username = tweet_row['username']
-            content = tweet_row['content']
-            tweet_url = tweet_row['tweet_url']
-            
-            conn.execute("""
-                INSERT INTO content_analyses (post_id, category, llm_explanation, analysis_method, author_username, post_content, post_url, analysis_timestamp)
-                VALUES (?, ?, ?, 'manual', ?, ?, ?, CURRENT_TIMESTAMP)
-            """, (tweet_id, new_category, 'Categoría asignada manualmente por administrador', username, content, tweet_url))
+    from utils.database import get_db_connection_context
+    with get_db_connection_context() as conn:
+        # Check if analysis exists
+        row = conn.execute("SELECT post_id FROM content_analyses WHERE post_id = ?", (tweet_id,)).fetchone()
+        if row:
+            # Update existing analysis
+            conn.execute("UPDATE content_analyses SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = CURRENT_TIMESTAMP WHERE post_id = ?", (new_category, 'Categoría asignada manualmente por administrador', tweet_id))
             conn.commit()
             success = True
         else:
-            success = False
-    conn.close()
+            # Create new analysis entry
+            tweet_row = conn.execute("SELECT username, content, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,)).fetchone()
+            if tweet_row:
+                username = tweet_row['username']
+                content = tweet_row['content']
+                tweet_url = tweet_row['tweet_url']
+                
+                conn.execute("""
+                    INSERT INTO content_analyses (post_id, category, llm_explanation, analysis_method, author_username, post_content, post_url, analysis_timestamp)
+                    VALUES (?, ?, ?, 'manual', ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (tweet_id, new_category, 'Categoría asignada manualmente por administrador', username, content, tweet_url))
+                conn.commit()
+                success = True
+            else:
+                success = False
 
     if success:
         flash(f'Categoría cambiada a "{new_category}" correctamente', 'success')
@@ -609,25 +606,25 @@ def admin_quick_edit_category(tweet_id: str) -> str:
 def export_csv() -> str:
     """Export analysis results as CSV."""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT 
-                ca.post_id,
-                ca.author_username,
-                ca.category,
-                ca.llm_explanation,
-                ca.analysis_method,
-                ca.analysis_timestamp,
-                t.content as tweet_content,
-                t.tweet_url,
-                t.tweet_timestamp
-            FROM content_analyses ca
-            JOIN tweets t ON t.tweet_id = ca.post_id
-            ORDER BY ca.analysis_timestamp DESC
-        """)
-        rows = cursor.fetchall()
-        conn.close()
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 
+                    ca.post_id,
+                    ca.author_username,
+                    ca.category,
+                    ca.llm_explanation,
+                    ca.analysis_method,
+                    ca.analysis_timestamp,
+                    t.content as tweet_content,
+                    t.tweet_url,
+                    t.tweet_timestamp
+                FROM content_analyses ca
+                JOIN tweets t ON t.tweet_id = ca.post_id
+                ORDER BY ca.analysis_timestamp DESC
+            """)
+            rows = cursor.fetchall()
 
         # Create CSV response
         import csv
@@ -676,30 +673,30 @@ def export_csv() -> str:
 def export_json() -> str:
     """Export analysis results as JSON."""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT
-                ca.post_id,
-                ca.author_username,
-                ca.category,
-                ca.llm_explanation,
-                ca.analysis_method,
-                ca.analysis_timestamp,
-                ca.post_content,
-                ca.post_url,
-                ca.categories_detected,
-                ca.verification_data,
-                ca.verification_confidence,
-                t.content as tweet_content,
-                t.tweet_url,
-                t.tweet_timestamp
-            FROM content_analyses ca
-            LEFT JOIN tweets t ON t.tweet_id = ca.post_id
-            ORDER BY ca.analysis_timestamp DESC
-        """)
-        rows = cursor.fetchall()
-        conn.close()
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    ca.post_id,
+                    ca.author_username,
+                    ca.category,
+                    ca.llm_explanation,
+                    ca.analysis_method,
+                    ca.analysis_timestamp,
+                    ca.post_content,
+                    ca.post_url,
+                    ca.categories_detected,
+                    ca.verification_data,
+                    ca.verification_confidence,
+                    t.content as tweet_content,
+                    t.tweet_url,
+                    t.tweet_timestamp
+                FROM content_analyses ca
+                LEFT JOIN tweets t ON t.tweet_id = ca.post_id
+                ORDER BY ca.analysis_timestamp DESC
+            """)
+            rows = cursor.fetchall()
 
         # Convert to JSON-serializable format
         data = []
@@ -748,37 +745,35 @@ def admin_view_feedback() -> str:
     per_page = config.get_pagination_limit('admin_category')
 
     try:
-        conn = get_db_connection()
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            # Total count
+            total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM user_feedback").fetchone()
+            total_count = total_count_row['cnt'] if total_count_row else 0
 
-        # Total count
-        total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM user_feedback").fetchone()
-        total_count = total_count_row['cnt'] if total_count_row else 0
+            # Pagination
+            offset = (page - 1) * per_page
 
-        # Pagination
-        offset = (page - 1) * per_page
+            # Get feedback submissions
+            feedback_rows = conn.execute("""
+                SELECT uf.id, uf.post_id, uf.feedback_type, uf.original_category, uf.corrected_category,
+                       uf.user_comment, uf.user_ip, uf.submitted_at, t.username, t.content, t.tweet_url
+                FROM user_feedback uf
+                LEFT JOIN tweets t ON t.tweet_id = uf.post_id
+                ORDER BY uf.submitted_at DESC
+                LIMIT ? OFFSET ?
+            """, (per_page, offset)).fetchall()
 
-        # Get feedback submissions
-        feedback_rows = conn.execute("""
-            SELECT uf.id, uf.post_id, uf.feedback_type, uf.original_category, uf.corrected_category,
-                   uf.user_comment, uf.user_ip, uf.submitted_at, t.username, t.content, t.tweet_url
-            FROM user_feedback uf
-            LEFT JOIN tweets t ON t.tweet_id = uf.post_id
-            ORDER BY uf.submitted_at DESC
-            LIMIT ? OFFSET ?
-        """, (per_page, offset)).fetchall()
-
-        # Feedback stats
-        stats_row = conn.execute("""
-            SELECT
-                COUNT(*) as total_feedback,
-                SUM(CASE WHEN feedback_type = 'correction' THEN 1 ELSE 0 END) as corrections,
-                SUM(CASE WHEN feedback_type = 'improvement' THEN 1 ELSE 0 END) as improvements,
-                SUM(CASE WHEN feedback_type = 'bug_report' THEN 1 ELSE 0 END) as bug_reports,
-                COUNT(DISTINCT post_id) as unique_posts
-            FROM user_feedback
-        """).fetchone()
-
-        conn.close()
+            # Feedback stats
+            stats_row = conn.execute("""
+                SELECT
+                    COUNT(*) as total_feedback,
+                    SUM(CASE WHEN feedback_type = 'correction' THEN 1 ELSE 0 END) as corrections,
+                    SUM(CASE WHEN feedback_type = 'improvement' THEN 1 ELSE 0 END) as improvements,
+                    SUM(CASE WHEN feedback_type = 'bug_report' THEN 1 ELSE 0 END) as bug_reports,
+                    COUNT(DISTINCT post_id) as unique_posts
+                FROM user_feedback
+            """).fetchone()
 
         # Process feedback
         feedback_list = []
