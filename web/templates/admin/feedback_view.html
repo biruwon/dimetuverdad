@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feedback Recibido - dimetuverdad</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .admin-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .feedback-card {
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1rem;
+        }
+        .feedback-type-badge {
+            border-radius: 20px;
+        }
+        .feedback-content {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 0.5rem 0;
+        }
+        .tweet-preview {
+            background-color: #e9ecef;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            font-size: 0.9em;
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 15px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Admin Header -->
+    <header class="admin-header py-3">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-comments me-2"></i>Feedback Recibido
+                    </h1>
+                    <small class="opacity-75">dimetuverdad Admin Dashboard</small>
+                </div>
+                <div>
+                    <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-light me-2">
+                        <i class="fas fa-home me-1"></i>Panel Principal
+                    </a>
+                    <a href="{{ url_for('admin.admin_logout') }}" class="btn btn-outline-light">
+                        <i class="fas fa-sign-out-alt me-1"></i>Salir
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container my-4">
+
+        <!-- Feedback Statistics -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="stats-card p-4 text-center">
+                    <i class="fas fa-comments fa-2x mb-2"></i>
+                    <h3 class="mb-1">{{ feedback_stats.total_feedback or 0 }}</h3>
+                    <small>Total Feedback</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="stats-card p-4 text-center">
+                    <i class="fas fa-check-circle fa-2x mb-2"></i>
+                    <h3 class="mb-1">{{ feedback_stats.corrections or 0 }}</h3>
+                    <small>Correcciones</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="stats-card p-4 text-center">
+                    <i class="fas fa-lightbulb fa-2x mb-2"></i>
+                    <h3 class="mb-1">{{ feedback_stats.improvements or 0 }}</h3>
+                    <small>Mejoras</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="stats-card p-4 text-center">
+                    <i class="fas fa-bug fa-2x mb-2"></i>
+                    <h3 class="mb-1">{{ feedback_stats.bug_reports or 0 }}</h3>
+                    <small>Reportes de Bug</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feedback List -->
+        <div class="row">
+            <div class="col-12">
+                {% if feedback %}
+                    {% for item in feedback %}
+                        <div class="card feedback-card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="badge feedback-type-badge bg-{{ 
+                                        'success' if item.feedback_type == 'correction' else
+                                        'info' if item.feedback_type == 'improvement' else
+                                        'warning' if item.feedback_type == 'bug_report' else
+                                        'secondary'
+                                    }}">
+                                        <i class="fas fa-{{ 
+                                            'check-circle' if item.feedback_type == 'correction' else
+                                            'lightbulb' if item.feedback_type == 'improvement' else
+                                            'bug' if item.feedback_type == 'bug_report' else
+                                            'comment'
+                                        }} me-1"></i>
+                                        {{ item.feedback_type.replace('_', ' ').title() }}
+                                    </span>
+                                    {% if item.username %}
+                                        <small class="ms-2">
+                                            <a href="{{ url_for('main.user_page', username=item.username) }}" class="text-decoration-none">
+                                                <i class="fas fa-user me-1"></i>@{{ item.username }}
+                                            </a>
+                                        </small>
+                                    {% endif %}
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted">
+                                        <i class="fas fa-calendar me-1"></i>{{ item.submitted_at[:16].replace('T', ' ') if item.submitted_at else '' }}
+                                    </small>
+                                    <br>
+                                    <small class="text-muted">
+                                        <i class="fas fa-globe me-1"></i>{{ item.user_ip }}
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                {% if item.original_category and item.corrected_category %}
+                                    <div class="mb-3">
+                                        <strong>Cambio de Categoría:</strong>
+                                        <span class="badge bg-secondary me-2">{{ item.original_category }}</span>
+                                        <i class="fas fa-arrow-right text-muted"></i>
+                                        <span class="badge bg-primary ms-2">{{ item.corrected_category }}</span>
+                                    </div>
+                                {% endif %}
+
+                                {% if item.user_comment %}
+                                    <div class="feedback-content">
+                                        <strong>Comentario del Usuario:</strong><br>
+                                        {{ item.user_comment }}
+                                    </div>
+                                {% endif %}
+
+                                {% if item.tweet_content %}
+                                    <div class="tweet-preview">
+                                        <strong>Tweet Original:</strong><br>
+                                        {{ item.tweet_content }}
+                                        {% if item.tweet_url %}
+                                            <br><small>
+                                                <a href="{{ item.tweet_url }}" target="_blank" class="text-decoration-none">
+                                                    <i class="fas fa-external-link-alt me-1"></i>Ver en Twitter
+                                                </a>
+                                            </small>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+
+                                {% if item.post_id %}
+                                    <div class="text-end">
+                                        <small class="text-muted">
+                                            <i class="fas fa-hashtag me-1"></i>ID: {{ item.post_id }}
+                                        </small>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+
+                    <!-- Pagination -->
+                    {% if pagination.total_pages > 1 %}
+                        <nav aria-label="Feedback pagination">
+                            <ul class="pagination justify-content-center">
+                                {% if pagination.page > 1 %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('admin.admin_view_feedback', page=pagination.page-1) }}">
+                                            <i class="fas fa-chevron-left"></i>
+                                        </a>
+                                    </li>
+                                {% endif %}
+
+                                {% for page_num in pagination.page_range %}
+                                    <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                                        <a class="page-link" href="{{ url_for('admin.admin_view_feedback', page=page_num) }}">{{ page_num }}</a>
+                                    </li>
+                                {% endfor %}
+
+                                {% if pagination.page < pagination.total_pages %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('admin.admin_view_feedback', page=pagination.page+1) }}">
+                                            <i class="fas fa-chevron-right"></i>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="card feedback-card">
+                        <div class="card-body text-center py-5">
+                            <i class="fas fa-comments fa-3x text-muted mb-3"></i>
+                            <h4 class="text-muted">No hay feedback recibido aún</h4>
+                            <p class="text-muted">Los usuarios podrán enviar feedback desde la interfaz principal una vez que implementes el formulario correspondiente.</p>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
