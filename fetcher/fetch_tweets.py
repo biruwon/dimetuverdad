@@ -40,6 +40,9 @@ from playwright.sync_api import sync_playwright, TimeoutError
 from datetime import datetime
 from utils.database import get_db_connection_context
 
+# Import performance tracking utility
+from utils.performance import start_tracking, stop_tracking, print_performance_summary
+
 # Load configuration
 config = get_config()
 
@@ -557,7 +560,10 @@ def main():
     # Setup logging and get configuration
     setup_logging()
     config = get_config()
-    
+
+    # Start performance tracking
+    tracker = start_tracking("Tweet Fetcher")
+
     start_time = time.time()  # Start timing
 
     parser = argparse.ArgumentParser(description="Fetch tweets from a given X (Twitter) user.")
@@ -600,6 +606,9 @@ def main():
     with sync_playwright() as p:
         total, accounts_processed = run_fetch_session(p, handles, max_tweets, True, args.latest)
     
+    # Increment performance counter with total tweets processed
+    tracker.increment_operations(total)
+    
     # Calculate and display execution time
     end_time = time.time()
     execution_time = end_time - start_time
@@ -610,6 +619,10 @@ def main():
     print(f"📊 Total tweets fetched and saved: {total}")
     print(f"🎯 Accounts processed: {accounts_processed}")
     print(f"📈 Average tweets per account: {total/accounts_processed:.1f}")
+
+    # Print performance summary
+    metrics = stop_tracking(tracker)
+    print_performance_summary(metrics)
 
 
 

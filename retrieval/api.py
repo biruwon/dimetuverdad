@@ -20,6 +20,9 @@ from retrieval.sources.statistical_apis import StatisticalAPIManager
 from retrieval.sources.web_scrapers import WebScraperManager
 from retrieval.integration.analyzer_hooks import AnalyzerHooks, AnalysisResult
 
+# Import performance tracking utility
+from utils.performance import start_tracking, stop_tracking, print_performance_summary
+
 
 @dataclass
 class RetrievalConfig:
@@ -99,6 +102,9 @@ class RetrievalAPI:
         Returns:
             Comprehensive verification result
         """
+        # Start performance tracking
+        tracker = start_tracking("Content Verification")
+
         start_time = time.time()
 
         try:
@@ -106,6 +112,12 @@ class RetrievalAPI:
             claims = self.claim_extractor.extract_claims(request.content)
 
             if not claims:
+                # Increment operations counter for claims processed
+                tracker.increment_operations(len(request.content.split()) // 10)  # Rough estimate of content units
+                
+                metrics = stop_tracking(tracker)
+                print_performance_summary(metrics)
+                
                 return RetrievalResult(
                     success=True,
                     verification_report=None,
@@ -129,6 +141,14 @@ class RetrievalAPI:
                     timeout=self.config.verification_timeout
                 )
             except asyncio.TimeoutError:
+                # Increment operations counter for timeout
+                tracker.increment_operations(1)
+                
+                metrics = stop_tracking(tracker)
+                metrics.success = False
+                metrics.error_message = f"Verification timeout after {self.config.verification_timeout}s"
+                print_performance_summary(metrics)
+                
                 return RetrievalResult(
                     success=False,
                     verification_report=None,
@@ -139,6 +159,12 @@ class RetrievalAPI:
 
             processing_time = time.time() - start_time
 
+            # Increment operations counter for successful verification
+            tracker.increment_operations(len(claims))
+
+            metrics = stop_tracking(tracker)
+            print_performance_summary(metrics)
+
             return RetrievalResult(
                 success=True,
                 verification_report=verification_report,
@@ -148,6 +174,15 @@ class RetrievalAPI:
 
         except Exception as e:
             self.logger.error(f"Content verification failed: {e}")
+            
+            # Increment operations counter for failed verification
+            tracker.increment_operations(1)
+            
+            metrics = stop_tracking(tracker)
+            metrics.success = False
+            metrics.error_message = str(e)
+            print_performance_summary(metrics)
+            
             return RetrievalResult(
                 success=False,
                 verification_report=None,
@@ -169,6 +204,9 @@ class RetrievalAPI:
         Returns:
             Verification result for the claim
         """
+        # Start performance tracking
+        tracker = start_tracking("Claim Verification")
+
         # Create a minimal claim object
         from retrieval.core.claim_extractor import VerificationTarget, ClaimType
         claim = VerificationTarget(
@@ -242,6 +280,11 @@ class RetrievalAPI:
 
         # Aggregate evidence
         result = self.evidence_aggregator.aggregate_evidence(claim, scored_sources)
+
+        # Increment operations counter and print summary
+        tracker.increment_operations(1)
+        metrics = stop_tracking(tracker)
+        print_performance_summary(metrics)
 
         return result
 

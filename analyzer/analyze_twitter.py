@@ -45,6 +45,9 @@ from retrieval.integration.analyzer_hooks import AnalyzerHooks, create_analyzer_
 # Import database utilities
 from utils.database import get_db_connection_context, get_tweet_data
 
+# Import performance tracking utility
+from utils.performance import start_tracking, stop_tracking, print_performance_summary
+
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
 
@@ -368,6 +371,9 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
         tweet_id: Specific tweet ID to analyze/reanalyze (overrides other filters)
     """
 
+    # Start performance tracking
+    tracker = start_tracking("Tweet Analyzer")
+
     print("🔍 Enhanced Tweet Analysis Pipeline")
     print("=" * 50)
 
@@ -540,6 +546,9 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
             ts_done = datetime.now().strftime('%H:%M:%S.%f')[:-3]
             print(f"{ts_done} 💾 Saved analysis for {tw_id}")
 
+            # Increment performance counter
+            tracker.increment_operations(1)
+
             # Show result
             category_emoji = {
                 Categories.HATE_SPEECH: '🚫',
@@ -620,6 +629,11 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
 
     print()
     print("✅ Results saved to content_analyses table in database")
+
+    # Print performance summary
+    metrics = stop_tracking(tracker)
+    print_performance_summary(metrics)
+
     return results
 
 
