@@ -44,7 +44,6 @@ def override_db_path(test_db):
 
 def get_test_connection(db_path):
     """Get a connection to the test database"""
-    import sqlite3
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -207,7 +206,6 @@ def test_save_tweet_invalid_tweet_id(test_db):
 def test_check_if_tweet_exists_tweet_exists(test_db):
     """Test checking if tweet exists when it does"""
     # Set DATABASE_PATH environment variable to use the test database
-    import os
     old_db_path = os.environ.get('DATABASE_PATH')
     os.environ['DATABASE_PATH'] = test_db
     
@@ -239,7 +237,6 @@ def test_check_if_tweet_exists_tweet_not_exists():
 def test_check_if_tweet_exists_wrong_user(test_db):
     """Test checking if tweet exists for wrong user"""
     # Set DATABASE_PATH environment variable to use the test database
-    import os
     old_db_path = os.environ.get('DATABASE_PATH')
     os.environ['DATABASE_PATH'] = test_db
     

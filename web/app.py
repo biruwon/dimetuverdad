@@ -18,6 +18,7 @@ from web.routes.loading import loading_bp
 
 # Import utilities
 from web.utils.decorators import register_error_handlers
+import web.utils.helpers as helpers
 
 def create_app(config_name=None):
     """Application factory pattern for Flask app creation."""
@@ -45,7 +46,6 @@ def create_app(config_name=None):
     app.register_blueprint(loading_bp)
 
     # Export helpers for test mocks
-    import web.utils.helpers as helpers
     app.get_user_profile_data = helpers.get_user_profile_data
     app.get_user_tweets_data = helpers.get_user_tweets_data
     app.get_user_analysis_stats = helpers.get_user_analysis_stats

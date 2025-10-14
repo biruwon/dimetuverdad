@@ -19,7 +19,6 @@ def cleanup_test_databases():
     yield  # Run tests first
 
     # Clean up test database after tests complete
-    import os
     test_db_path = paths.get_db_path(env='testing')
     if os.path.exists(test_db_path):
         try:

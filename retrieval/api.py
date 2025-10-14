@@ -5,6 +5,7 @@ This is the primary interface for integrating evidence verification into the ana
 
 import asyncio
 import logging
+import time
 from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass
 
@@ -98,7 +99,6 @@ class RetrievalAPI:
         Returns:
             Comprehensive verification result
         """
-        import time
         start_time = time.time()
 
         try:

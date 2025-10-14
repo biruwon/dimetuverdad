@@ -7,6 +7,9 @@ import pytest
 import tempfile
 import os
 import atexit
+import glob
+import uuid
+import sqlite3
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
@@ -28,7 +31,6 @@ def cleanup_web_test_databases():
     temp_dir = tempfile.gettempdir()
     flask_test_pattern = os.path.join(temp_dir, 'flask_session_test_*.db')
 
-    import glob
     for db_file in glob.glob(flask_test_pattern):
         try:
             os.remove(db_file)
@@ -40,8 +42,6 @@ def cleanup_web_test_databases():
 @pytest.fixture(scope="session")
 def session_test_db_path():
     """Create a single test database for the entire web test session."""
-    import tempfile
-    import uuid
 
     # Create unique test database per session
     session_id = str(uuid.uuid4())[:8]
@@ -225,7 +225,6 @@ def sample_tweet_data():
 def cleanup_session_db_tables(session_test_db_path):
     """Clean up database tables between tests to ensure test isolation."""
     # Truncate all tables to ensure clean state between tests
-    import sqlite3
     conn = sqlite3.connect(session_test_db_path)
     try:
         cursor = conn.cursor()

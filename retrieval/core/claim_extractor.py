@@ -276,7 +276,6 @@ class ClaimExtractor:
     def _split_into_sentences(self, text: str) -> List[str]:
         """Split text into sentences."""
         # Simple sentence splitting on periods, question marks, exclamation marks
-        import re
         sentences = re.split(r'(?<=[.!?])\s+', text.strip())
         return [s.strip() for s in sentences if s.strip()]
 

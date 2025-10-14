@@ -4,6 +4,7 @@ import unittest
 import sys
 import os
 import tempfile
+import shutil
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from utils.paths import (
@@ -44,7 +45,6 @@ class TestPaths(unittest.TestCase):
         """Clean up test fixtures."""
         os.chdir(self.original_cwd)
         # Clean up temporary directory
-        import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_get_project_root(self):

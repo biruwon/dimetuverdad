@@ -4,6 +4,7 @@ Tests credibility scoring, temporal verification, and multi-source verification.
 """
 
 import pytest
+import asyncio
 
 from retrieval.verification.credibility_scorer import CredibilityScorer
 from retrieval.verification.claim_verifier import ClaimVerifier, VerificationContext
@@ -95,7 +96,6 @@ class TestTemporalVerifier:
         )
 
         # This will test temporal verification internally
-        import asyncio
         async def test_async():
             report = await self.verifier.verify_content(context)
             return report

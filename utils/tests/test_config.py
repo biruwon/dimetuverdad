@@ -3,6 +3,7 @@
 import unittest
 import os
 import tempfile
+import shutil
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from utils.config import Config, config
@@ -33,7 +34,6 @@ class TestConfig(unittest.TestCase):
         os.chdir(self.original_cwd)
 
         # Clean up temporary directory
-        import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
         # Reset config state

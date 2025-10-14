@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import aiohttp
+import psutil
 
 # Simple warning suppression for Google Cloud libraries
 os.environ['GRPC_VERBOSITY'] = 'ERROR'
@@ -218,7 +219,6 @@ class DefaultResourceMonitor(ResourceMonitorProtocol):
     def check_memory_usage(self) -> float:
         """Check current memory usage in MB."""
         try:
-            import psutil
             process = psutil.Process()
             return process.memory_info().rss / (1024 * 1024)  # Convert to MB
         except ImportError:

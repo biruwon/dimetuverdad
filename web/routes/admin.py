@@ -8,6 +8,9 @@ import json
 import math
 import threading
 import subprocess
+import traceback
+import csv
+import io
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Any
@@ -178,10 +181,6 @@ def admin_fetch() -> str:
         flash('Nombre de usuario requerido para fetch', 'error')
         return redirect(url_for('admin.admin_dashboard'))
 
-    import subprocess
-    import threading
-    from pathlib import Path
-
     base_dir = Path(__file__).parent.parent.parent
 
     def run_user_fetch():
@@ -247,7 +246,6 @@ def admin_reanalyze() -> str:
             return redirect(url_for('admin.admin_dashboard'))
 
         # Reanalyze tweets from specific category using direct analysis
-        import threading
 
         def reanalyze_category():
             try:
@@ -287,10 +285,6 @@ def admin_reanalyze() -> str:
         if not username:
             flash('Nombre de usuario requerido para reanálisis', 'error')
             return redirect(url_for('admin.admin_dashboard'))
-
-        import subprocess
-        import threading
-        from pathlib import Path
 
         base_dir = Path(__file__).parent.parent.parent
 
@@ -351,7 +345,6 @@ def admin_edit_analysis(tweet_id: str) -> str:
         except Exception as e:
             admin_bp.logger.error(f"Error in admin_edit_analysis: {str(e)}")
             admin_bp.logger.error(f"Exception type: {type(e).__name__}")
-            import traceback
             admin_bp.logger.error(f"Traceback: {traceback.format_exc()}")
             flash('Ocurrió un error al procesar la solicitud. Inténtalo de nuevo.', 'error')
             return redirect(referrer or url_for('admin.admin_dashboard'))
@@ -544,7 +537,6 @@ def admin_view_category(category_name: str) -> str:
     except Exception as e:
         admin_bp.logger.error(f"Error in admin_view_category for {category_name}: {str(e)}")
         admin_bp.logger.error(f"Error details: {type(e).__name__}: {e}")
-        import traceback
         admin_bp.logger.error(f"Traceback: {traceback.format_exc()}")
         flash('No se pudo cargar la información de la categoría. Inténtalo de nuevo.', 'error')
         return redirect(url_for('admin.admin_dashboard'))
@@ -627,9 +619,6 @@ def export_csv() -> str:
             rows = cursor.fetchall()
 
         # Create CSV response
-        import csv
-        import io
-
         output = io.StringIO()
         writer = csv.writer(output)
 

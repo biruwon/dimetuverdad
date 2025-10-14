@@ -7,6 +7,7 @@ Tests that require external dependencies like Twitter/X API access.
 import argparse
 import os
 import sys
+import subprocess
 from pathlib import Path
 
 # Add project root to path for imports
@@ -51,8 +52,6 @@ class TestFetchIntegration:
             test_tweet_id = '1977734268571791494'  # Known tweet from vox_es
 
             # Use subprocess to run the fetch_tweets.py script with --refetch flag
-            import subprocess
-            import sys
 
             print(f"🔄 Testing refetch of tweet: {test_tweet_id}")
 

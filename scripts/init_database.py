@@ -314,7 +314,6 @@ After running this script, you can:
     """)
 
 if __name__ == "__main__":
-    import sys
     
     force_recreate = "--force" in sys.argv
     show_help = "--help" in sys.argv or "-h" in sys.argv

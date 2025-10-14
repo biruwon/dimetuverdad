@@ -631,7 +631,6 @@ class StatisticalAPIManager:
         This method provides compatibility with the API interface.
         """
         # Extract numerical values from the query
-        import re
         numbers = re.findall(r'\d+(?:\.\d+)?', query)
 
         if not numbers:

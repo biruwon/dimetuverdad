@@ -3,6 +3,7 @@
 import unittest
 import tempfile
 import os
+import shutil
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
 from utils.database import (
@@ -74,7 +75,6 @@ class TestDatabaseFunctions(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test fixtures."""
-        import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     @patch('utils.database.sqlite3.connect')

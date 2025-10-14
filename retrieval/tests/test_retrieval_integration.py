@@ -254,7 +254,6 @@ if __name__ == "__main__":
         original_text="El evento ocurrió el 15/03/2023",
         content_category="general"
     )
-    import asyncio
     async def test_temporal():
         report = await temporal_verifier.verify_content(context)
         print(f"Temporal verification through main verifier: {len(report.claims_verified)} claims processed")

@@ -6,6 +6,8 @@ Contains common database operations, tweet processing, and admin actions.
 import sys
 import os
 import importlib.util
+import asyncio
+import concurrent.futures
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Callable
 import json
@@ -25,8 +27,6 @@ import config
 def get_db_connection():
     """Get database connection with row factory for easier access."""
     # Legacy compatibility - repositories handle connections internally
-    import sys
-    import os
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
@@ -58,13 +58,11 @@ async def reanalyze_tweet(tweet_id) -> Any:
 
 def reanalyze_tweet_sync(tweet_id) -> Any:
     """Synchronous wrapper for reanalyze_tweet that can be called from Flask routes."""
-    import asyncio
     try:
         # Check if there's already a running event loop
         try:
             loop = asyncio.get_running_loop()
             # If loop is already running, we need to use a different approach
-            import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, reanalyze_tweet(tweet_id))
                 return future.result(timeout=30)  # 30 second timeout

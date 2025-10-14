@@ -7,6 +7,12 @@ import os
 from typing import Optional
 from pathlib import Path
 
+try:
+    import dotenv
+    HAS_DOTENV = True
+except ImportError:
+    HAS_DOTENV = False
+
 
 class Config:
     """Centralized configuration management."""
@@ -27,8 +33,11 @@ class Config:
 
         if env_file.exists():
             try:
-                import dotenv
-                dotenv.load_dotenv(env_file, override=True)
+                if HAS_DOTENV:
+                    dotenv.load_dotenv(env_file, override=True)
+                else:
+                    # dotenv not installed, load manually
+                    cls._load_env_file_manual(env_file)
             except ImportError:
                 # dotenv not installed, load manually
                 cls._load_env_file_manual(env_file)
@@ -37,8 +46,11 @@ class Config:
             default_env_file = Path(__file__).resolve().parent.parent / '.env'
             if default_env_file.exists():
                 try:
-                    import dotenv
-                    dotenv.load_dotenv(default_env_file, override=True)
+                    if HAS_DOTENV:
+                        dotenv.load_dotenv(default_env_file, override=True)
+                    else:
+                        # dotenv not installed, load manually
+                        cls._load_env_file_manual(default_env_file)
                 except ImportError:
                     # dotenv not installed, load manually
                     cls._load_env_file_manual(default_env_file)
@@ -75,7 +87,6 @@ class Config:
         cls._load_env_file()
 
         # Check if running in pytest (testing environment)
-        import os
         if os.environ.get('PYTEST_CURRENT_TEST') or os.environ.get('PYTEST_VERSION'):
             env = 'testing'
         else:

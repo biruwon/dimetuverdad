@@ -5,6 +5,7 @@ Unit tests for Gemini multimodal analysis functionality.
 
 import unittest
 import os
+import asyncio
 from unittest.mock import patch, MagicMock
 from analyzer.gemini_multimodal import (
     GeminiMultimodal,
@@ -575,7 +576,6 @@ class TestGeminiMultimodalAsync(unittest.TestCase):
     @patch('analyzer.gemini_multimodal.genai.get_file')
     def test_analyze_multimodal_content_async_success(self, mock_get_file, mock_upload_file, mock_generative_model, mock_configure):
         """Test successful async multimodal analysis."""
-        import asyncio
 
         # Mock Gemini components
         mock_model = MagicMock()

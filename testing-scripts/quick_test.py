@@ -13,6 +13,7 @@ from analyzer.pattern_analyzer import PatternAnalyzer
 from analyzer.categories import Categories
 import time
 import argparse
+import json
 
 def main():
     parser = argparse.ArgumentParser(
@@ -161,7 +162,6 @@ def analyze_single_text(analyzer, text, json_output=False):
         )
         
         if json_output:
-            import json
             output = {
                 'content': text,
                 'category': result.category,

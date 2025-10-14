@@ -7,6 +7,11 @@ import sqlite3
 import os
 import threading
 import fcntl
+import glob
+import tempfile
+import uuid
+import atexit
+import stat
 from contextlib import contextmanager
 from typing import Optional, Dict, Any
 from utils import paths
@@ -162,7 +167,6 @@ def get_db_connection_context():
 
 def cleanup_test_databases():
     """Clean up test databases (useful for testing teardown)."""
-    import glob
     
     # Clean up all test databases with the actual naming pattern
     base_db_path = paths.get_db_path(env='testing')
@@ -190,11 +194,6 @@ def init_test_database(fixtures: bool = False) -> str:
     Returns:
         Path to the test database
     """
-    import os
-    import tempfile
-    import threading
-    import uuid
-    import atexit
 
     # Create unique test database per process/thread to avoid conflicts
     # Use process ID, thread ID, and random UUID for uniqueness
@@ -218,7 +217,6 @@ def init_test_database(fixtures: bool = False) -> str:
 
     # Ensure proper permissions for test database
     try:
-        import stat
         os.chmod(test_db_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP)
     except OSError:
         pass  # Ignore permission errors
@@ -272,9 +270,6 @@ def get_tweet_data(tweet_id: str, timeout: float = 30.0) -> Optional[dict]:
 
 def cleanup_test_database():
     """Clean up the test database by removing it entirely."""
-    import os
-    import glob
-    import threading
 
     # Clean up all test databases for this process
     process_id = os.getpid()

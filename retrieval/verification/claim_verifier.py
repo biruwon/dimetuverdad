@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
 import logging
+import time
 
 from ..core.models import VerificationResult, EvidenceSource, VerificationVerdict
 from ..core.claim_extractor import ClaimExtractor, Claim, ClaimType
@@ -311,7 +312,6 @@ class ClaimVerifier:
         Returns:
             Comprehensive verification report
         """
-        import time
         start_time = time.time()
 
         try:

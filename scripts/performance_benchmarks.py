@@ -24,6 +24,7 @@ from datetime import datetime
 import json
 import sys
 from pathlib import Path
+import argparse
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent))
@@ -244,7 +245,6 @@ class PerformanceBenchmarks:
 
 def main():
     """Main function to run benchmarks."""
-    import argparse
 
     parser = argparse.ArgumentParser(description='Run dimetuverdad performance benchmarks')
     parser.add_argument('--output', '-o', help='Output file for results (default: auto-generated)')
