@@ -7,6 +7,7 @@ import pytest
 import sqlite3
 from unittest.mock import Mock, patch, MagicMock
 from web.tests.conftest import TestHelpers, MockRow
+from utils.database import get_db_connection_context
 
 
 class TestMainRoutes:
@@ -96,8 +97,6 @@ class TestMainRoutes:
     def test_user_page_exists(self, client, app, sample_tweet_data):
         """Test user page for existing account."""
         # Use the test database that's already set up by the fixtures
-        from utils.database import get_db_connection_context
-        from web.tests.conftest import TestHelpers
 
         with app.app_context():
             with get_db_connection_context() as conn:
@@ -123,8 +122,6 @@ class TestMainRoutes:
 
     def test_user_page_with_filters(self, client, app, sample_tweet_data):
         """Test user page with category filtering."""
-        from utils.database import get_db_connection_context
-        from web.tests.conftest import TestHelpers
 
         with app.app_context():
             with get_db_connection_context() as conn:
@@ -253,8 +250,6 @@ class TestAPIEndpoints:
     def test_tweet_status_api(self, client, app):
         """Test tweet status API endpoint."""
         # Use the test database that's already set up by the fixtures
-        from utils.database import get_db_connection_context
-        from web.tests.conftest import TestHelpers
 
         with app.app_context():
             with get_db_connection_context() as conn:

@@ -10,6 +10,8 @@ import warnings
 import sys
 import logging
 import argparse
+import asyncio
+import traceback
 from typing import List, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -39,6 +41,9 @@ from .constants import AnalysisMethods, ErrorMessages, ConfigDefaults
 
 # Import retrieval integration
 from retrieval.integration.analyzer_hooks import AnalyzerHooks, create_analyzer_hooks
+
+# Import database utilities
+from utils.database import get_db_connection_context, get_tweet_data
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
@@ -104,14 +109,13 @@ class Analyzer:
 
         try:
             # Route to appropriate analyzer (execute in thread to avoid blocking event loop)
-            import asyncio as _asyncio
             if media_urls and len(media_urls) > 0:
-                result = await _asyncio.to_thread(
+                result = await asyncio.to_thread(
                     self.multimodal_analyzer.analyze_with_media,
                     tweet_id, tweet_url, username, content, media_urls
                 )
             else:
-                result = await _asyncio.to_thread(
+                result = await asyncio.to_thread(
                     self.text_analyzer.analyze,
                     tweet_id, tweet_url, username, content
                 )
@@ -152,7 +156,6 @@ class Analyzer:
             # Handle analysis errors gracefully
             if self.verbose:
                 print(f"❌ Error en análisis: {e}")
-                import traceback
                 traceback.print_exc()
 
             # Return error result
@@ -345,7 +348,6 @@ class Analyzer:
 
         # Check database
         try:
-            from utils.database import get_db_connection_context
             with get_db_connection_context() as conn:
                 c = conn.cursor()
                 c.execute("SELECT COUNT(*) FROM content_analyses")
@@ -391,7 +393,6 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
                 print(f"❌ Tweet {tweet_id} not found in database")
         except Exception as e:
             print(f"❌ Error reanalyzing tweet: {e}")
-            import traceback
             traceback.print_exc()
         return
 
@@ -452,7 +453,6 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
     max_concurrency = _coerce_positive_int(raw_max_conc, ConfigDefaults.MAX_CONCURRENCY)
     max_llm_concurrency = _coerce_positive_int(raw_max_llm_conc, ConfigDefaults.MAX_LLM_CONCURRENCY)
 
-    import asyncio
     analysis_sema = asyncio.Semaphore(max_concurrency)
     llm_sema = asyncio.Semaphore(max_llm_concurrency)
 
@@ -509,8 +509,7 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
                             if attempts > max_retries:
                                 raise inner_e
                             # brief backoff
-                            import asyncio as _asyncio
-                            await _asyncio.sleep(retry_delay)
+                            await asyncio.sleep(retry_delay)
 
             # Count categories
             category = result.category
@@ -632,7 +631,6 @@ def create_analyzer(config: Optional[AnalyzerConfig] = None, verbose: bool = Fal
 
 async def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) -> Optional[ContentAnalysis]:
     """Reanalyze a single tweet and return the result."""
-    from utils.database import get_tweet_data
 
     # Use provided analyzer or create default one
     if analyzer is None:
@@ -696,7 +694,6 @@ Examples:
     args = parser.parse_args()
 
     # Run async analysis
-    import asyncio
     asyncio.run(analyze_tweets_from_db(
         username=args.username,
         max_tweets=args.limit,

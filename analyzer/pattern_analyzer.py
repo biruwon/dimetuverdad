@@ -357,7 +357,6 @@ class PatternAnalyzer:
     
     def _detect_political_context(self, text: str) -> List[str]:
         """Detect political entities and context."""
-        import re
         context = []
         text_lower = text.lower()
         

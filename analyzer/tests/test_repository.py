@@ -9,6 +9,7 @@ from analyzer.repository import ContentAnalysisRepository
 from analyzer.models import ContentAnalysis
 from analyzer.categories import Categories
 from analyzer.constants import DatabaseConstants
+from utils.database import get_db_connection_context
 
 class TestContentAnalysisRepository:
     """Test the ContentAnalysisRepository class."""
@@ -36,7 +37,6 @@ class TestContentAnalysisRepository:
     def test_save_success(self):
         """Test successful analysis saving."""
         # Create test tweet data first
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             # Create account first
@@ -86,7 +86,6 @@ class TestContentAnalysisRepository:
     def test_save_retry_on_lock(self, mock_sleep):
         """Test save retry logic on database lock."""
         # Create test tweet data first
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             # Create account first
@@ -129,7 +128,6 @@ class TestContentAnalysisRepository:
     def test_save_max_retries_exceeded(self):
         """Test save failure after max retries."""
         # Create test tweet data first
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             # Create account first
@@ -159,7 +157,6 @@ class TestContentAnalysisRepository:
     def test_get_by_post_id_success(self):
         """Test successful retrieval by post ID."""
         # Create test tweet data first
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             # Create account first
@@ -219,7 +216,6 @@ class TestContentAnalysisRepository:
     def test_get_recent_analyses(self):
         """Test retrieval of recent analyses."""
         # Create test tweet data first
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             # Create account first
@@ -264,7 +260,6 @@ class TestContentAnalysisRepository:
     def test_get_analyses_by_category(self):
         """Test retrieval of analyses by category."""
         # Clean up any existing analyses first
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             c.execute('DELETE FROM content_analyses')
@@ -316,7 +311,6 @@ class TestContentAnalysisRepository:
     def test_get_analysis_count(self):
         """Test getting total analysis count."""
         # Clean up any existing analyses first
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             c.execute('DELETE FROM content_analyses')
@@ -365,7 +359,6 @@ class TestContentAnalysisRepository:
     def test_save_failed_analysis(self):
         """Test saving failed analysis."""
         # Create test tweet data first
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             # Create account first
@@ -403,7 +396,6 @@ class TestContentAnalysisRepository:
     def test_save_failed_analysis_no_media(self):
         """Test saving failed analysis without media."""
         # Create test tweet data first
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             # Create account first
@@ -542,7 +534,6 @@ class TestContentAnalysisRepository:
     def test_delete_existing_analysis_success(self):
         """Test successful deletion of existing analysis."""
         # Create test tweet data first
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             # Create account first

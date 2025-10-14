@@ -21,6 +21,7 @@ from analyzer.analyze_twitter import Analyzer
 from analyzer.config import AnalyzerConfig
 from analyzer.models import ContentAnalysis
 from analyzer.categories import Categories
+from retrieval.integration.analyzer_hooks import AnalysisResult
 
 
 class TestAnalyzerIntegration(unittest.TestCase):
@@ -186,7 +187,6 @@ class TestEvidenceEnhancement(unittest.TestCase):
         mock_create_hooks.return_value = mock_hooks_instance
         
         # Mock the analyze_with_verification method
-        from retrieval.integration.analyzer_hooks import AnalysisResult
         mock_result = AnalysisResult(
             original_result={'category': 'disinformation'},
             verification_data={
@@ -242,7 +242,6 @@ class TestEvidenceEnhancement(unittest.TestCase):
         mock_create_hooks.return_value = mock_hooks_instance
         
         # Mock the analyze_with_verification method to return no verification data
-        from retrieval.integration.analyzer_hooks import AnalysisResult
         mock_result = AnalysisResult(
             original_result={'category': 'hate_speech'},
             verification_data=None,

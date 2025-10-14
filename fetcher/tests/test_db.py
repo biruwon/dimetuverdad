@@ -4,7 +4,8 @@ import tempfile
 import pytest
 from datetime import datetime
 from fetcher import db
-from utils.database import init_test_database, cleanup_test_database
+from utils.database import init_test_database, cleanup_test_database, _create_test_database_schema
+from utils.paths import get_db_path
 
 
 # ===== TEST HELPERS =====
@@ -13,17 +14,14 @@ from utils.database import init_test_database, cleanup_test_database
 def test_db(tmp_path):
     """Provide a unique test database for each test."""
     # Use the standard testing database path
-    from utils.paths import get_db_path
     db_path = get_db_path(env='testing')
     
     # But modify it to be unique per test by adding a suffix
-    import os
     base, ext = os.path.splitext(db_path)
     unique_db_path = f"{base}_{tmp_path.name}{ext}"
     
     # Ensure database exists and has schema
     if not os.path.exists(unique_db_path):
-        from utils.database import _create_test_database_schema
         _create_test_database_schema(unique_db_path)
     
     yield unique_db_path

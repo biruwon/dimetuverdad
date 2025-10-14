@@ -17,6 +17,7 @@ from .categories import Categories
 
 from .prompts import EnhancedPromptGenerator
 from utils.text_utils import normalize_text
+import traceback
 
 # Suppress warnings including the parameter conflict warnings
 warnings.filterwarnings("ignore")
@@ -1003,7 +1004,6 @@ class EnhancedLLMPipeline:
                 return f"ERROR: Insufficient explanation generated - got: '{explanation}'"
                 
         except Exception as e:
-            import traceback
             traceback.print_exc()
             return f"ERROR: Exception in explanation prompt generation - {type(e).__name__}: {str(e)}"
     
@@ -1049,7 +1049,6 @@ class EnhancedLLMPipeline:
                 
         except Exception as e:
             print(f"⚠️ Ollama classification error: {e}")
-            import traceback
             traceback.print_exc()
             return {"llm_categories": []}
     

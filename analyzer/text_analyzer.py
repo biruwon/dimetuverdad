@@ -3,6 +3,7 @@ Text-only content analysis functionality.
 """
 
 import json
+import traceback
 from typing import Dict, Tuple, Optional
 from datetime import datetime
 
@@ -11,6 +12,7 @@ from .llm_models import EnhancedLLMPipeline
 from .models import ContentAnalysis
 from .categories import Categories
 from .config import AnalyzerConfig
+from .prompts import EnhancedPromptGenerator
 from utils.text_utils import normalize_text
 from .constants import AnalysisMethods, ErrorMessages
 
@@ -199,7 +201,7 @@ class TextAnalyzer:
 
         try:
             # Import here to avoid circular imports
-            from .prompts import EnhancedPromptGenerator
+            # from .prompts import EnhancedPromptGenerator
 
             # Extract pattern result for context
             pattern_result = pattern_results.get('pattern_result', None)
@@ -250,7 +252,7 @@ class TextAnalyzer:
         except Exception as e:
             if self.verbose:
                 print(f"❌ Error en explicación LLM: {e}")
-                import traceback
+                # import traceback
                 traceback.print_exc()
             return ErrorMessages.LLM_EXPLANATION_EXCEPTION.format(
                 error_type=type(e).__name__,

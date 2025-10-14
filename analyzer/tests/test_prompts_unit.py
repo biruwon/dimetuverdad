@@ -2,7 +2,7 @@
 
 import unittest
 from analyzer.prompts import EnhancedPromptGenerator
-from analyzer.categories import Categories
+from analyzer.categories import Categories, CATEGORY_INFO
 
 
 class TestEnhancedPromptGenerator(unittest.TestCase):
@@ -151,7 +151,6 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         self.assertGreater(len(self.generator.prompt_templates), 0)
 
         # Check that all categories have templates
-        from analyzer.categories import CATEGORY_INFO
         for category_name in CATEGORY_INFO.keys():
             self.assertIn(category_name, self.generator.prompt_templates)
             template = self.generator.prompt_templates[category_name]

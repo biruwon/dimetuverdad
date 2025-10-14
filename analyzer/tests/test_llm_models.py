@@ -4,7 +4,7 @@ Comprehensive test coverage for LLM models and pipeline functionality.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, patch as mock_patch
 import torch
 from analyzer.llm_models import (
     LLMModelConfig,
@@ -408,7 +408,6 @@ class TestEnhancedLLMPipeline:
     @patch('analyzer.llm_models.pipeline')
     def test_load_generation_model_ollama(self, mock_pipeline):
         """Test loading Ollama generation model."""
-        from unittest.mock import patch as mock_patch
         with mock_patch('analyzer.llm_models.OpenAI') as mock_openai:
             mock_client = Mock()
             mock_openai.return_value = mock_client
@@ -452,8 +451,6 @@ class TestEnhancedLLMPipeline:
     @patch('analyzer.llm_models.pipeline')
     def test_get_category_with_ollama(self, mock_pipeline):
         """Test get_category method using Ollama."""
-        from unittest.mock import patch as mock_patch
-
         # Mock Ollama client
         with mock_patch('analyzer.llm_models.OpenAI') as mock_openai:
             mock_client = Mock()
@@ -489,8 +486,6 @@ class TestEnhancedLLMPipeline:
     @patch('analyzer.llm_models.pipeline')
     def test_get_explanation_with_ollama(self, mock_pipeline):
         """Test get_explanation method using Ollama."""
-        from unittest.mock import patch as mock_patch
-
         with mock_patch('analyzer.llm_models.OpenAI') as mock_openai:
             mock_client = Mock()
             mock_openai.return_value = mock_client
@@ -658,8 +653,6 @@ class TestEnhancedLLMPipeline:
     @patch('analyzer.llm_models.pipeline')
     def test_ollama_model_info(self, mock_pipeline):
         """Test model info with Ollama model."""
-        from unittest.mock import patch as mock_patch
-
         with mock_patch('analyzer.llm_models.OpenAI') as mock_openai:
             mock_client = Mock()
             mock_openai.return_value = mock_client

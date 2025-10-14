@@ -16,7 +16,7 @@ sys.path.insert(0, str(project_root))
 
 from web.app import create_app
 from config import ADMIN_TOKEN
-from utils.database import init_test_database, cleanup_test_databases
+from utils.database import init_test_database, cleanup_test_databases, _create_test_database_schema
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -52,7 +52,6 @@ def session_test_db_path():
         os.remove(test_db_path)
 
     # Create fresh schema using the same initialization function
-    from utils.database import _create_test_database_schema
     _create_test_database_schema(test_db_path)
 
     yield test_db_path

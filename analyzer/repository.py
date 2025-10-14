@@ -5,6 +5,7 @@ Database operations for content analysis storage and retrieval.
 import os
 import sqlite3
 import json
+import time
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 from contextlib import contextmanager
@@ -87,7 +88,6 @@ class ContentAnalysisRepository:
                 if attempt < DatabaseConstants.MAX_RETRIES - 1:
                     print(f"⚠️ Database locked, retrying in {retry_delay}s... "
                           f"(attempt {attempt + 1}/{DatabaseConstants.MAX_RETRIES})")
-                    import time
                     time.sleep(retry_delay)
                     # Exponential backoff with local variable
                     retry_delay *= 2

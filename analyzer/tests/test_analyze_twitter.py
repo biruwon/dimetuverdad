@@ -26,6 +26,8 @@ from analyzer.config import AnalyzerConfig
 from analyzer.models import ContentAnalysis
 from analyzer.repository import ContentAnalysisRepository
 from analyzer.categories import Categories
+from utils.database import get_db_connection_context
+from analyzer.multimodal_analyzer import extract_media_type
 
 
 class TestContentAnalysis(unittest.TestCase):
@@ -488,7 +490,6 @@ class TestDatabaseFunctions:
         repo.save(analysis)
 
         # Verify the data was saved using the repository's database connection
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
             c.execute("SELECT * FROM content_analyses WHERE post_id = ?", (test_tweet['tweet_id'],))
@@ -527,7 +528,6 @@ class TestDatabaseFunctions:
         repo.save(analysis2)  # Should replace
 
         # Verify the data was saved using the repository's database connection
-        from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
 
@@ -661,21 +661,18 @@ class TestAnalyzerMultimodal(unittest.TestCase):
 
     def test_extract_media_type_image(self):
         """Test media type extraction for images."""
-        from analyzer.multimodal_analyzer import extract_media_type
         media_urls = ["https://pbs.twimg.com/media/1973243448871284736/bPeZHL3l?format=jpg&name=small"]
         result = extract_media_type(media_urls)
         self.assertEqual(result, "image")
 
     def test_extract_media_type_video(self):
         """Test media type extraction for videos."""
-        from analyzer.multimodal_analyzer import extract_media_type
         media_urls = ["https://video.twimg.com/amplify_video/1972307252796141568/vid/avc1/320x568/GftH9VZYZuygizQc.mp4"]
         result = extract_media_type(media_urls)
         self.assertEqual(result, "video")
 
     def test_extract_media_type_mixed(self):
         """Test media type extraction for mixed content."""
-        from analyzer.multimodal_analyzer import extract_media_type
         media_urls = [
             "https://pbs.twimg.com/media/1973243448871284736/bPeZHL3l?format=jpg&name=small",
             "https://video.twimg.com/amplify_video/1972307252796141568/vid/avc1/320x568/GftH9VZYZuygizQc.mp4"
@@ -685,28 +682,24 @@ class TestAnalyzerMultimodal(unittest.TestCase):
 
     def test_extract_media_type_unknown(self):
         """Test media type extraction for unknown content."""
-        from analyzer.multimodal_analyzer import extract_media_type
         media_urls = ["https://example.com/somefile.txt"]
         result = extract_media_type(media_urls)
         self.assertEqual(result, "unknown")
 
     def test_extract_media_type_empty(self):
         """Test media type extraction for empty list."""
-        from analyzer.multimodal_analyzer import extract_media_type
         media_urls = []
         result = extract_media_type(media_urls)
         self.assertEqual(result, "")
 
     def test_extract_media_type_video_by_pattern(self):
         """Test media type extraction for video detected by URL pattern."""
-        from analyzer.multimodal_analyzer import extract_media_type
         media_urls = ["https://example.com/video/content"]
         result = extract_media_type(media_urls)
         self.assertEqual(result, "video")
 
     def test_extract_media_type_image_by_format_param(self):
         """Test media type extraction for image detected by format parameter."""
-        from analyzer.multimodal_analyzer import extract_media_type
         media_urls = ["https://example.com/image?format=jpeg"]
         result = extract_media_type(media_urls)
         self.assertEqual(result, "image")
@@ -915,7 +908,6 @@ class TestUtilityFunctions(unittest.TestCase):
     @patch('analyzer.analyze_twitter.Analyzer')
     def test_create_analyzer_function(self, mock_analyzer_class):
         """Test the create_analyzer utility function."""
-        from analyzer.config import AnalyzerConfig
         config = AnalyzerConfig(use_llm=False, model_priority="fast")
         create_analyzer(config=config, verbose=True)
         mock_analyzer_class.assert_called_once_with(config=config, verbose=True)
