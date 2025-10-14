@@ -21,7 +21,7 @@ def cleanup_test_databases():
 
     # Clean up all test databases after tests complete
     base_db_path = paths.get_db_path(env='testing')
-    test_pattern = f"{base_db_path}.pid_*"
+    test_pattern = f"{base_db_path}.session_*"
 
     for db_file in glob.glob(test_pattern):
         try:
@@ -31,17 +31,52 @@ def cleanup_test_databases():
             print(f"⚠️  Could not remove test database {db_file}: {e}")
 
 
+@pytest.fixture(scope="session")
+def session_db_path():
+    """Create a single test database for the entire test session."""
+    import os
+    import tempfile
+    import threading
+    import uuid
+
+    # Create unique test database per session
+    process_id = os.getpid()
+    session_id = str(uuid.uuid4())[:8]
+
+    # Get base test database path
+    base_db_path = paths.get_db_path(env='testing')
+    session_db_path = f"{base_db_path}.session_{process_id}_{session_id}"
+
+    # Clean up any existing database
+    if os.path.exists(session_db_path):
+        try:
+            os.remove(session_db_path)
+        except OSError:
+            pass
+
+    # Create fresh schema
+    from utils.database import _create_test_database_schema
+    _create_test_database_schema(session_db_path)
+
+    yield session_db_path
+
+    # Clean up after session
+    try:
+        if os.path.exists(session_db_path):
+            os.remove(session_db_path)
+    except OSError:
+        pass
+
+
 @pytest.fixture
-def test_db_path():
-    """Provide a test database path for each test."""
-    db_path = init_test_database(fixtures=False)
-    yield db_path
-    # Cleanup happens automatically via atexit in init_test_database
+def test_db_path(session_db_path):
+    """Provide the session database path for each test."""
+    return session_db_path
 
 
 @pytest.fixture(autouse=True)
 def test_db(test_db_path):
-    """Provide a fresh test database connection for each test."""
+    """Provide a test database connection for each test."""
     conn = sqlite3.connect(test_db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

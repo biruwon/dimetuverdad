@@ -168,7 +168,7 @@ def cleanup_test_databases():
     
     # Clean up all test databases with the actual naming pattern
     base_db_path = paths.get_db_path(env='testing')
-    test_pattern = f"{base_db_path}.pid_*"
+    test_pattern = f"{base_db_path}.session_*"
     
     for db_file in glob.glob(test_pattern):
         try:

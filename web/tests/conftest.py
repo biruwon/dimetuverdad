@@ -26,7 +26,7 @@ def cleanup_web_test_databases():
 
     # Clean up Flask test databases in temp directory
     temp_dir = tempfile.gettempdir()
-    flask_test_pattern = os.path.join(temp_dir, 'flask_test_*.db')
+    flask_test_pattern = os.path.join(temp_dir, 'flask_session_test_*.db')
 
     import glob
     for db_file in glob.glob(flask_test_pattern):
@@ -37,16 +37,17 @@ def cleanup_web_test_databases():
             print(f"⚠️  Could not remove Flask test database {db_file}: {e}")
 
 
-@pytest.fixture
-def app():
-    """Create and configure a test app instance."""
-
-    # For Flask tests, use a deterministic test database path that's consistent across workers
+@pytest.fixture(scope="session")
+def session_test_db_path():
+    """Create a single test database for the entire web test session."""
     import tempfile
-    worker_id = os.environ.get('PYTEST_XDIST_WORKER', 'master')
-    test_db_path = os.path.join(tempfile.gettempdir(), f'flask_test_{worker_id}.db')
+    import uuid
 
-    # Remove any existing test database for this worker
+    # Create unique test database per session
+    session_id = str(uuid.uuid4())[:8]
+    test_db_path = os.path.join(tempfile.gettempdir(), f'flask_session_test_{session_id}.db')
+
+    # Remove any existing test database
     if os.path.exists(test_db_path):
         os.remove(test_db_path)
 
@@ -54,10 +55,24 @@ def app():
     from utils.database import _create_test_database_schema
     _create_test_database_schema(test_db_path)
 
-    # Configure test app
+    yield test_db_path
+
+    # Clean up after session
+    try:
+        if os.path.exists(test_db_path):
+            os.remove(test_db_path)
+    except OSError:
+        pass
+
+
+@pytest.fixture
+def app(session_test_db_path):
+    """Create and configure a test app instance."""
+
+    # Configure test app with session database
     test_config = {
         'TESTING': True,
-        'DATABASE_PATH': test_db_path,
+        'DATABASE_PATH': session_test_db_path,
         'SECRET_KEY': 'test-secret-key',
         'ADMIN_TOKEN': 'test-admin-token',
         'CACHE_TYPE': 'SimpleCache',

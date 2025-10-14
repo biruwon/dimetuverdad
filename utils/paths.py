@@ -25,7 +25,7 @@ def get_project_root() -> Path:
     """Get the project root directory."""
     return Path(__file__).resolve().parent.parent
 
-def get_db_path(env: Optional[str] = None, test_mode: bool = False) -> str:
+def get_db_path(env: Optional[str] = None) -> str:
     """Get the database file path for the specified environment."""
     if env is None:
         env = config.get_environment()
