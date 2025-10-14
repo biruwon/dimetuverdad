@@ -38,9 +38,9 @@ DB_CHECK_SAME_THREAD = os.environ.get('DB_CHECK_SAME_THREAD', 'False').lower() =
 
 # Flask-Caching configuration - disabled for development/testing, enabled for production
 if config.is_production():
-    CACHE_TYPE = 'SimpleCache'
+    CACHE_TYPE = 'flask_caching.backends.SimpleCache'
 else:
-    CACHE_TYPE = 'null'  # Disabled for development/testing
+    CACHE_TYPE = 'flask_caching.backends.NullCache'  # Disabled for development/testing
 CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', '300'))  # 5 minutes
 
 # =============================================================================

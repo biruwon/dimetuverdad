@@ -437,7 +437,7 @@ When working on this codebase, prioritize understanding the multi-stage analysis
    - `fetcher/db.py` → `fetcher/tests/test_db.py`
    - `fetcher/parsers.py` → `fetcher/tests/test_parsers.py`
    - `fetch_tweets.py` → `fetcher/tests/test_fetch_tweets.py`
-   - `analyzer.py` → `tests/test_analyzer.py` (project root)
+   - `analyzer.py` → `tests/test_analyze_twitter.py` (project root)
 
 2. **NO FRAGMENTED TESTS**: Never create multiple test files for the same module
    - ❌ `test_parsers.py`, `test_parsers_additional.py`, `test_parsers_more.py`

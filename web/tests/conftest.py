@@ -75,7 +75,7 @@ def app(session_test_db_path):
         'DATABASE_PATH': session_test_db_path,
         'SECRET_KEY': 'test-secret-key',
         'ADMIN_TOKEN': 'test-admin-token',
-        'CACHE_TYPE': 'SimpleCache',
+        'CACHE_TYPE': 'flask_caching.backends.SimpleCache',
         'CACHE_DEFAULT_TIMEOUT': 300,
         'DB_TIMEOUT': 30.0,
         'DB_CHECK_SAME_THREAD': False
@@ -222,17 +222,34 @@ def sample_tweet_data():
     }
 
 
-@pytest.fixture
-def sample_account_data():
-    """Sample account data for testing."""
-    return {
-        'username': 'testuser',
-        'tweet_count': 100,
-        'problematic_posts': 5,
-        'analyzed_posts': 95,
-        'profile_pic_url': 'https://example.com/avatar.jpg',
-        'last_activity': '2024-01-01 12:00:00'
-    }
+@pytest.fixture(autouse=True)
+def cleanup_session_db_tables(session_test_db_path):
+    """Clean up database tables between tests to ensure test isolation."""
+    # Truncate all tables to ensure clean state between tests
+    import sqlite3
+    conn = sqlite3.connect(session_test_db_path)
+    try:
+        cursor = conn.cursor()
+        # Disable foreign key checks temporarily
+        cursor.execute("PRAGMA foreign_keys = OFF")
+
+        # Get all table names
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        tables = cursor.fetchall()
+
+        # Truncate all tables
+        for table in tables:
+            table_name = table[0]
+            cursor.execute(f"DELETE FROM {table_name}")
+
+        # Reset auto-increment counters
+        cursor.execute("DELETE FROM sqlite_sequence")
+
+        # Re-enable foreign key checks
+        cursor.execute("PRAGMA foreign_keys = ON")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 class TestHelpers:
