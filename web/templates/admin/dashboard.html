@@ -140,6 +140,7 @@
                         <form method="POST" action="{{ url_for('admin.admin_fetch') }}" class="mb-3">
                             <div class="input-group mb-2">
                                 <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
+                                <input type="number" name="max" class="form-control" placeholder="Máx. tweets (opcional)" min="1" max="10000">
                                 <input type="hidden" name="action" value="fetch_only">
                                 <button type="submit" class="btn btn-outline-secondary" onclick="return confirm('Esto obtendrá tweets del usuario especificado SIN analizarlos.\n\n• Si el usuario ya existe: obtendrá solo contenido nuevo\n• Si es nuevo: obtendrá todo el historial disponible\n\n¿Continuar?')">
                                     <i class="fas fa-download me-1"></i>Obtener Solo Datos
@@ -151,6 +152,7 @@
                         <form method="POST" action="{{ url_for('admin.admin_fetch') }}" class="mb-3">
                             <div class="input-group mb-2">
                                 <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
+                                <input type="number" name="max" class="form-control" placeholder="Máx. tweets (opcional)" min="1" max="10000">
                                 <input type="hidden" name="action" value="fetch_and_analyze">
                                 <button type="submit" class="btn btn-outline-primary" onclick="return confirm('Esto obtendrá tweets del usuario especificado Y los analizará automáticamente.\n\n• Si el usuario ya existe: obtendrá solo contenido nuevo\n• Si es nuevo: obtendrá todo el historial disponible\n• Se analizarán automáticamente los tweets obtenidos\n\n¿Continuar?')">
                                     <i class="fas fa-user-plus me-1"></i>Obtener y Analizar

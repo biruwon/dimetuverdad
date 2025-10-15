@@ -18,7 +18,210 @@ from utils import paths
 from utils.config import config
 
 # Direct import of schema creation function for tests
-from scripts.init_database import create_fresh_database_schema
+# from scripts.init_database import create_fresh_database_schema  # Circular import - removed
+
+def create_fresh_database_schema(db_path: str):
+    """Create a clean database schema for the specified path."""
+    print(f"🏗️  Creating fresh database schema at {db_path}...")
+
+    # Create connection directly to the target database
+    conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+
+    try:
+        # Core accounts table (multi-platform support)
+        print("  📝 Creating accounts table...")
+        c.execute('''
+            CREATE TABLE accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                platform TEXT DEFAULT 'twitter',  -- Multi-platform support
+                profile_pic_url TEXT,
+                profile_pic_updated TIMESTAMP,
+                last_scraped TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Core tweets table (simplified)
+        print("  📝 Creating tweets table...")
+        c.execute('''
+            CREATE TABLE tweets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tweet_id TEXT UNIQUE NOT NULL,
+                tweet_url TEXT NOT NULL,
+                username TEXT NOT NULL,
+                content TEXT NOT NULL,
+
+                -- Post classification (simplified)
+                post_type TEXT DEFAULT 'original', -- original, repost_own, repost_other, repost_reply, thread
+                is_pinned INTEGER DEFAULT 0,
+
+                -- RT / embedded/referenced content data (only when needed)
+                original_author TEXT,     -- For reposts or referenced tweets
+                original_tweet_id TEXT,   -- For reposts or referenced tweets
+                original_content TEXT,    -- For reposts or referenced tweets (if different)
+                reply_to_username TEXT,   -- For replies
+
+                -- Media and content
+                media_links TEXT,         -- Comma-separated URLs
+                media_count INTEGER DEFAULT 0,
+                hashtags TEXT,           -- JSON array
+                mentions TEXT,           -- JSON array
+                external_links TEXT,     -- JSON array
+
+                -- Basic engagement (optional)
+                engagement_likes INTEGER DEFAULT 0,
+                engagement_retweets INTEGER DEFAULT 0,
+                engagement_replies INTEGER DEFAULT 0,
+
+                -- Essential status tracking
+                is_deleted INTEGER DEFAULT 0,
+                is_edited INTEGER DEFAULT 0,
+
+                -- RT optimization
+                rt_original_analyzed INTEGER DEFAULT 0, -- Avoid duplicate analysis
+
+                -- Timestamps (minimal)
+                tweet_timestamp TEXT,
+                scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (username) REFERENCES accounts (username)
+            )
+        ''')
+
+        # Content analysis results (platform-agnostic)
+        print("  📝 Creating content_analyses table...")
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS content_analyses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id TEXT UNIQUE NOT NULL,
+            post_url TEXT,
+            author_username TEXT,
+            platform TEXT DEFAULT 'twitter',
+            post_content TEXT,
+            category TEXT,
+            categories_detected TEXT,
+            local_explanation TEXT,
+            external_explanation TEXT,
+            analysis_stages TEXT,
+            external_analysis_used BOOLEAN DEFAULT FALSE,
+            analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            analysis_json TEXT,
+            pattern_matches TEXT,
+            topic_classification TEXT,
+            media_urls TEXT,
+            media_type TEXT,
+            multimodal_analysis BOOLEAN DEFAULT FALSE,
+            verification_data TEXT,
+            verification_confidence REAL DEFAULT 0.0
+        )
+        ''')
+
+        # Post edits detection (renamed for clarity - tracks post content changes)
+        print("  📝 Creating post_edits table...")
+        c.execute('''
+            CREATE TABLE post_edits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                post_id TEXT NOT NULL,
+                version_number INTEGER NOT NULL,
+                previous_content TEXT NOT NULL,
+                detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (post_id) REFERENCES tweets (tweet_id),
+                UNIQUE(post_id, version_number)
+            )
+        ''')
+
+        # User feedback table for model improvement (platform-agnostic)
+        print("  📝 Creating user_feedback table...")
+        c.execute('''
+            CREATE TABLE user_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                post_id TEXT NOT NULL,          -- Platform-agnostic post identifier
+                feedback_type TEXT NOT NULL,    -- 'correction', 'flag', 'improvement'
+                original_category TEXT,
+                corrected_category TEXT,
+                user_comment TEXT,
+                user_ip TEXT,                   -- For rate limiting and analytics
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                FOREIGN KEY (post_id) REFERENCES tweets (tweet_id)
+            )
+        ''')
+
+        # Platforms table for multi-platform support (hierarchical)
+        print("  📝 Creating platforms table...")
+        c.execute('''
+            CREATE TABLE platforms (
+                platform_id TEXT PRIMARY KEY,
+                category TEXT NOT NULL,  -- 'social_media', 'messenger', 'news', etc.
+                name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                description TEXT,
+                api_base_url TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Populate platforms table with defaults
+        print("  📝 Populating platforms table...")
+        platforms_data = [
+            ('twitter', 'social_media', 'Twitter', 'Twitter/X', 'Social media platform for short-form content', 'https://twitter.com'),
+            ('telegram', 'messenger', 'Telegram', 'Telegram', 'Messaging platform with channels and groups', 'https://telegram.org'),
+            ('news', 'news', 'News', 'News Sources', 'Newspaper and news website sources', None),
+        ]
+
+        c.executemany('''
+            INSERT INTO platforms (platform_id, category, name, display_name, description, api_base_url)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', platforms_data)
+
+        # Performance indexes
+        print("  📝 Creating indexes...")
+        indexes = [
+            ('idx_tweets_username', 'tweets', 'username'),
+            ('idx_tweets_post_type', 'tweets', 'post_type'),
+            ('idx_tweets_timestamp', 'tweets', 'scraped_at'),
+            ('idx_tweets_tweet_timestamp', 'tweets', 'tweet_timestamp'),
+            ('idx_tweets_deleted', 'tweets', 'is_deleted'),
+            ('idx_tweets_edited', 'tweets', 'is_edited'),
+            ('idx_analyses_post', 'content_analyses', 'post_id'),
+            ('idx_analyses_category', 'content_analyses', 'category'),
+            ('idx_analyses_author', 'content_analyses', 'author_username'),
+            ('idx_analyses_platform', 'content_analyses', 'platform'),
+            ('idx_content_analyses_timestamp', 'content_analyses', 'analysis_timestamp'),
+            ('idx_content_analyses_stages', 'content_analyses', 'analysis_stages'),
+            ('idx_content_analyses_external', 'content_analyses', 'external_analysis_used'),
+            ('idx_content_analyses_multimodal', 'content_analyses', 'multimodal_analysis'),
+            ('idx_post_edits_post', 'post_edits', 'post_id'),
+            ('idx_user_feedback_post', 'user_feedback', 'post_id'),
+            ('idx_user_feedback_type', 'user_feedback', 'feedback_type'),
+            ('idx_user_feedback_submitted', 'user_feedback', 'submitted_at'),
+            ('idx_platforms_name', 'platforms', 'name')
+        ]
+
+        for idx_name, table, columns in indexes:
+            c.execute(f'CREATE INDEX {idx_name} ON {table}({columns})')
+
+        print(f"    ✅ Created {len(indexes)} performance indexes")
+
+        conn.commit()
+        print("✅ Clean database schema created successfully!")
+
+        # Show summary
+        c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row['name'] for row in c.fetchall()]
+        print(f"📊 Created {len(tables)} tables: {', '.join(tables)}")
+
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Database creation failed: {e}")
+        raise
+    finally:
+        conn.close()
 
 # Thread-local storage for database connections
 _local = threading.local()

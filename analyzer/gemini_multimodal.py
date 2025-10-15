@@ -456,11 +456,11 @@ class GeminiMultimodal:
 
     def analyze_multimodal_content(self, media_urls: List[str], text_content: str) -> Tuple[Optional[str], float]:
         """
-        Analyze multimodal content (images/videos + text) using Gemini models with fallback.
+        Analyze multimodal content (images/videos + text) or text-only content using Gemini models with fallback.
 
         Args:
-            media_urls: List of media URLs to analyze
-            text_content: Text content accompanying the media
+            media_urls: List of media URLs to analyze (empty list for text-only)
+            text_content: Text content to analyze
 
         Returns:
             Tuple of (analysis_result, analysis_time_seconds)
@@ -470,16 +470,13 @@ class GeminiMultimodal:
 
         # Record analysis start
         self.dependencies.metrics_collector.record_operation(
-            "analysis_start", 0.0, True, media_count=len(media_urls)
+            "analysis_start", 0.0, True, media_count=len(media_urls) if media_urls else 0
         )
 
+        # Check if this is text-only analysis (no media URLs)
         if not media_urls:
-            self.logger.warning("No media URLs provided")
-            self.dependencies.metrics_collector.record_operation(
-                "analysis_failure", time.time() - analysis_start_time, False,
-                error_category="no_media_urls"
-            )
-            return None, time.time() - analysis_start_time
+            self.logger.info("📝 Performing text-only analysis")
+            return self._analyze_text_only(text_content, analysis_start_time)
 
         # Filter out unwanted media
         filtered_urls = []
@@ -541,15 +538,123 @@ class GeminiMultimodal:
             # Clean up
             self._cleanup_file(media_path)
 
+    def _analyze_text_only(self, text_content: str, analysis_start_time: float) -> Tuple[Optional[str], float]:
+        """
+        Analyze text-only content using Gemini models with fallback and retries.
+
+        Args:
+            text_content: Text content to analyze
+            analysis_start_time: When analysis started (for timeout tracking)
+
+        Returns:
+            Tuple of (analysis_result, analysis_time_seconds)
+        """
+        try:
+            # Try each available model in priority order
+            available_models = self._get_available_models()
+            if not available_models:
+                self.logger.error("💔 No available models (all rate-limited)")
+                self.dependencies.metrics_collector.record_operation(
+                    "text_analysis_failure", time.time() - analysis_start_time, False,
+                    error_category="no_available_models"
+                )
+                return None, time.time() - analysis_start_time
+
+            for model_name in available_models:
+                # Check timeout
+                if time.time() - analysis_start_time > self.dependencies.config.analysis_timeout:
+                    self.logger.error("❌ Text analysis timeout exceeded")
+                    self.dependencies.metrics_collector.record_operation(
+                        "text_analysis_failure", time.time() - analysis_start_time, False,
+                        error_category="timeout"
+                    )
+                    return None, time.time() - analysis_start_time
+
+                result = self._try_text_model_analysis(model_name, text_content)
+                if result:
+                    # Mark model as successful
+                    self._mark_model_success(model_name)
+                    total_time = time.time() - analysis_start_time
+                    self.dependencies.metrics_collector.record_operation(
+                        "text_analysis_success", total_time, True,
+                        model_used=model_name
+                    )
+                    return result, total_time
+
+            # All available models failed
+            self.logger.error("💔 All available models failed for text analysis")
+            self.dependencies.metrics_collector.record_operation(
+                "text_analysis_failure", time.time() - analysis_start_time, False,
+                error_category="all_models_failed"
+            )
+            return None, time.time() - analysis_start_time
+
+        except Exception as e:
+            error = classify_error(e, "text analysis")
+            self.logger.error(f"❌ Text analysis failed: {error}")
+            self.dependencies.metrics_collector.record_operation(
+                "text_analysis_failure", time.time() - analysis_start_time, False,
+                error_category=error.category.value
+            )
+            return None, time.time() - analysis_start_time
+
+    def _try_text_model_analysis(self, model_name: str, text_content: str) -> Optional[str]:
+        """
+        Try text-only analysis with a specific model.
+
+        Args:
+            model_name: Name of the model to use
+            text_content: Text content to analyze
+
+        Returns:
+            Analysis result or None if failed
+        """
+        try:
+            self.logger.info(f"🔄 Trying text model: {model_name}")
+
+            # Get Gemini client
+            model, error = self._get_gemini_client(model_name)
+            if not model:
+                self.logger.error(f"❌ Failed to initialize {model_name}: {error}")
+                return None
+
+            # Build text-only analysis prompt
+            prompt = EnhancedPromptGenerator.build_gemini_analysis_prompt(text_content, is_video=False)
+
+            # Use ThreadPoolExecutor with timeout for text generation
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(model.generate_content, prompt)
+                try:
+                    response = future.result(timeout=60.0)
+                    if response and response.text:
+                        self.logger.info(f"✅ {model_name} text analysis completed")
+                        return response.text
+                    else:
+                        self.logger.warning(f"⚠️ {model_name} returned empty response")
+                        return None
+                except TimeoutError:
+                    self.logger.warning(f"⏰ {model_name} text analysis timed out")
+                    future.cancel()
+                    return None
+
+        except Exception as e:
+            error = classify_error(e, f"text {model_name} analysis")
+
+            # Check if this is a rate limiting error
+            if error.category == ErrorCategory.QUOTA_ERROR:
+                self._mark_model_rate_limited(model_name)
+
+            self.logger.error(f"❌ {error}")
+            return None
+
     async def analyze_multimodal_content_async(self, media_urls: List[str], text_content: str) -> Tuple[Optional[str], float]:
         """
         Async version of analyze_multimodal_content with concurrent processing.
-
-        This method can process multiple media URLs concurrently for better performance.
+        Supports both multimodal and text-only analysis.
 
         Args:
-            media_urls: List of media URLs to analyze
-            text_content: Text content accompanying the media
+            media_urls: List of media URLs to analyze (empty list for text-only)
+            text_content: Text content to analyze
 
         Returns:
             Tuple of (analysis_result, analysis_time_seconds)
@@ -559,16 +664,18 @@ class GeminiMultimodal:
 
         # Record analysis start
         self.dependencies.metrics_collector.record_operation(
-            "async_analysis_start", 0.0, True, media_count=len(media_urls)
+            "async_analysis_start", 0.0, True, media_count=len(media_urls) if media_urls else 0
         )
 
+        # Check if this is text-only analysis (no media URLs)
         if not media_urls:
-            self.logger.warning("No media URLs provided")
-            self.dependencies.metrics_collector.record_operation(
-                "async_analysis_failure", time.time() - analysis_start_time, False,
-                error_category="no_media_urls"
+            self.logger.info("📝 Performing async text-only analysis")
+            # Run text analysis in thread pool since it's sync
+            loop = asyncio.get_event_loop()
+            result, time_taken = await loop.run_in_executor(
+                None, self._analyze_text_only, text_content, analysis_start_time
             )
-            return None, time.time() - analysis_start_time
+            return result, time_taken
 
         # Filter out unwanted media
         filtered_urls = []

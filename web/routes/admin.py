@@ -186,6 +186,7 @@ def admin_dashboard() -> str:
 def admin_fetch() -> str:
     """Fetch tweets from a user, optionally with analysis."""
     username = request.form.get('username')
+    max_tweets = request.form.get('max')
     action = request.form.get('action', 'fetch_and_analyze')  # Default to fetch and analyze
 
     if not username:
@@ -211,6 +212,16 @@ def admin_fetch() -> str:
                 # User doesn't exist, fetch all history
                 cmd = ["./run_in_venv.sh", "fetch", "--refetch-all", username]
                 strategy = "complete history"
+
+            # Add max parameter if provided
+            if max_tweets and max_tweets.strip():
+                try:
+                    max_val = int(max_tweets.strip())
+                    if max_val > 0:
+                        cmd.extend(["--max", str(max_val)])
+                        strategy += f" (max {max_val} tweets)"
+                except ValueError:
+                    admin_bp.logger.warning(f"Invalid max_tweets value: {max_tweets}")
 
             result = subprocess.run(cmd, cwd=base_dir, check=True, timeout=config.get_command_timeout('fetch'))  # 10 minute timeout for fetch
             admin_bp.logger.info(f"User fetch completed for @{username} ({strategy})")

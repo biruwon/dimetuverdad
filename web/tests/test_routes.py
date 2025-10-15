@@ -5,6 +5,7 @@ Comprehensive testing for all Flask application routes and endpoints.
 
 import pytest
 import sqlite3
+import os
 from unittest.mock import Mock, patch, MagicMock
 from web.tests.conftest import TestHelpers, MockRow
 from utils.database import get_db_connection_context
@@ -297,38 +298,50 @@ class TestAPIEndpoints:
         assert data['analyzed'] == True
         assert data['category'] == 'general'
 
-    def test_usernames_api_requires_auth(self, client, app):
+    def test_usernames_api_requires_auth(self, client, app, session_test_db_path):
         """Test usernames API endpoint (no auth required)."""
         # Set up test data with accounts first (FK constraint)
         with app.app_context():
-            with get_db_connection_context() as conn:
-                # Create accounts first
-                TestHelpers.create_test_account(conn, {
-                    'username': 'user1',
-                    'profile_pic_url': 'https://example.com/user1.jpg',
-                    'last_activity': '2024-01-01 12:00:00'
-                })
-                TestHelpers.create_test_account(conn, {
-                    'username': 'user2',
-                    'profile_pic_url': 'https://example.com/user2.jpg',
-                    'last_activity': '2024-01-01 13:00:00'
-                })
-                
-                # Create test tweets to populate usernames
-                TestHelpers.create_test_tweet(conn, {
-                    'tweet_id': '1111111111',
-                    'content': 'Test tweet 1',
-                    'username': 'user1',
-                    'tweet_timestamp': '2024-01-01 12:00:00',
-                    'tweet_url': 'https://twitter.com/user1/status/1111111111'
-                })
-                TestHelpers.create_test_tweet(conn, {
-                    'tweet_id': '2222222222',
-                    'content': 'Test tweet 2',
-                    'username': 'user2',
-                    'tweet_timestamp': '2024-01-01 13:00:00',
-                    'tweet_url': 'https://twitter.com/user2/status/2222222222'
-                })
+            # Override DATABASE_PATH for this test to ensure we use the correct database
+            import os
+            old_db_path = os.environ.get('DATABASE_PATH')
+            os.environ['DATABASE_PATH'] = session_test_db_path
+            
+            try:
+                with get_db_connection_context() as conn:
+                    # Create accounts first
+                    TestHelpers.create_test_account(conn, {
+                        'username': 'user1',
+                        'profile_pic_url': 'https://example.com/user1.jpg',
+                        'last_activity': '2024-01-01 12:00:00'
+                    })
+                    TestHelpers.create_test_account(conn, {
+                        'username': 'user2',
+                        'profile_pic_url': 'https://example.com/user2.jpg',
+                        'last_activity': '2024-01-01 13:00:00'
+                    })
+                    
+                    # Create test tweets to populate usernames
+                    TestHelpers.create_test_tweet(conn, {
+                        'tweet_id': '1111111111',
+                        'content': 'Test tweet 1',
+                        'username': 'user1',
+                        'tweet_timestamp': '2024-01-01 12:00:00',
+                        'tweet_url': 'https://twitter.com/user1/status/1111111111'
+                    })
+                    TestHelpers.create_test_tweet(conn, {
+                        'tweet_id': '2222222222',
+                        'content': 'Test tweet 2',
+                        'username': 'user2',
+                        'tweet_timestamp': '2024-01-01 13:00:00',
+                        'tweet_url': 'https://twitter.com/user2/status/2222222222'
+                    })
+            finally:
+                # Restore original DATABASE_PATH
+                if old_db_path is not None:
+                    os.environ['DATABASE_PATH'] = old_db_path
+                elif 'DATABASE_PATH' in os.environ:
+                    del os.environ['DATABASE_PATH']
         
         response = client.get('/api/usernames')
         assert response.status_code == 200  # Endpoint exists and is public
@@ -383,29 +396,40 @@ class TestRateLimiting:
 class TestTemplateRendering:
     """Test template rendering and context."""
 
-    def test_user_template_context(self, client, app, sample_tweet_data):
+    def test_user_template_context(self, client, app, sample_tweet_data, session_test_db_path):
         """Test user template receives correct context."""
         # Use the test database that's already set up by the fixtures
         with app.app_context():
-            with get_db_connection_context() as conn:
-                # Create test account first
-                TestHelpers.create_test_account(conn, {
-                    'username': 'testuser',
-                    'profile_pic_url': 'https://example.com/avatar.jpg',
-                    'last_activity': '2024-01-01 12:00:00'
-                })
-                
-                # Create test tweet with analysis
-                TestHelpers.create_test_tweet(conn, {
-                    'tweet_id': '1234567890123456789',
-                    'content': 'Test tweet content for template context',
-                    'username': 'testuser',
-                    'tweet_timestamp': '2024-01-01 12:00:00',
-                    'tweet_url': 'https://twitter.com/testuser/status/1234567890123456789',
-                    'category': 'general',
-                    'local_explanation': 'Test explanation',
-                    'analysis_stages': 'pattern'
-                })
+            # Override DATABASE_PATH environment variable to ensure we use the correct database
+            old_db_path = os.environ.get('DATABASE_PATH')
+            os.environ['DATABASE_PATH'] = session_test_db_path
+            
+            try:
+                with get_db_connection_context() as conn:
+                    # Create test account first
+                    TestHelpers.create_test_account(conn, {
+                        'username': 'testuser',
+                        'profile_pic_url': 'https://example.com/avatar.jpg',
+                        'last_activity': '2024-01-01 12:00:00'
+                    })
+                    
+                    # Create test tweet with analysis
+                    TestHelpers.create_test_tweet(conn, {
+                        'tweet_id': '1234567890123456789',
+                        'content': 'Test tweet content for template context',
+                        'username': 'testuser',
+                        'tweet_timestamp': '2024-01-01 12:00:00',
+                        'tweet_url': 'https://twitter.com/testuser/status/1234567890123456789',
+                        'category': 'general',
+                        'local_explanation': 'Test explanation',
+                        'analysis_stages': 'pattern'
+                    })
+            finally:
+                # Restore original DATABASE_PATH environment variable
+                if old_db_path is not None:
+                    os.environ['DATABASE_PATH'] = old_db_path
+                else:
+                    os.environ.pop('DATABASE_PATH', None)
 
         response = client.get('/user/testuser')
         assert response.status_code == 200

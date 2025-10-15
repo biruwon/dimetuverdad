@@ -470,6 +470,237 @@ curl -f http://localhost:5000/health || echo "Health check failed"
 curl http://localhost:11434/api/tags
 ```
 
+## Database Queries and Analysis
+
+### Database Overview
+
+The system uses SQLite with two main tables:
+- **`tweets`**: Raw tweet data collected from Twitter/X
+- **`content_analyses`**: Analysis results and classifications
+
+### Useful Database Queries
+
+#### Basic Statistics
+
+```sql
+-- Total tweets and analyses
+SELECT 
+    (SELECT COUNT(*) FROM tweets) as total_tweets,
+    (SELECT COUNT(*) FROM content_analyses) as total_analyses,
+    ROUND((SELECT COUNT(*) FROM content_analyses) * 100.0 / (SELECT COUNT(*) FROM tweets), 1) as analysis_coverage_percent;
+
+-- Top 10 users by tweet count
+SELECT username, COUNT(*) as tweet_count 
+FROM tweets 
+GROUP BY username 
+ORDER BY tweet_count DESC 
+LIMIT 10;
+```
+
+#### Content Analysis Statistics
+
+```sql
+-- Category distribution
+SELECT category, COUNT(*) as count 
+FROM content_analyses 
+WHERE category IS NOT NULL 
+GROUP BY category 
+ORDER BY count DESC;
+
+-- Analysis stages usage
+SELECT analysis_stages, COUNT(*) as count 
+FROM content_analyses 
+WHERE analysis_stages IS NOT NULL 
+GROUP BY analysis_stages 
+ORDER BY count DESC;
+
+-- External analysis usage
+SELECT 
+    CASE WHEN external_analysis_used = 1 THEN 'Used' ELSE 'Not used' END as external_analysis_status,
+    COUNT(*) as count,
+    ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM content_analyses), 1) as percentage
+FROM content_analyses 
+GROUP BY external_analysis_used;
+```
+
+#### Media Analysis Statistics
+
+```sql
+-- Media content statistics
+SELECT 
+    (SELECT COUNT(*) FROM tweets WHERE media_count > 0) as tweets_with_media,
+    (SELECT COUNT(*) FROM tweets) as total_tweets,
+    ROUND((SELECT COUNT(*) FROM tweets WHERE media_count > 0) * 100.0 / (SELECT COUNT(*) FROM tweets), 1) as media_percentage,
+    (SELECT COUNT(*) FROM content_analyses WHERE multimodal_analysis = 1) as multimodal_analyses;
+
+-- Media types distribution
+SELECT media_type, COUNT(*) as count 
+FROM content_analyses 
+WHERE media_type IS NOT NULL AND media_type != '' 
+GROUP BY media_type 
+ORDER BY count DESC;
+```
+
+#### Specific Tweet Investigation
+
+```sql
+-- Check specific tweet details (replace '1935239994274370004' with actual tweet ID)
+SELECT tweet_id, username, content, media_count, media_links 
+FROM tweets 
+WHERE tweet_id = '1935239994274370004';
+
+-- Check analysis details for specific tweet
+SELECT author_username, category, external_explanation, multimodal_analysis, analysis_stages, media_urls 
+FROM content_analyses 
+WHERE post_id = '1935239994274370004';
+```
+
+#### Recent Activity and Errors
+
+```sql
+-- Recent analyses (last 24 hours)
+SELECT 
+    COUNT(*) as analyses_last_24h,
+    MAX(analysis_timestamp) as latest_analysis
+FROM content_analyses 
+WHERE analysis_timestamp > datetime('now', '-1 day');
+
+-- Failed analyses (no category assigned)
+SELECT COUNT(*) as analyses_without_category
+FROM content_analyses 
+WHERE category IS NULL OR category = '';
+
+-- Analyses with error indicators in explanations
+SELECT COUNT(*) as analyses_with_errors
+FROM content_analyses 
+WHERE external_explanation LIKE '%error%' 
+   OR external_explanation LIKE '%failed%'
+   OR external_explanation LIKE '%Error%'
+   OR external_explanation LIKE '%Failed%';
+```
+
+#### Performance Analysis
+
+```sql
+-- Daily analysis counts (last 7 days)
+SELECT 
+    DATE(analysis_timestamp) as analysis_date, 
+    COUNT(*) as daily_count
+FROM content_analyses 
+WHERE analysis_timestamp >= date('now', '-7 days')
+GROUP BY DATE(analysis_timestamp) 
+ORDER BY analysis_date DESC;
+
+-- Analysis stages performance
+SELECT 
+    analysis_stages, 
+    COUNT(*) as count,
+    ROUND(AVG(LENGTH(external_explanation)), 0) as avg_explanation_length
+FROM content_analyses 
+WHERE analysis_stages IS NOT NULL
+GROUP BY analysis_stages;
+```
+
+### Advanced Queries
+
+#### Cross-table Analysis
+
+```sql
+-- Tweets with media that weren't analyzed with multimodal
+SELECT 
+    t.tweet_id, 
+    t.username, 
+    t.media_count, 
+    CASE WHEN ca.multimodal_analysis = 1 THEN 'Yes' ELSE 'No' END as multimodal_analysis,
+    ca.category
+FROM tweets t
+LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
+WHERE t.media_count > 0 
+  AND (ca.multimodal_analysis = 0 OR ca.multimodal_analysis IS NULL)
+LIMIT 10;
+
+-- Unanalyzed tweets
+SELECT 
+    t.tweet_id, 
+    t.username, 
+    t.content,
+    t.tweet_timestamp
+FROM tweets t
+LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
+WHERE ca.post_id IS NULL
+ORDER BY t.tweet_timestamp DESC
+LIMIT 20;
+```
+
+#### Pattern Matching Analysis
+
+```sql
+-- Most common pattern matches (requires JSON parsing)
+SELECT pattern_matches, COUNT(*) as frequency
+FROM content_analyses 
+WHERE pattern_matches IS NOT NULL 
+  AND pattern_matches != '[]'
+GROUP BY pattern_matches 
+ORDER BY frequency DESC 
+LIMIT 10;
+
+-- Categories by user
+SELECT 
+    ca.author_username,
+    ca.category,
+    COUNT(*) as count
+FROM content_analyses ca
+GROUP BY ca.author_username, ca.category
+ORDER BY ca.author_username, count DESC;
+```
+
+### Database Maintenance Queries
+
+```sql
+-- Check database integrity
+PRAGMA integrity_check;
+
+-- Analyze query performance
+PRAGMA analyze;
+
+-- Check table sizes
+SELECT 
+    name as table_name,
+    sql
+FROM sqlite_master 
+WHERE type = 'table';
+
+-- Get row counts for all tables
+SELECT 
+    'tweets' as table_name, COUNT(*) as row_count FROM tweets
+UNION ALL
+SELECT 
+    'content_analyses' as table_name, COUNT(*) as row_count FROM content_analyses;
+
+-- Database file information
+SELECT 
+    page_count * page_size as database_size_bytes,
+    ROUND(page_count * page_size / 1024.0 / 1024.0, 2) as database_size_mb
+FROM pragma_page_count(), pragma_page_size();
+```
+
+### Quick Reference Commands
+
+To connect to the database using SQLite CLI:
+```bash
+sqlite3 accounts.db
+```
+
+To run these queries:
+1. Open SQLite CLI: `sqlite3 accounts.db`
+2. Copy and paste any SQL query above
+3. Use `.quit` to exit SQLite CLI
+
+To export query results to CSV:
+```bash
+sqlite3 -header -csv accounts.db "SELECT * FROM tweets LIMIT 10;" > tweets_sample.csv
+```
+
 ## Getting Help
 
 ### Support Resources

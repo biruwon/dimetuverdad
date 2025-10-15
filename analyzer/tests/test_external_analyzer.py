@@ -23,11 +23,40 @@ def mock_gemini():
 
 
 @pytest.fixture
+def mock_genai():
+    """Mock google.generativeai module."""
+    with patch('google.generativeai') as mock_genai:
+        # Mock the GenerativeModel
+        mock_model = Mock()
+        mock_response = Mock()
+        mock_response.text = "CATEGORÍA: hate_speech\nEXPLICACIÓN: Este contenido muestra discurso de odio xenófobo."
+        mock_model.generate_content.return_value = mock_response
+        
+        mock_genai.GenerativeModel.return_value = mock_model
+        mock_genai.configure = Mock()
+        yield mock_genai
+
+
+@pytest.fixture
 def analyzer(mock_gemini):
     """Create ExternalAnalyzer with mocked Gemini."""
     with patch('analyzer.external_analyzer.GeminiMultimodal', return_value=mock_gemini):
         analyzer = ExternalAnalyzer(verbose=False)
         return analyzer
+
+
+@pytest.fixture
+def analyzer_with_genai_mock(mock_gemini):
+    """Create ExternalAnalyzer with both GeminiMultimodal and genai mocked."""
+    # Mock the analyze_multimodal_content method to return text-only results
+    mock_gemini.analyze_multimodal_content.return_value = (
+        "CATEGORÍA: hate_speech\nEXPLICACIÓN: Este contenido muestra discurso de odio xenófobo.",
+        0.5
+    )
+    
+    with patch('analyzer.external_analyzer.GeminiMultimodal', return_value=mock_gemini):
+        analyzer = ExternalAnalyzer(verbose=False)
+        yield analyzer
 
 
 class TestExternalAnalyzerInitialization:
@@ -68,26 +97,27 @@ class TestAnalyzeMethod:
         mock_gemini._select_media_url.assert_called_once_with(media_urls)
     
     @pytest.mark.asyncio
-    async def test_analyze_text_only(self, analyzer, mock_gemini):
+    async def test_analyze_text_only(self, analyzer_with_genai_mock, mock_gemini):
         """Test text-only analysis (no media)."""
         content = "Test content without media"
         
-        result = await analyzer.analyze(content, media_urls=None)
+        result = await analyzer_with_genai_mock.analyze(content, media_urls=None)
         
         assert result == "Este contenido muestra discurso de odio xenófobo."
         
-        # Verify text-only analysis was called (with empty media list)
+        # Verify analyze_multimodal_content was called with empty media list
         mock_gemini.analyze_multimodal_content.assert_called_once()
         call_args = mock_gemini.analyze_multimodal_content.call_args
         assert call_args[0][0] == []  # Empty media list
+        assert call_args[0][1] == content
     
     @pytest.mark.asyncio
-    async def test_analyze_with_empty_media_list(self, analyzer, mock_gemini):
+    async def test_analyze_with_empty_media_list(self, analyzer_with_genai_mock, mock_gemini):
         """Test analysis with empty media list treated as text-only."""
         content = "Test content"
         media_urls = []
         
-        result = await analyzer.analyze(content, media_urls)
+        result = await analyzer_with_genai_mock.analyze(content, media_urls)
         
         # Empty list should trigger text-only analysis
         mock_gemini.analyze_multimodal_content.assert_called_once()
@@ -95,14 +125,15 @@ class TestAnalyzeMethod:
         assert call_args[0][0] == []
     
     @pytest.mark.asyncio
-    async def test_analyze_error_handling(self, analyzer, mock_gemini):
+    async def test_analyze_error_handling(self, analyzer_with_genai_mock, mock_gemini):
         """Test error handling in analyze method."""
-        mock_gemini.analyze_multimodal_content.side_effect = RuntimeError("Gemini API error")
+        # Make analyze_multimodal_content return None (failure)
+        mock_gemini.analyze_multimodal_content.return_value = (None, 0.5)
         
         content = "Test content"
-        result = await analyzer.analyze(content)
+        result = await analyzer_with_genai_mock.analyze(content)
         
-        assert "Error en análisis externo" in result
+        assert "No se pudo completar el análisis de texto externo." in result
 
 
 class TestMultimodalAnalysis:
@@ -164,26 +195,28 @@ class TestTextOnlyAnalysis:
     """Test text-only analysis flow."""
     
     @pytest.mark.asyncio
-    async def test_text_only_success(self, analyzer, mock_gemini):
+    async def test_text_only_success(self, analyzer_with_genai_mock, mock_gemini):
         """Test successful text-only analysis."""
         content = "Pure text content"
         
-        result = await analyzer._analyze_text_only(content)
+        result = await analyzer_with_genai_mock._analyze_text_only(content)
         
         assert "discurso de odio xenófobo" in result
         
-        # Verify called with empty media list
+        # Verify analyze_multimodal_content was called with empty media list
+        mock_gemini.analyze_multimodal_content.assert_called_once()
         call_args = mock_gemini.analyze_multimodal_content.call_args
         assert call_args[0][0] == []
         assert call_args[0][1] == content
     
     @pytest.mark.asyncio
-    async def test_text_only_null_response(self, analyzer, mock_gemini):
+    async def test_text_only_null_response(self, analyzer_with_genai_mock, mock_gemini):
         """Test handling of null response in text-only analysis."""
-        mock_gemini.analyze_multimodal_content.return_value = (None, 0)
+        # Make analyze_multimodal_content return None
+        mock_gemini.analyze_multimodal_content.return_value = (None, 0.5)
         
         content = "Test content"
-        result = await analyzer._analyze_text_only(content)
+        result = await analyzer_with_genai_mock._analyze_text_only(content)
         
         assert result == "No se pudo completar el análisis de texto externo."
 

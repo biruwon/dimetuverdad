@@ -235,6 +235,8 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 
 **NEW FEATURES REQUIRE TESTS**: Every new feature, endpoint, function, or significant code change MUST include comprehensive tests before the feature is considered complete. No new functionality may be added without corresponding test coverage.
 
+**DOCUMENTATION CHANGES**: Documentation updates (.md files, comments, README files) do NOT require testing. Only run tests for actual code changes.
+
 **IMMEDIATE TESTING RULE**:
 - **EVERY CODE CHANGE** triggers immediate testing requirement
 - **NO EXCEPTIONS**: Functions, refactors, bug fixes, new features, config changes

@@ -186,31 +186,31 @@ def save_account_profile_info(conn, username: str, profile_pic_url: str = None):
 
 def init_db():
     """Initialize database with schema."""
-    from utils.database import get_db_connection_context
-    with get_db_connection_context() as conn:
-        c = conn.cursor()
-        
-        # The schema is already created by migrate_tweets_schema.py
-        # Just verify it exists
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tweets'")
-        if not c.fetchone():
-            print("❌ Tweets table not found! Run migrate_tweets_schema.py first.")
-            raise Exception("Database not properly initialized")
-        
-        print("✅ Database schema ready")
-        # Ensure scrape_errors table exists for logging errors during scraping
-        c.execute("""
-        CREATE TABLE IF NOT EXISTS scrape_errors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT,
-            tweet_id TEXT,
-            error TEXT,
-            context TEXT,
-            timestamp TEXT
-        )
-        """)
-        conn.commit()
-        return conn
+    from utils.database import get_db_connection
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    # The schema is already created by migrate_tweets_schema.py
+    # Just verify it exists
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tweets'")
+    if not c.fetchone():
+        print("❌ Tweets table not found! Run migrate_tweets_schema.py first.")
+        raise Exception("Database not properly initialized")
+    
+    print("✅ Database schema ready")
+    # Ensure scrape_errors table exists for logging errors during scraping
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS scrape_errors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        tweet_id TEXT,
+        error TEXT,
+        context TEXT,
+        timestamp TEXT
+    )
+    """)
+    conn.commit()
+    return conn
 
 
 def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:

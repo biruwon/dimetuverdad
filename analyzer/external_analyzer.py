@@ -5,6 +5,7 @@ Provides independent analysis without context from local analyzer.
 
 from typing import List, Optional
 import asyncio
+import os
 
 from .gemini_multimodal import GeminiMultimodal
 from .categories import Categories
@@ -96,7 +97,7 @@ class ExternalAnalyzer:
     
     async def _analyze_text_only(self, content: str) -> str:
         """
-        Analyze text-only content using Gemini.
+        Analyze text-only content using Gemini multimodal infrastructure.
         
         Args:
             content: Text content to analyze
@@ -104,13 +105,10 @@ class ExternalAnalyzer:
         Returns:
             Text-based explanation from Gemini
         """
-        # For text-only, we can use Gemini's text generation capabilities
-        # This would require adding a text-only method to GeminiMultimodal
-        # For now, we'll use the multimodal endpoint with no media
-        
+        # Use the same robust infrastructure as multimodal analysis
         analysis_result, analysis_time = await asyncio.to_thread(
             self.gemini.analyze_multimodal_content,
-            [],  # No media URLs
+            [],  # Empty media list for text-only
             content
         )
         

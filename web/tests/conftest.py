@@ -78,10 +78,21 @@ def app(session_test_db_path):
         'DB_CHECK_SAME_THREAD': False
     }
 
+    # Set DATABASE_PATH environment variable to ensure it takes precedence
+    # over any global DATABASE_PATH set by other test modules
+    old_db_path = os.environ.get('DATABASE_PATH')
+    os.environ['DATABASE_PATH'] = session_test_db_path
+
     flask_app = create_app()
     flask_app.config.update(test_config)
 
     yield flask_app
+
+    # Restore original DATABASE_PATH if it existed
+    if old_db_path is not None:
+        os.environ['DATABASE_PATH'] = old_db_path
+    elif 'DATABASE_PATH' in os.environ:
+        del os.environ['DATABASE_PATH']
 @pytest.fixture
 def client(app):
     """A test client for the app."""
