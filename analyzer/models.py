@@ -21,13 +21,14 @@ class ContentAnalysis:
     category: str  # Primary category
     categories_detected: List[str] = None  # All detected categories
 
-    # Analysis results
-    llm_explanation: str = ""
-    analysis_method: str = "pattern"  # "pattern", "llm", or "gemini"
+    # Dual analysis results
+    local_explanation: str = ""        # Local LLM explanation (gpt-oss:20b)
+    external_explanation: str = ""     # External LLM explanation (Gemini, optional)
+    analysis_stages: str = ""          # Comma-separated stages executed (e.g., "pattern,local_llm,external")
+    external_analysis_used: bool = False  # Whether external analysis was triggered
 
     # Media analysis fields
     media_urls: List[str] = None  # List of media URLs
-    media_analysis: str = ""      # Gemini multimodal analysis result
     media_type: str = ""          # "image", "video", or ""
     multimodal_analysis: bool = False  # Whether media was analyzed
 
@@ -62,3 +63,19 @@ class ContentAnalysis:
     def get_secondary_categories(self) -> List[str]:
         """Get all categories except the primary one."""
         return [cat for cat in self.categories_detected if cat != self.category]
+    
+    def get_best_explanation(self) -> str:
+        """
+        Get the best available explanation.
+        Prefers external over local, falls back to local if external not available.
+        """
+        if self.external_explanation and len(self.external_explanation.strip()) > 0:
+            return self.external_explanation
+        return self.local_explanation
+    
+    def has_dual_explanations(self) -> bool:
+        """Check if both local and external explanations are available."""
+        return (
+            len(self.local_explanation.strip()) > 0 and 
+            len(self.external_explanation.strip()) > 0
+        )

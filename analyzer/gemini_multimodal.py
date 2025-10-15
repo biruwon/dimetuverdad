@@ -809,6 +809,7 @@ class GeminiMultimodal:
     def _try_model_analysis(self, model_name: str, media_path: str, media_url: str,
                           text_content: str, is_video: bool) -> Optional[str]:
         """Try analysis with a specific model."""
+        media_file = None
         try:
             self.logger.info(f"🔄 Trying model: {model_name}")
 
@@ -818,7 +819,7 @@ class GeminiMultimodal:
                 self.logger.error(f"❌ Failed to initialize {model_name}: {error}")
                 return None
 
-            # Upload media
+            # Prepare media
             media_file = self._upload_media_to_gemini(model, media_path, media_url)
             if not media_file:
                 return None
@@ -848,10 +849,18 @@ class GeminiMultimodal:
 
             self.logger.error(f"❌ {error}")
             return None
+        finally:
+            # Clean up PIL Image if it was created
+            if media_file and hasattr(media_file, 'close'):
+                try:
+                    media_file.close()
+                except Exception:
+                    pass  # Ignore cleanup errors
 
     async def _try_model_analysis_async(self, model_name: str, media_path: str, media_url: str,
                                       text_content: str, is_video: bool) -> Optional[str]:
         """Try analysis with a specific model asynchronously."""
+        media_file = None
         try:
             self.logger.info(f"🔄 Trying model async: {model_name}")
 
@@ -865,7 +874,7 @@ class GeminiMultimodal:
                 self.logger.error(f"❌ Failed to initialize {model_name}: {error}")
                 return None
 
-            # Upload media (run in thread pool)
+            # Prepare media (run in thread pool)
             media_file = await loop.run_in_executor(
                 None, self._upload_media_to_gemini, model, media_path, media_url
             )
@@ -897,6 +906,13 @@ class GeminiMultimodal:
 
             self.logger.error(f"❌ {error}")
             return None
+        finally:
+            # Clean up PIL Image if it was created
+            if media_file and hasattr(media_file, 'close'):
+                try:
+                    media_file.close()
+                except Exception:
+                    pass  # Ignore cleanup errors
 
     def _get_gemini_client(self, model_name: str) -> Tuple[Optional[genai.GenerativeModel], Optional[str]]:
         """Get initialized Gemini client."""
@@ -908,29 +924,51 @@ class GeminiMultimodal:
             error = classify_error(e, f"client initialization ({model_name})")
             return None, str(error)
 
-    def _upload_media_to_gemini(self, client: genai.GenerativeModel, media_path: str, media_url: str) -> Optional[genai.types.File]:
-        """Upload media to Gemini."""
+    def _upload_media_to_gemini(self, client: genai.GenerativeModel, media_path: str, media_url: str) -> Optional[Any]:
+        """Prepare media for Gemini analysis.
+
+        For the direct Gemini API, we return the file path or PIL Image directly
+        instead of uploading to Vertex AI.
+        """
         try:
-            self.logger.info("📤 Uploading media to Gemini...")
-            media_file = genai.upload_file(media_path)
+            self.logger.info("📤 Preparing media for Gemini...")
 
-            # Wait for processing
-            max_wait = 60
-            start_wait = time.time()
-
-            while media_file.state.name == "PROCESSING" and (time.time() - start_wait) < max_wait:
-                time.sleep(1)
-                media_file = genai.get_file(media_file.name)
-
-            if media_file.state.name != "ACTIVE":
-                self.logger.error(f"❌ Media processing failed: {media_file.state.name}")
+            # Check if file exists and get its size
+            if not os.path.exists(media_path):
+                self.logger.error(f"❌ Media file does not exist: {media_path}")
                 return None
 
-            self.logger.info("✅ Media uploaded successfully")
-            return media_file
+            file_size = os.path.getsize(media_path)
+            if file_size == 0:
+                self.logger.error("❌ Media file is empty")
+                return None
+
+            # For images, we can return PIL Image or file path directly
+            if media_path.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp')):
+                try:
+                    from PIL import Image
+                    # Try to load as PIL Image for better compatibility
+                    image = Image.open(media_path)
+                    # Verify image can be loaded
+                    image.verify()
+                    image.close()
+                    # Reopen for use
+                    image = Image.open(media_path)
+                    self.logger.info("✅ Image prepared successfully")
+                    return image
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Could not load as PIL Image, using file path: {e}")
+                    # Fallback to file path
+                    self.logger.info("✅ Media file prepared successfully")
+                    return media_path
+
+            # For videos and other files, return the file path
+            # Gemini API can handle file paths directly for generate_content
+            self.logger.info("✅ Media file prepared successfully")
+            return media_path
 
         except Exception as e:
-            error = classify_error(e, "media upload")
+            error = classify_error(e, "media preparation")
             self.logger.error(f"❌ {error}")
             return None
 

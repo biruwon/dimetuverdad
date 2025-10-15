@@ -82,8 +82,8 @@
                     <small>Usuarios Únicos</small>
                 </div>
                 <div class="col-md-3">
-                    <h2 class="mb-1">{{ category_stats.llm_analyzed or 0 }}</h2>
-                    <small>Análisis LLM</small>
+                    <h2 class="mb-1">{{ category_stats.local_llm_analyzed or 0 }}</h2>
+                    <small>Análisis LLM Local</small>
                 </div>
                 <div class="col-md-3">
                     <h2 class="mb-1">{{ category_stats.pattern_analyzed or 0 }}</h2>
@@ -126,13 +126,21 @@
                                         <small class="text-muted">{{ tweet.tweet_timestamp[:19].replace('T', ' ') }}</small>
                                     </div>
                                     <div class="text-end">
-                                        <span class="badge analysis-badge bg-{{ 
-                                            'success' if tweet.analysis_method == 'llm' else 
-                                            'secondary' if tweet.analysis_method == 'pattern' else
-                                            'info' 
-                                        }}">
-                                            {{ 'LLM' if tweet.analysis_method == 'llm' else 'Patrones' if tweet.analysis_method == 'pattern' else tweet.analysis_method|title }}
-                                        </span>
+                                        {% if tweet.analysis_stages %}
+                                            {% if 'external' in tweet.analysis_stages %}
+                                                <span class="badge analysis-badge bg-success" title="Análisis externo con Gemini">
+                                                    <i class="fas fa-star me-1"></i>Gemini
+                                                </span>
+                                            {% elif 'local_llm' in tweet.analysis_stages %}
+                                                <span class="badge analysis-badge bg-info" title="Análisis local con LLM">
+                                                    <i class="fas fa-brain me-1"></i>LLM Local
+                                                </span>
+                                            {% elif 'pattern' in tweet.analysis_stages %}
+                                                <span class="badge analysis-badge bg-secondary" title="Detección por patrones">
+                                                    <i class="fas fa-search me-1"></i>Patrones
+                                                </span>
+                                            {% endif %}
+                                        {% endif %}
                                         {% if tweet.is_deleted %}
                                             <span class="badge bg-danger ms-1">
                                                 <i class="fas fa-trash me-1"></i>Eliminado
@@ -152,12 +160,12 @@
                                 </div>
 
                                 <!-- Analysis Explanation -->
-                                {% if tweet.llm_explanation %}
+                                {% if tweet.external_explanation or tweet.local_explanation %}
                                     <div class="border-top pt-3">
                                         <h6 class="text-primary mb-2">
                                             <i class="fas fa-robot me-1"></i>Análisis Automático
                                         </h6>
-                                        <p class="small mb-0">{{ tweet.llm_explanation }}</p>
+                                        <p class="small mb-0">{{ tweet.external_explanation or tweet.local_explanation }}</p>
                                     </div>
                                 {% endif %}
 

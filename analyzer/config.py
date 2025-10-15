@@ -18,9 +18,11 @@ class AnalyzerConfig:
     """
 
     # Core settings
-    use_llm: bool = ConfigDefaults.USE_LLM
-    model_priority: str = ConfigDefaults.MODEL_PRIORITY
     verbose: bool = ConfigDefaults.VERBOSE
+
+    # External analysis settings
+    enable_external_analysis: bool = True  # Auto-trigger for non-general/political_general categories
+    external_analysis_timeout: float = 120.0  # Timeout for external analysis (Gemini)
 
     # Performance settings
     max_retries: int = ConfigDefaults.MAX_RETRIES
@@ -49,6 +51,9 @@ class AnalyzerConfig:
 
         if self.analysis_timeout <= 0:
             raise ValueError("analysis_timeout must be positive")
+        
+        if self.external_analysis_timeout <= 0:
+            raise ValueError("external_analysis_timeout must be positive")
 
         if self.database_timeout <= 0:
             raise ValueError("database_timeout must be positive")
@@ -58,9 +63,6 @@ class AnalyzerConfig:
 
         if self.request_timeout <= 0:
             raise ValueError("request_timeout must be positive")
-
-        if self.model_priority not in ["fast", "balanced", "quality"]:
-            raise ValueError("model_priority must be one of: fast, balanced, quality")
 
         if self.max_concurrency <= 0:
             raise ValueError("max_concurrency must be positive")
@@ -75,9 +77,9 @@ class AnalyzerConfig:
     def to_dict(self) -> dict:
         """Convert configuration to dictionary."""
         return {
-            'use_llm': self.use_llm,
-            'model_priority': self.model_priority,
             'verbose': self.verbose,
+            'enable_external_analysis': self.enable_external_analysis,
+            'external_analysis_timeout': self.external_analysis_timeout,
             'max_retries': self.max_retries,
             'retry_delay': self.retry_delay,
             'analysis_timeout': self.analysis_timeout,

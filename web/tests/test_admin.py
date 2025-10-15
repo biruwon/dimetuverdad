@@ -3,9 +3,8 @@ Test Admin Functionality
 Comprehensive testing for admin-specific features and operations.
 """
 
-import pytest
-from unittest.mock import patch, Mock, call
-from web.tests.conftest import TestHelpers, MockRow
+from unittest.mock import patch, Mock
+from web.tests.conftest import MockRow
 
 
 class TestAdminEditAnalysis:
@@ -18,14 +17,17 @@ class TestAdminEditAnalysis:
 
     def test_edit_analysis_get_existing_tweet(self, admin_client, mock_database, sample_tweet_data):
         """Test GET request for editing existing tweet analysis."""
-        # Mock database to return tweet data (9 columns as per the actual query)
+        # Mock database to return tweet data with new dual explanation schema
         # Use MockRow (mapping-like) to reflect sqlite3.Row behavior
         mock_database.execute.return_value.fetchone.return_value = MockRow({
             'content': sample_tweet_data['content'],
             'username': sample_tweet_data['username'],
             'tweet_timestamp': sample_tweet_data['tweet_timestamp'],
             'category': sample_tweet_data['category'],
-            'llm_explanation': sample_tweet_data['llm_explanation'],
+            'local_explanation': sample_tweet_data.get('local_explanation', sample_tweet_data.get('llm_explanation', '')),
+            'external_explanation': sample_tweet_data.get('external_explanation', ''),
+            'analysis_stages': sample_tweet_data.get('analysis_stages', 'pattern'),
+            'external_analysis_used': sample_tweet_data.get('external_analysis_used', False),
             'tweet_url': sample_tweet_data['tweet_url'],
             'original_content': None,
             'verification_data': None,
@@ -122,7 +124,7 @@ class TestAdminCategoryViews:
 
     def test_category_view_existing_category(self, admin_client, mock_database):
         """Test viewing existing category."""
-        # Mock category data
+        # Mock category data with new dual explanation schema
         mock_database.execute.side_effect = [
             Mock(fetchone=Mock(return_value=MockRow({'cnt': 1}))),  # Category exists check (mapping)
             Mock(fetchone=Mock(return_value=MockRow({'cnt': 100}))),  # Total count (mapping)
@@ -134,15 +136,17 @@ class TestAdminCategoryViews:
                     'tweet_timestamp': '2024-01-01 12:00:00',
                     'tweet_id': '123',
                     'category': 'hate_speech',
-                    'llm_explanation': 'Test explanation',
-                    'analysis_method': 'pattern',
+                    'local_explanation': 'Test explanation',
+                    'external_explanation': '',
+                    'analysis_stages': 'pattern',
+                    'external_analysis_used': False,
                     'analysis_timestamp': '2024-01-01 12:00:00',
                     'is_deleted': False,
                     'is_edited': False,
                     'post_type': 'original'
                 })
             ])),  # Recent analyses
-            Mock(fetchone=Mock(return_value=MockRow({'llm_count': 50, 'pattern_count': 5, 'unique_users': 30}))),  # Category stats (mapping)
+            Mock(fetchone=Mock(return_value=MockRow({'local_llm_count': 50, 'external_count': 10, 'unique_users': 30}))),  # Category stats (mapping)
             Mock(fetchall=Mock(return_value=[
                 MockRow({'username': 'user1', 'tweet_count': 25}),
                 MockRow({'username': 'user2', 'tweet_count': 15})
@@ -166,7 +170,7 @@ class TestAdminCategoryViews:
             Mock(fetchone=Mock(return_value=MockRow({'cnt': 1}))),  # Category exists (mapping)
             Mock(fetchone=Mock(return_value=MockRow({'cnt': 100}))),  # Total count (mapping)
             Mock(fetchall=Mock(return_value=[])),  # Empty results for page 2
-            Mock(fetchone=Mock(return_value=MockRow({'llm_count': 50, 'pattern_count': 5, 'unique_users': 30}))),  # Category stats (mapping)
+            Mock(fetchone=Mock(return_value=MockRow({'local_llm_count': 50, 'external_count': 10, 'unique_users': 30}))),  # Category stats (mapping)
             Mock(fetchall=Mock(return_value=[]))  # Top users
         ]
 
@@ -238,8 +242,10 @@ class TestAdminExport:
                 'post_id': '1234567890',
                 'author_username': 'testuser',
                 'category': 'general',
-                'llm_explanation': 'Test explanation',
-                'analysis_method': 'pattern',
+                'local_explanation': 'Test explanation',
+                'external_explanation': '',
+                'analysis_stages': 'pattern',
+                'external_analysis_used': False,
                 'analysis_timestamp': '2024-01-01 12:00:00',
                 'tweet_content': 'Test content',
                 'tweet_url': 'https://twitter.com/test/status/123',
@@ -263,8 +269,10 @@ class TestAdminExport:
                 'post_id': '1234567890',
                 'author_username': 'testuser',
                 'category': 'general',
-                'llm_explanation': 'Test explanation',
-                'analysis_method': 'pattern',
+                'local_explanation': 'Test explanation',
+                'external_explanation': '',
+                'analysis_stages': 'pattern',
+                'external_analysis_used': False,
                 'analysis_timestamp': '2024-01-01 12:00:00',
                 'post_content': 'Test content',
                 'post_url': 'https://twitter.com/test/status/123',

@@ -294,7 +294,7 @@
                 {% endif %}
 
                 <div class="analysis-explanation">
-                    {{ analysis.llm_explanation[:400] }}{% if analysis.llm_explanation|length > 400 %}...{% endif %}
+                    {{ (analysis.external_explanation or analysis.local_explanation or '')[:400] }}{% if (analysis.external_explanation or analysis.local_explanation or '')|length > 400 %}...{% endif %}
                 </div>
 
                 <div class="actions">

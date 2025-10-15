@@ -398,7 +398,7 @@
                     <ul class="pagination justify-content-center">
                         {% if tweets_data.page > 1 %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ tweets_data.page - 1 }}{% if current_category %}&category={{ current_category }}{% endif %}{% if request.args.get('post_type') %}&post_type={{ request.args.get('post_type') }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if analysis_method %}&analysis_method={{ analysis_method }}{% endif %}">
+                            <a class="page-link" href="?page={{ tweets_data.page - 1 }}{% if current_category %}&category={{ current_category }}{% endif %}{% if request.args.get('post_type') %}&post_type={{ request.args.get('post_type') }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
                                 <i class="fas fa-chevron-left me-1"></i>Anterior
                             </a>
                         </li>
@@ -411,7 +411,7 @@
                             </li>
                             {% elif page_num <= 3 or page_num > tweets_data.total_pages - 3 or (page_num >= tweets_data.page - 1 and page_num <= tweets_data.page + 1) %}
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ page_num }}{% if current_category %}&category={{ current_category }}{% endif %}{% if request.args.get('post_type') %}&post_type={{ request.args.get('post_type') }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if analysis_method %}&analysis_method={{ analysis_method }}{% endif %}">{{ page_num }}</a>
+                                <a class="page-link" href="?page={{ page_num }}{% if current_category %}&category={{ current_category }}{% endif %}{% if request.args.get('post_type') %}&post_type={{ request.args.get('post_type') }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">{{ page_num }}</a>
                             </li>
                             {% elif page_num == 4 and tweets_data.page > 5 %}
                             <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -422,7 +422,7 @@
                         
                         {% if tweets_data.page < tweets_data.total_pages %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ tweets_data.page + 1 }}{% if current_category %}&category={{ current_category }}{% endif %}{% if request.args.get('post_type') %}&post_type={{ request.args.get('post_type') }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if analysis_method %}&analysis_method={{ analysis_method }}{% endif %}">
+                            <a class="page-link" href="?page={{ tweets_data.page + 1 }}{% if current_category %}&category={{ current_category }}{% endif %}{% if request.args.get('post_type') %}&post_type={{ request.args.get('post_type') }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
                                 Siguiente<i class="fas fa-chevron-right ms-1"></i>
                             </a>
                         </li>
@@ -554,45 +554,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Analysis Method Filter -->
-                                <div class="col-lg-6 col-xl-3 mb-3">
-                                    <h6 class="card-title mb-2">
-                                        <i class="fas fa-brain text-primary me-1"></i>
-                                        Método de Análisis
-                                    </h6>
-                                    <div class="d-flex flex-wrap gap-1">
-                                        {# Keep any existing category, post_type, or date filters when switching analysis_method #}
-                                        {% set base_qs = [] %}
-                                        {% if current_category %}
-                                            {% set base_qs = base_qs + ['category=' ~ current_category] %}
-                                        {% endif %}
-                                        {% if request.args.get('post_type') %}
-                                            {% set base_qs = base_qs + ['post_type=' ~ request.args.get('post_type')] %}
-                                        {% endif %}
-                                        {% if date_from %}
-                                            {% set base_qs = base_qs + ['date_from=' ~ date_from] %}
-                                        {% endif %}
-                                        {% if date_to %}
-                                            {% set base_qs = base_qs + ['date_to=' ~ date_to] %}
-                                        {% endif %}
-
-                                        {% set qs_prefix = '?' if base_qs|length == 0 else '?' ~ (base_qs|join('&')) ~ '&' %}
-
-                                        <a href="{{ qs_prefix }}analysis_method=all" class="btn btn-sm {% if not analysis_method or analysis_method == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}">
-                                            Todos
-                                        </a>
-                                        <a href="{{ qs_prefix }}analysis_method=pattern" class="btn btn-sm {% if analysis_method == 'pattern' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
-                                            <i class="fas fa-search me-1"></i>Patrones
-                                        </a>
-                                        <a href="{{ qs_prefix }}analysis_method=llm" class="btn btn-sm {% if analysis_method == 'llm' %}btn-success{% else %}btn-outline-success{% endif %}">
-                                            <i class="fas fa-robot me-1"></i>LLM
-                                        </a>
-                                        <a href="{{ qs_prefix }}analysis_method=manual" class="btn btn-sm {% if analysis_method == 'manual' %}btn-warning{% else %}btn-outline-warning{% endif %}">
-                                            <i class="fas fa-user-edit me-1"></i>Manual
-                                        </a>
-                                    </div>
-                                </div>
-
                                 <!-- Date Range Filter -->
                                 <div class="col-lg-6 col-xl-3 mb-3">
                                     <h6 class="card-title mb-2">
@@ -606,9 +567,6 @@
                                         {% endif %}
                                         {% if request.args.get('post_type') %}
                                             <input type="hidden" name="post_type" value="{{ request.args.get('post_type') }}">
-                                        {% endif %}
-                                        {% if analysis_method %}
-                                            <input type="hidden" name="analysis_method" value="{{ analysis_method }}">
                                         {% endif %}
                                         
                                         <div class="col-12">

@@ -54,40 +54,51 @@ class Tweet:
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
+        """Convert to dictionary for template rendering."""
         return {
-            'tweet_id': self.tweet_id,
-            'content': self.content,
-            'username': self.username,
-            'tweet_url': self.tweet_url,
-            'tweet_timestamp': self.tweet_timestamp,
-            'media_count': self.media_count,
-            'hashtags': self.hashtags,
-            'mentions': self.mentions,
-            'media_links': self.media_links,
-            'post_type': self.post_type,
-            'is_deleted': self.is_deleted,
-            'is_edited': self.is_edited,
-            'rt_original_analyzed': self.rt_original_analyzed,
-            'original_author': self.original_author,
-            'original_tweet_id': self.original_tweet_id,
-            'reply_to_username': self.reply_to_username,
-            'original_content': self.original_content
+            'tweet_url': self.tweet.tweet_url,
+            'content': self.tweet.content,
+            'media_links': self.tweet.media_links,
+            'hashtags_parsed': self.tweet.hashtags,
+            'mentions_parsed': self.tweet.mentions,
+            'tweet_timestamp': self.tweet.tweet_timestamp,
+            'post_type': self.tweet.post_type,
+            'tweet_id': self.tweet.tweet_id,
+            'analysis_category': self.category,
+            'local_explanation': self.local_explanation,
+            'external_explanation': self.external_explanation,
+            'best_explanation': self.best_explanation,
+            'has_dual_explanations': self.has_dual_explanations,
+            'analysis_stages': self.analysis_stages,
+            'external_analysis_used': self.external_analysis_used,
+            'analysis_timestamp': self.analysis.analysis_timestamp if self.analysis else '',
+            'categories_detected': self.categories_detected,
+            'multimodal_analysis': self.analysis.multimodal_analysis if self.analysis else False,
+            'is_deleted': self.tweet.is_deleted,
+            'is_edited': self.tweet.is_edited,
+            'rt_original_analyzed': self.tweet.rt_original_analyzed,
+            'original_author': self.tweet.original_author,
+            'original_tweet_id': self.tweet.original_tweet_id,
+            'reply_to_username': self.tweet.reply_to_username,
+            'post_status_warnings': self.post_status_warnings,
+            'is_rt': self.is_rt,
+            'rt_type': self.rt_type,
         }
 
 
 @dataclass
 class ContentAnalysis:
-    """Represents the analysis results for a tweet."""
+    """Represents the analysis results for a tweet with dual explanation architecture."""
     post_id: str
     category: str
-    llm_explanation: str
-    analysis_method: str
+    local_explanation: str
     author_username: str
     analysis_timestamp: str
+    external_explanation: Optional[str] = ''
+    analysis_stages: Optional[str] = ''
+    external_analysis_used: bool = False
     categories_detected: Optional[str] = None
     multimodal_analysis: bool = False
-    media_analysis: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> 'ContentAnalysis':
@@ -95,13 +106,14 @@ class ContentAnalysis:
         return cls(
             post_id=row['post_id'],
             category=row['category'] or 'general',
-            llm_explanation=row['llm_explanation'] or '',
-            analysis_method=row['analysis_method'] or 'unknown',
+            local_explanation=row['local_explanation'] or '',
+            external_explanation=row['external_explanation'] or '',
+            analysis_stages=row['analysis_stages'] or '',
+            external_analysis_used=bool(row['external_analysis_used']) if row['external_analysis_used'] is not None else False,
             author_username=row['author_username'] or '',
             analysis_timestamp=row['analysis_timestamp'] or '',
             categories_detected=row['categories_detected'],
-            multimodal_analysis=bool(row['multimodal_analysis']) if row['multimodal_analysis'] is not None else False,
-            media_analysis=row['media_analysis']
+            multimodal_analysis=bool(row['multimodal_analysis']) if row['multimodal_analysis'] is not None else False
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -109,13 +121,14 @@ class ContentAnalysis:
         return {
             'post_id': self.post_id,
             'category': self.category,
-            'llm_explanation': self.llm_explanation,
-            'analysis_method': self.analysis_method,
+            'local_explanation': self.local_explanation,
+            'external_explanation': self.external_explanation,
+            'analysis_stages': self.analysis_stages,
+            'external_analysis_used': self.external_analysis_used,
             'author_username': self.author_username,
             'analysis_timestamp': self.analysis_timestamp,
             'categories_detected': self.categories_detected,
-            'multimodal_analysis': self.multimodal_analysis,
-            'media_analysis': self.media_analysis
+            'multimodal_analysis': self.multimodal_analysis
         }
 
     @property
@@ -127,6 +140,21 @@ class ContentAnalysis:
             except (json.JSONDecodeError, TypeError):
                 pass
         return [self.category] if self.category else []
+    
+    @property
+    def best_explanation(self) -> str:
+        """Get the best available explanation (prefers external over local)."""
+        if self.external_explanation and len(self.external_explanation.strip()) > 0:
+            return self.external_explanation
+        return self.local_explanation
+    
+    @property
+    def has_dual_explanations(self) -> bool:
+        """Check if both local and external explanations are available."""
+        return (
+            len(self.local_explanation.strip()) > 0 and 
+            len(self.external_explanation.strip()) > 0
+        )
 
 
 @dataclass
@@ -206,8 +234,6 @@ class AnalysisStatistics:
     total_tweets: int = 0
     analyzed_tweets: int = 0
     unique_users: int = 0
-    llm_analyzed: int = 0
-    pattern_analyzed: int = 0
     category_breakdown: Dict[str, int] = field(default_factory=dict)
 
     @classmethod
@@ -215,9 +241,7 @@ class AnalysisStatistics:
         """Create from category statistics query result."""
         return cls(
             total_tweets=row.get('total_tweets', 0),
-            unique_users=row.get('unique_users', 0),
-            llm_analyzed=row.get('llm_analyzed', 0),
-            pattern_analyzed=row.get('pattern_analyzed', 0)
+            unique_users=row.get('unique_users', 0)
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -226,8 +250,6 @@ class AnalysisStatistics:
             'total_tweets': self.total_tweets,
             'analyzed_tweets': self.analyzed_tweets,
             'unique_users': self.unique_users,
-            'llm_analyzed': self.llm_analyzed,
-            'pattern_analyzed': self.pattern_analyzed,
             'category_breakdown': self.category_breakdown
         }
 
@@ -244,14 +266,34 @@ class TweetDisplay:
         return self.analysis.category if self.analysis else 'general'
 
     @property
-    def llm_explanation(self) -> str:
-        """Get the LLM explanation."""
-        return self.analysis.llm_explanation if self.analysis else ''
+    def local_explanation(self) -> str:
+        """Get the local LLM explanation."""
+        return self.analysis.local_explanation if self.analysis else ''
+    
+    @property
+    def external_explanation(self) -> str:
+        """Get the external LLM explanation."""
+        return self.analysis.external_explanation if self.analysis else ''
+    
+    @property
+    def best_explanation(self) -> str:
+        """Get the best available explanation."""
+        return self.analysis.best_explanation if self.analysis else ''
+    
+    @property
+    def has_dual_explanations(self) -> bool:
+        """Check if both local and external explanations are available."""
+        return self.analysis.has_dual_explanations if self.analysis else False
 
     @property
-    def analysis_method(self) -> str:
-        """Get the analysis method."""
-        return self.analysis.analysis_method if self.analysis else 'none'
+    def analysis_stages(self) -> str:
+        """Get the analysis stages."""
+        return self.analysis.analysis_stages if self.analysis else ''
+    
+    @property
+    def external_analysis_used(self) -> bool:
+        """Check if external analysis was used."""
+        return self.analysis.external_analysis_used if self.analysis else False
 
     @property
     def categories_detected(self) -> List[str]:
@@ -296,9 +338,8 @@ class TweetDisplay:
     @property
     def analysis_display(self) -> str:
         """Get the appropriate analysis text for display."""
-        if self.analysis and self.analysis.multimodal_analysis and self.analysis.media_analysis:
-            return self.analysis.media_analysis
-        return self.llm_explanation or "Sin análisis disponible"
+        # Prefer external explanation if available, otherwise use local
+        return self.best_explanation or "Sin análisis disponible"
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for template rendering."""
@@ -312,12 +353,15 @@ class TweetDisplay:
             'post_type': self.tweet.post_type,
             'tweet_id': self.tweet.tweet_id,
             'analysis_category': self.category,
-            'llm_explanation': self.llm_explanation,
-            'analysis_method': self.analysis_method,
+            'local_explanation': self.local_explanation,
+            'external_explanation': self.external_explanation,
+            'best_explanation': self.best_explanation,
+            'has_dual_explanations': self.has_dual_explanations,
+            'analysis_stages': self.analysis_stages,
+            'external_analysis_used': self.external_analysis_used,
             'analysis_timestamp': self.analysis.analysis_timestamp if self.analysis else '',
             'categories_detected': self.categories_detected,
             'multimodal_analysis': self.analysis.multimodal_analysis if self.analysis else False,
-            'media_analysis': self.analysis.media_analysis if self.analysis else None,
             'is_deleted': self.tweet.is_deleted,
             'is_edited': self.tweet.is_edited,
             'rt_original_analyzed': self.tweet.rt_original_analyzed,

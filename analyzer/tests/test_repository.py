@@ -2,6 +2,7 @@
 Tests for analyzer/repository.py - Comprehensive test coverage for database operations.
 """
 
+import unittest
 import pytest
 import sqlite3
 from unittest.mock import Mock, patch
@@ -58,10 +59,9 @@ class TestContentAnalysisRepository:
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH,
             categories_detected=[Categories.HATE_SPEECH],
-            llm_explanation="Test explanation",
-            analysis_method="llm",
+            local_explanation="Test explanation",
+            analysis_stages="pattern->local_llm",
             media_urls=["https://example.com/image.jpg"],
-            media_analysis="Test media analysis",
             media_type="image",
             multimodal_analysis=True,
             pattern_matches=[],
@@ -79,38 +79,20 @@ class TestContentAnalysisRepository:
             assert row is not None
             assert row['post_id'] == "test_123"
             assert row['category'] == Categories.HATE_SPEECH
-            assert row['llm_explanation'] == "Test explanation"
+            assert row['local_explanation'] == "Test explanation"
             assert row['multimodal_analysis'] == 1
 
-    @patch('time.sleep')
-    def test_save_retry_on_lock(self, mock_sleep):
-        """Test save retry logic on database lock."""
-        # Create test tweet data first
-        with get_db_connection_context() as conn:
-            c = conn.cursor()
-            # Create account first
-            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
-            c.execute('''
-                INSERT OR REPLACE INTO tweets
-                (tweet_id, tweet_url, username, content, tweet_timestamp)
-                VALUES (?, ?, ?, ?, ?)
-            ''', ("test_123", "https://twitter.com/test/status/test_123", "test_user", "Test content", "2024-01-01T12:00:00"))
-            conn.commit()
-
+    def test_save_fails_immediately_on_lock(self):
+        """Test that save fails immediately on database lock (no retry logic)."""
         repo = ContentAnalysisRepository()
 
-        # Mock sqlite3.connect to raise OperationalError on first attempts
-        original_connect = sqlite3.connect
-        call_count = 0
+        # Mock the _get_connection method to raise OperationalError
+        with patch.object(repo, '_get_connection') as mock_get_conn:
+            mock_conn = Mock()
+            mock_conn.__enter__ = Mock(side_effect=sqlite3.OperationalError("database is locked"))
+            mock_conn.__exit__ = Mock(return_value=None)
+            mock_get_conn.return_value = mock_conn
 
-        def mock_connect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count < DatabaseConstants.MAX_RETRIES:
-                raise sqlite3.OperationalError("database is locked")
-            return original_connect(*args, **kwargs)
-
-        with patch('sqlite3.connect', side_effect=mock_connect):
             analysis = ContentAnalysis(
                 post_id="test_123",
                 post_url="https://twitter.com/test/status/test_123",
@@ -120,10 +102,9 @@ class TestContentAnalysisRepository:
                 category=Categories.GENERAL
             )
 
-            repo.save(analysis)
-
-        assert call_count == DatabaseConstants.MAX_RETRIES
-        mock_sleep.assert_called()
+            # Should fail immediately without retries
+            with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+                repo.save(analysis)
 
     def test_save_max_retries_exceeded(self):
         """Test save failure after max retries."""
@@ -179,10 +160,9 @@ class TestContentAnalysisRepository:
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH,
             categories_detected=[Categories.HATE_SPEECH],
-            llm_explanation="Test explanation",
-            analysis_method="llm",
+            local_explanation="Test explanation",
+            analysis_stages="pattern->local_llm",
             media_urls=["https://example.com/image.jpg"],
-            media_analysis="Test media analysis",
             media_type="image",
             multimodal_analysis=True,
             pattern_matches=[{"matched_text": "test", "category": "hate_speech"}],
@@ -195,7 +175,7 @@ class TestContentAnalysisRepository:
         assert retrieved is not None
         assert retrieved.post_id == "test_123"
         assert retrieved.category == Categories.HATE_SPEECH
-        assert retrieved.llm_explanation == "Test explanation"
+        assert retrieved.local_explanation == "Test explanation"
         assert retrieved.multimodal_analysis == True
         assert len(retrieved.media_urls) == 1
 
@@ -389,8 +369,8 @@ class TestContentAnalysisRepository:
 
             assert row is not None
             assert row['category'] == "ERROR"
-            assert "Analysis error occurred" in row['llm_explanation']
-            assert row['analysis_method'] == "error"
+            assert "Analysis error occurred" in row['local_explanation']
+            assert row['analysis_stages'] == "error"
             assert row['multimodal_analysis'] == 1
 
     def test_save_failed_analysis_no_media(self):
@@ -631,8 +611,8 @@ class TestContentAnalysisRepository:
             'analysis_timestamp': '2024-01-01T12:00:00',
             'category': Categories.HATE_SPEECH,
             'categories_detected': '["hate_speech"]',
-            'llm_explanation': 'Test explanation',
-            'analysis_method': 'llm',
+            'local_explanation': 'Test explanation',
+            'analysis_stages': 'llm',
             'media_urls': '["https://example.com/image.jpg"]',
             'media_analysis': 'Test media analysis',
             'media_type': 'image',
@@ -647,7 +627,7 @@ class TestContentAnalysisRepository:
         assert isinstance(result, ContentAnalysis)
         assert result.post_id == 'test_123'
         assert result.category == Categories.HATE_SPEECH
-        assert result.llm_explanation == 'Test explanation'
+        assert result.local_explanation == 'Test explanation'
         assert result.multimodal_analysis == True
         assert len(result.media_urls) == 1
         assert result.media_urls[0] == 'https://example.com/image.jpg'

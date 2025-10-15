@@ -1,0 +1,3 @@
+# AI Avatar for Political Disinformation Analysis --- Technical & Product Blueprint
+
+... (content from the previous assistant message) ...

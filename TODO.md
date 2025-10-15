@@ -89,3 +89,5 @@ Random ideas:
 - [M] **IFTTT/Zapier integration**: Connect with external workflow automation tools
 - [L] **Research paper generation**: Automated analysis summary reports
 - [L] **Academic partnership**: Integration with university research databases
+
+- Multi language support

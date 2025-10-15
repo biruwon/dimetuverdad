@@ -3,18 +3,12 @@ Main routes for the dimetuverdad web application.
 Contains dashboard and user profile pages.
 """
 
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
-import json
-import math
-from datetime import datetime
-from typing import Optional, Dict, List, Any
-
+from flask import Blueprint, render_template, request, current_app
 from flask_caching import Cache
-
-from web.utils.decorators import rate_limit, handle_db_errors, validate_input, ANALYSIS_CATEGORIES
+from web.utils.decorators import rate_limit, handle_db_errors, validate_input
 from web.utils.helpers import (
-    get_db_connection, get_all_accounts, get_user_profile_data,
-    get_user_tweets_data, process_tweet_row, get_user_analysis_stats,
+    get_all_accounts, get_user_profile_data,
+    get_user_tweets_data, get_user_analysis_stats,
     prepare_user_page_template_data
 )
 import config
@@ -104,7 +98,6 @@ def user_page(username: str) -> str:
     post_type_filter = request.args.get('post_type', None)
     date_from = request.args.get('date_from', None)
     date_to = request.args.get('date_to', None)
-    analysis_method_filter = request.args.get('analysis_method', None)
     per_page = config.get_pagination_limit('tweets')
 
     try:
@@ -122,7 +115,7 @@ def user_page(username: str) -> str:
         total_tweets_all = user_profile_data['total_tweets']
 
         # Build and execute tweets query
-        tweets_data = get_user_tweets_data(username, page, per_page, category_filter, post_type_filter, total_tweets_all, date_from, date_to, analysis_method_filter)
+        tweets_data = get_user_tweets_data(username, page, per_page, category_filter, post_type_filter, total_tweets_all, date_from, date_to)
 
         # Get user statistics
         user_stats = get_user_analysis_stats(username)
@@ -130,7 +123,7 @@ def user_page(username: str) -> str:
         # Prepare final data for template
         template_data = prepare_user_page_template_data(
             username, tweets_data, user_stats, total_tweets_all,
-            page, per_page, category_filter, user_profile_pic, date_from, date_to, analysis_method_filter
+            page, per_page, category_filter, user_profile_pic, date_from, date_to
         )
 
         return render_template('user.html', **template_data)

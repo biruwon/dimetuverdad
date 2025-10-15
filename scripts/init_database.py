@@ -7,7 +7,6 @@ Run this to set up a fresh dimetuverdad database with proper schema.
 import sqlite3
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
 
 # Import utility modules
@@ -102,39 +101,31 @@ def create_fresh_database_schema(db_path: str = None):
         
         # Content analysis results (platform-agnostic)
         print("  📝 Creating content_analyses table...")
+        # Content analyses table - dual explanation architecture
         c.execute('''
-            CREATE TABLE content_analyses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                post_id TEXT NOT NULL,           -- Platform-agnostic post identifier
-                post_url TEXT,                   -- Platform-agnostic post URL
-                author_username TEXT,            -- Platform-agnostic author identifier
-                platform TEXT DEFAULT 'twitter', -- Multi-platform support
-                post_content TEXT,               -- Platform-agnostic content
-                category TEXT,                   -- Primary category (backward compatibility)
-                categories_detected TEXT,        -- JSON array of all detected categories
-                llm_explanation TEXT,
-                analysis_method TEXT DEFAULT "pattern", -- "pattern", "llm", or "gemini"
-                analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                analysis_json TEXT,
-                
-                -- Multi-category support
-                pattern_matches TEXT,            -- JSON array of pattern matches
-                topic_classification TEXT,       -- JSON topic classification data
-                
-                -- Media analysis (multimodal support)
-                media_urls TEXT,                 -- JSON array of media URLs
-                media_analysis TEXT,             -- Gemini multimodal analysis result
-                media_type TEXT,                 -- "image", "video", or ""
-                multimodal_analysis BOOLEAN DEFAULT FALSE, -- Whether media was analyzed
-                
-                -- Evidence retrieval and verification
-                verification_data TEXT,          -- JSON verification data from retrieval system
-                verification_confidence REAL DEFAULT 0.0, -- Confidence score for verification
-                
-                FOREIGN KEY (post_id) REFERENCES tweets (tweet_id),  -- Keep FK for now, will be updated
-                FOREIGN KEY (author_username) REFERENCES accounts (username),  -- Keep FK for now, will be updated
-                UNIQUE(post_id) -- One analysis per post
-            )
+        CREATE TABLE IF NOT EXISTS content_analyses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id TEXT UNIQUE NOT NULL,
+            post_url TEXT,
+            author_username TEXT,
+            platform TEXT DEFAULT 'twitter',
+            post_content TEXT,
+            category TEXT,
+            categories_detected TEXT,
+            local_explanation TEXT,
+            external_explanation TEXT,
+            analysis_stages TEXT,
+            external_analysis_used BOOLEAN DEFAULT FALSE,
+            analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            analysis_json TEXT,
+            pattern_matches TEXT,
+            topic_classification TEXT,
+            media_urls TEXT,
+            media_type TEXT,
+            multimodal_analysis BOOLEAN DEFAULT FALSE,
+            verification_data TEXT,
+            verification_confidence REAL DEFAULT 0.0
+        )
         ''')
         
         # Post edits detection (renamed for clarity - tracks post content changes)
@@ -211,7 +202,8 @@ def create_fresh_database_schema(db_path: str = None):
             ('idx_analyses_author', 'content_analyses', 'author_username'),
             ('idx_analyses_platform', 'content_analyses', 'platform'),
             ('idx_content_analyses_timestamp', 'content_analyses', 'analysis_timestamp'),
-            ('idx_content_analyses_method', 'content_analyses', 'analysis_method'),
+            ('idx_content_analyses_stages', 'content_analyses', 'analysis_stages'),
+            ('idx_content_analyses_external', 'content_analyses', 'external_analysis_used'),
             ('idx_content_analyses_multimodal', 'content_analyses', 'multimodal_analysis'),
             ('idx_post_edits_post', 'post_edits', 'post_id'),
             ('idx_user_feedback_post', 'user_feedback', 'post_id'),
@@ -239,11 +231,6 @@ def create_fresh_database_schema(db_path: str = None):
         raise
     finally:
         conn.close()
-
-
-def create_fresh_database():
-    """Create a clean database with optimized schema (legacy wrapper)."""
-    return create_fresh_database_schema()
 
 
 def verify_schema():

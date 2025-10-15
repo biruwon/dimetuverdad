@@ -56,8 +56,6 @@ class ErrorMessages:
 
 class ConfigDefaults:
     """Default configuration values."""
-    USE_LLM: Final[bool] = True
-    MODEL_PRIORITY: Final[str] = "balanced"
     VERBOSE: Final[bool] = False
     MAX_RETRIES: Final[int] = 3
     RETRY_DELAY: Final[int] = 1

@@ -94,8 +94,8 @@
             <div class="col-md-3 mb-3">
                 <div class="stats-card p-4 text-center">
                     <i class="fas fa-robot fa-2x mb-2"></i>
-                    <h3 class="mb-1">{{ stats.llm_analyzed or 0 }}</h3>
-                    <small>Por LLM</small>
+                    <h3 class="mb-1">{{ stats.local_llm_analyzed or 0 }}</h3>
+                    <small>Por LLM Local</small>
                 </div>
             </div>
         </div>
@@ -310,8 +310,22 @@
                                             <span class="badge bg-success text-white">
                                                 <i class="fas fa-download me-1"></i>Fetch
                                             </span>
+                                        {% elif analysis.analysis_stages %}
+                                            {% if 'external' in analysis.analysis_stages %}
+                                                <span class="badge bg-success text-white" title="Análisis externo con Gemini">
+                                                    <i class="fas fa-star me-1"></i>Gemini
+                                                </span>
+                                            {% elif 'local_llm' in analysis.analysis_stages %}
+                                                <span class="badge bg-info text-white" title="Análisis local con LLM">
+                                                    <i class="fas fa-brain me-1"></i>LLM
+                                                </span>
+                                            {% elif 'pattern' in analysis.analysis_stages %}
+                                                <span class="badge bg-secondary text-white" title="Detección por patrones">
+                                                    <i class="fas fa-search me-1"></i>Patrones
+                                                </span>
+                                            {% endif %}
                                         {% else %}
-                                            <span class="badge bg-light text-dark">{{ analysis.analysis_method }}</span>
+                                            <span class="badge bg-light text-dark">{{ analysis.analysis_stages or 'N/A' }}</span>
                                         {% endif %}
                                         {% if analysis.activity_type == 'analysis' %}
                                             <i class="fas fa-external-link-alt ms-1 text-muted small" title="Ver tweets de este usuario en esta categoría"></i>

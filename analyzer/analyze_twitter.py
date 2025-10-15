@@ -3,49 +3,23 @@ Analyze Twitter: Comprehensive Twitter content analysis system.
 Combines content analysis, database operations, and CLI interface.
 """
 
-import json
-import sqlite3
 import time
 import warnings
-import sys
 import logging
 import argparse
 import asyncio
 import traceback
 from typing import List, Optional
-from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
-
-# Add project root to path for imports
-project_root = Path(__file__).parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
-# Import our components
-from .pattern_analyzer import PatternAnalyzer
-from utils.text_utils import normalize_text
-from .llm_models import EnhancedLLMPipeline
 from .categories import Categories
-# Import repository interfaces
-from repositories import get_tweet_repository
-
-# Import new modular components
 from .config import AnalyzerConfig
 from .metrics import MetricsCollector
 from .repository import ContentAnalysisRepository
-from .text_analyzer import TextAnalyzer
-from .multimodal_analyzer import MultimodalAnalyzer
+from .flow_manager import AnalysisFlowManager
 from .models import ContentAnalysis
-from .constants import AnalysisMethods, ErrorMessages, ConfigDefaults
-
-# Import retrieval integration
-from retrieval.integration.analyzer_hooks import AnalyzerHooks, create_analyzer_hooks
-
-# Import database utilities
-from utils.database import get_db_connection_context, get_tweet_data
-
-# Import performance tracking utility
+from .constants import ConfigDefaults
+from retrieval.integration.analyzer_hooks import  create_analyzer_hooks
+from utils.database import get_db_connection_context
 from utils.performance import start_tracking, stop_tracking, print_performance_summary
 
 # Suppress warnings for cleaner output
@@ -57,16 +31,15 @@ logger = logging.getLogger(__name__)
 
 class Analyzer:
     """
-    Uses specialized components for different analysis types:
-    - TextAnalyzer: Text-only content analysis
-    - MultimodalAnalyzer: Media content analysis
-    - MetricsCollector: Performance tracking
-    - ContentAnalysisRepository: Database operations
+    Dual-flow content analysis system:
+    - Local flow: Pattern detection → Local LLM (gpt-oss:20b)
+    - External flow: Gemini multimodal (for non-general/political_general categories)
+    - Evidence retrieval: For disinformation/conspiracy/numerical/temporal claims
     """
 
     def __init__(self, config: Optional[AnalyzerConfig] = None, verbose: bool = False):
         """
-        Initialize analyzer with configuration.
+        Initialize analyzer with dual-flow architecture.
 
         Args:
             config: Analyzer configuration (created with defaults if None)
@@ -79,60 +52,93 @@ class Analyzer:
         self.metrics = MetricsCollector()
         self.repository = ContentAnalysisRepository()
 
-        # Initialize analysis components
-        self.text_analyzer = TextAnalyzer(config=self.config, verbose=verbose)
-        self.multimodal_analyzer = MultimodalAnalyzer(verbose=verbose)
+        # Initialize analysis flow manager (handles all 3 stages)
+        self.flow_manager = AnalysisFlowManager(verbose=verbose)
 
         # Initialize retrieval integration
         self.retrieval_hooks = create_analyzer_hooks()
 
         if self.verbose:
-            print("🚀 Iniciando Analyzer con componentes modulares...")
+            print("🚀 Iniciando Analyzer con arquitectura dual-flow...")
             print("Componentes cargados:")
-            print("- ✓ Analizador de texto especializado")
-            print("- ✓ Analizador multimodal para medios")
+            print("- ✓ Flow Manager (pattern → local LLM → external)")
+            print("- ✓ Local LLM: gpt-oss:20b (Ollama)")
+            print("- ✓ External LLM: Gemini 2.5 Flash (multimodal)")
             print("- ✓ Recolector de métricas de rendimiento")
             print("- ✓ Repositorio de análisis de contenido")
             print("- ✓ Integración de recuperación de evidencia")
-            print(f"- ✓ Configuración: {self.config.model_priority} priority")
+            print(f"- ✓ External analysis: {self.config.enable_external_analysis}")
 
     async def analyze_content(self,
                        tweet_id: str,
                        tweet_url: str,
                        username: str,
                        content: str,
-                       media_urls: List[str] = None) -> ContentAnalysis:
+                       media_urls: List[str] = None,
+                       admin_override: bool = False) -> ContentAnalysis:
         """
-        Main content analysis pipeline with conditional multimodal analysis and evidence retrieval.
+        Main content analysis pipeline with dual-flow architecture.
 
-        Routes to appropriate analyzer based on content type, then conditionally triggers
-        evidence retrieval for verification.
+        Flow:
+        1. Local analysis (pattern → local LLM with gpt-oss:20b)
+        2. External analysis (Gemini) for non-general/political_general categories OR admin override
+        3. Evidence retrieval for disinformation/conspiracy/numerical/temporal claims
+
+        Args:
+            tweet_id: Tweet identifier
+            tweet_url: Tweet URL
+            username: Author username
+            content: Tweet content text
+            media_urls: Optional list of media URLs
+            admin_override: Force external analysis regardless of category
+
+        Returns:
+            ContentAnalysis with both local and (optionally) external explanations
         """
         analysis_start_time = time.time()
 
         try:
-            # Route to appropriate analyzer (execute in thread to avoid blocking event loop)
-            if media_urls and len(media_urls) > 0:
-                result = await asyncio.to_thread(
-                    self.multimodal_analyzer.analyze_with_media,
-                    tweet_id, tweet_url, username, content, media_urls
-                )
-            else:
-                result = await asyncio.to_thread(
-                    self.text_analyzer.analyze,
-                    tweet_id, tweet_url, username, content
-                )
+            # Determine if external analysis should run based on config
+            run_external = self.config.enable_external_analysis or admin_override
+
+            # Run dual-flow analysis
+            category, local_explanation, external_explanation, stages, pattern_data = await self.flow_manager.analyze_full(
+                content=content,
+                media_urls=media_urls,
+                admin_override=admin_override
+            )
+
+            # Create initial analysis result
+            result = ContentAnalysis(
+                post_id=tweet_id,
+                post_url=tweet_url,
+                author_username=username,
+                post_content=content,
+                analysis_timestamp=datetime.now().isoformat(),
+                category=category,
+                categories_detected=[category],  # Flow manager returns single primary category
+                local_explanation=local_explanation,
+                external_explanation=external_explanation or '',
+                analysis_stages=stages.to_string(),
+                external_analysis_used=stages.external,
+                media_urls=media_urls or [],
+                media_type=self._detect_media_type(media_urls) if media_urls else '',
+                multimodal_analysis=bool(media_urls and external_explanation),
+                pattern_matches=pattern_data.get('pattern_matches', []),
+                topic_classification=pattern_data.get('topic_classification', {}),
+                analysis_json=f'{{"stages": "{stages.to_string()}", "has_media": {bool(media_urls)}}}'
+            )
 
             # Check if evidence retrieval should be triggered
             if self._should_trigger_evidence_retrieval(result, content):
                 if self.verbose:
                     print("🔍 Triggering evidence retrieval for verification...")
 
-                # Perform evidence retrieval and enhance explanation
+                # Perform evidence retrieval and enhance local explanation
                 enhanced_result = await self._enhance_with_evidence_retrieval(result, content)
 
-                # Update result with enhanced explanation and verification data
-                result.llm_explanation = enhanced_result.llm_explanation
+                # Update result with verification data
+                result.local_explanation = enhanced_result.local_explanation
                 result.verification_data = enhanced_result.verification_data
                 result.verification_confidence = enhanced_result.verification_confidence
 
@@ -142,11 +148,11 @@ class Analyzer:
             # Track metrics
             analysis_time = time.time() - analysis_start_time
             self.metrics.record_analysis(
-                method=result.analysis_method,
+                method="dual_flow" if stages.external else "local_only",
                 duration=analysis_time,
                 category=result.category,
                 model_used=self._get_model_name(result),
-                is_multimodal=result.analysis_method == AnalysisMethods.MULTIMODAL.value
+                is_multimodal=result.multimodal_analysis
             )
 
             # Add performance data to result
@@ -161,7 +167,37 @@ class Analyzer:
                 print(f"❌ Error en análisis: {e}")
                 traceback.print_exc()
 
-            # Return error result
+            # Return error result with minimal data
+            return ContentAnalysis(
+                post_id=tweet_id,
+                post_url=tweet_url,
+                author_username=username,
+                post_content=content,
+                analysis_timestamp=datetime.now().isoformat(),
+                category="ERROR",
+                categories_detected=["ERROR"],
+                local_explanation=f"Analysis failed: {str(e)}",
+                external_explanation="",
+                analysis_stages="error",
+                external_analysis_used=False,
+                media_urls=media_urls or [],
+                media_type="",
+                multimodal_analysis=False,
+                pattern_matches=[],
+                topic_classification={},
+                analysis_json=f'{{"error": "{str(e)[:500]}"}}'
+            )
+    def _detect_media_type(self, media_urls: List[str]) -> str:
+        """Detect media type from URLs."""
+        if not media_urls:
+            return ''
+        
+        # Simple detection based on URL patterns
+        for url in media_urls:
+            if any(ext in url.lower() for ext in ['.mp4', '.m3u8', '.mov', 'video']):
+                return 'video'
+        return 'image'
+    
     def _should_trigger_evidence_retrieval(self, analysis_result: ContentAnalysis, content: str) -> bool:
         """
         Determine if evidence retrieval should be triggered based on analysis results and content.
@@ -170,20 +206,20 @@ class Analyzer:
         1. High-confidence disinformation detection
         2. Conspiracy theory content
         3. Content with numerical/statistical claims
-        4. Far-right bias content with potential factual claims
+        4. Temporal claims requiring fact-checking
 
-        Note: Multimodal analyses are excluded as they already include media-based verification.
+        Note: External multimodal analyses already include visual verification.
         """
-        # Skip verification for multimodal analyses (they already include media verification)
-        if analysis_result.analysis_method == AnalysisMethods.MULTIMODAL.value:
+        # Skip verification if external multimodal analysis was performed
+        if analysis_result.external_analysis_used and analysis_result.multimodal_analysis:
             return False
 
         # Convert ContentAnalysis to dict format expected by analyzer hooks
         analyzer_result_dict = {
             'category': analysis_result.category,
-            'confidence': getattr(analysis_result, 'confidence', 0.5),  # Default confidence
-            'explanation': analysis_result.llm_explanation,
-            'analysis_method': analysis_result.analysis_method
+            'confidence': 0.7,  # Default confidence for dual-flow system
+            'explanation': analysis_result.local_explanation,
+            'analysis_stages': analysis_result.analysis_stages
         }
 
         # Use the analyzer hooks to determine if verification should be triggered
@@ -199,6 +235,7 @@ class Analyzer:
     async def _enhance_with_evidence_retrieval(self, analysis_result: ContentAnalysis, content: str):
         """
         Enhance analysis result with evidence retrieval and verification.
+        Updates the local_explanation with evidence-based verification.
 
         Args:
             analysis_result: Original analysis result
@@ -211,9 +248,9 @@ class Analyzer:
             # Convert ContentAnalysis to dict format for analyzer hooks
             original_result_dict = {
                 'category': analysis_result.category,
-                'confidence': getattr(analysis_result, 'confidence', 0.5),
-                'explanation': analysis_result.llm_explanation,
-                'analysis_method': analysis_result.analysis_method
+                'confidence': 0.7,
+                'explanation': analysis_result.local_explanation,
+                'analysis_stages': analysis_result.analysis_stages
             }
 
             # Perform analysis with verification
@@ -255,7 +292,7 @@ class Analyzer:
                         'verification_method': getattr(report, 'verification_method', 'unknown')
                     }
 
-            # Create enhanced ContentAnalysis with verification data
+            # Create enhanced ContentAnalysis with verification data (preserving dual explanations)
             enhanced_analysis = ContentAnalysis(
                 post_id=analysis_result.post_id,
                 post_url=analysis_result.post_url,
@@ -264,10 +301,11 @@ class Analyzer:
                 analysis_timestamp=analysis_result.analysis_timestamp,
                 category=analysis_result.category,
                 categories_detected=analysis_result.categories_detected,
-                llm_explanation=enhanced_result.explanation_with_verification,
-                analysis_method=analysis_result.analysis_method,
+                local_explanation=enhanced_result.explanation_with_verification,  # Enhanced local explanation
+                external_explanation=analysis_result.external_explanation,  # Preserve external
+                analysis_stages=analysis_result.analysis_stages,
+                external_analysis_used=analysis_result.external_analysis_used,
                 media_urls=analysis_result.media_urls,
-                media_analysis=analysis_result.media_analysis,
                 media_type=analysis_result.media_type,
                 multimodal_analysis=analysis_result.multimodal_analysis,
                 pattern_matches=analysis_result.pattern_matches,
@@ -290,12 +328,11 @@ class Analyzer:
 
     def _get_model_name(self, result: ContentAnalysis) -> str:
         """Get the model name based on analysis result."""
-        if result.analysis_method == AnalysisMethods.MULTIMODAL.value:
-            return "gemini-2.5-flash"
-        elif result.analysis_method == AnalysisMethods.LLM.value:
-            return f"ollama-{self.config.model_priority}"
-        else:
-            return "pattern-matching"
+        if result.external_analysis_used:
+            if result.multimodal_analysis:
+                return "gpt-oss:20b+gemini-2.5-flash (multimodal)"
+            return "gpt-oss:20b+gemini-2.5-flash"
+        return "gpt-oss:20b"
 
     def get_metrics_report(self) -> str:
         """Generate comprehensive metrics report."""
@@ -333,9 +370,9 @@ class Analyzer:
     def cleanup_resources(self):
         """Clean up any resources used by the analyzer."""
         try:
-            if hasattr(self.text_analyzer, 'llm_pipeline') and self.text_analyzer.llm_pipeline:
-                if hasattr(self.text_analyzer.llm_pipeline, 'cleanup'):
-                    self.text_analyzer.llm_pipeline.cleanup()
+            # Cleanup flow manager resources (LLM pipelines, etc.)
+            if hasattr(self.flow_manager, 'cleanup'):
+                self.flow_manager.cleanup()
         except Exception as e:
             print(f"⚠️ Warning during cleanup: {e}")
 
@@ -343,11 +380,11 @@ class Analyzer:
         """Print current system status for debugging."""
         print("🔧 ANALYZER SYSTEM STATUS")
         print("=" * 50)
-        print(f"🤖 LLM Enabled: {self.config.use_llm}")
-        print(f"🔧 Model Priority: {self.config.model_priority}")
-        print(f"🧠 LLM Pipeline: {'✓' if self.text_analyzer.llm_pipeline else '❌'}")
-        print(f"🔍 Pattern analyzer: {'✓' if self.text_analyzer.pattern_analyzer else '❌'}")
-        print(f"🎥 Multimodal analyzer: {'✓' if self.multimodal_analyzer.gemini_analyzer else '❌'}")
+        print(f"🤖 External Analysis Enabled: {self.config.enable_external_analysis}")
+        print(f"⚡ Flow Manager: {'✓' if self.flow_manager else '❌'}")
+        print(f"🔍 Pattern Analyzer: ✓")
+        print(f"🧠 Local LLM (gpt-oss:20b): ✓")
+        print(f"🎥 External Gemini (2.5 Flash): ✓")
 
         # Check database
         try:
@@ -377,40 +414,80 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
     print("🔍 Enhanced Tweet Analysis Pipeline")
     print("=" * 50)
 
-    # Special case: specific tweet ID requested - use reanalyze_tweet utility
+    # Special case: specific tweet ID requested
     if tweet_id:
-        print(f"🎯 Reanalyzing specific tweet: {tweet_id}")
-        print("🚀 Initializing Analyzer...")
-        try:
-            config = AnalyzerConfig(use_llm=True, verbose=False)
-            analyzer_instance = create_analyzer(config=config, verbose=False)
-            print("✅ Analyzer ready!")
-
-            result = await reanalyze_tweet(tweet_id, analyzer=analyzer_instance)
-            if result:
-                print(f"\n📝 Tweet: {tweet_id}")
-                print(f"    🏷️ Category: {result.category}")
-                print(f"    💭 {result.llm_explanation[:100]}...")
-                print(f"    🔍 Method: {result.analysis_method}")
-                if result.multimodal_analysis:
-                    print(f"    🎥 Multimodal analysis: Yes ({result.media_type})")
-                print("\n✅ Analysis complete and saved to database")
-            else:
-                print(f"❌ Tweet {tweet_id} not found in database")
-        except Exception as e:
-            print(f"❌ Error reanalyzing tweet: {e}")
-            traceback.print_exc()
+        await _handle_single_tweet_analysis(tweet_id)
         return
 
-    # Initialize analyzer for bulk processing
+    # Initialize analyzer and get tweets for bulk processing
+    analyzer_instance, tweets, analyzed_count = await _setup_analyzer_and_get_tweets(
+        username, max_tweets, force_reanalyze
+    )
+
+    if not tweets:
+        _print_no_tweets_message(username, force_reanalyze, analyzed_count)
+        return
+
+    _print_analysis_start_info(tweets, username, force_reanalyze, analyzed_count)
+
+    # Setup concurrency configuration
+    analysis_sema, llm_sema, max_retries, retry_delay = _setup_concurrency_config(analyzer_instance)
+
+    # Execute analysis tasks
+    results, category_counts = await _execute_analysis_tasks(
+        tweets, analyzer_instance, analysis_sema, llm_sema, max_retries, retry_delay, tracker
+    )
+
+    # Print final summary
+    _print_analysis_summary(results, category_counts, tracker)
+
+
+async def _handle_single_tweet_analysis(tweet_id: str):
+    """Handle analysis of a single specific tweet."""
+    print(f"🎯 Reanalyzing specific tweet: {tweet_id}")
     print("🚀 Initializing Analyzer...")
     try:
-        config = AnalyzerConfig(use_llm=True, verbose=False)
+        config = AnalyzerConfig(verbose=False)
+        analyzer_instance = create_analyzer(config=config, verbose=False)
+        print("✅ Analyzer ready!")
+
+        result = await reanalyze_tweet(tweet_id, analyzer=analyzer_instance)
+        if result:
+            print(f"\n📝 Tweet: {tweet_id}")
+            print(f"    🏷️ Category: {result.category}")
+
+            # Display best available explanation
+            best_explanation = result.external_explanation if result.external_explanation else result.local_explanation
+            if best_explanation:
+                print(f"    💭 {best_explanation[:100]}...")
+
+            # Show analysis stages
+            stages_display = result.analysis_stages or "pattern"
+            if result.external_analysis_used:
+                print(f"    🌐 Stages: {stages_display} (with external)")
+            else:
+                print(f"    🔍 Stages: {stages_display}")
+
+            if result.multimodal_analysis:
+                print(f"    🎥 Multimodal analysis: Yes ({result.media_type})")
+            print("\n✅ Analysis complete and saved to database")
+        else:
+            print(f"❌ Tweet {tweet_id} not found in database")
+    except Exception as e:
+        print(f"❌ Error reanalyzing tweet: {e}")
+        traceback.print_exc()
+
+
+async def _setup_analyzer_and_get_tweets(username, max_tweets, force_reanalyze):
+    """Initialize analyzer and retrieve tweets for analysis."""
+    print("🚀 Initializing Analyzer...")
+    try:
+        config = AnalyzerConfig(verbose=False)
         analyzer_instance = create_analyzer(config=config, verbose=False)  # Always use LLM for better explanations
         print("✅ Analyzer ready!")
     except Exception as e:
         print(f"❌ Error initializing analyzer: {e}")
-        return
+        return None, [], 0
 
     # Get tweets for analysis
     tweets = analyzer_instance.repository.get_tweets_for_analysis(
@@ -422,13 +499,19 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
     # Also get count of already analyzed tweets for reporting
     analyzed_count = analyzer_instance.repository.get_analysis_count_by_author(username)
 
-    if not tweets:
-        search_desc = "tweets" if force_reanalyze else "unanalyzed tweets"
-        print(f"✅ No {search_desc} found{f' for @{username}' if username else ''}")
-        if analyzed_count > 0 and not force_reanalyze:
-            print(f"📊 Already analyzed: {analyzed_count} tweets")
-        return
+    return analyzer_instance, tweets, analyzed_count
 
+
+def _print_no_tweets_message(username, force_reanalyze, analyzed_count):
+    """Print message when no tweets are found for analysis."""
+    search_desc = "tweets" if force_reanalyze else "unanalyzed tweets"
+    print(f"✅ No {search_desc} found{f' for @{username}' if username else ''}")
+    if analyzed_count > 0 and not force_reanalyze:
+        print(f"📊 Already analyzed: {analyzed_count} tweets")
+
+
+def _print_analysis_start_info(tweets, username, force_reanalyze, analyzed_count):
+    """Print information about the analysis that is about to start."""
     tweet_type = "tweets" if force_reanalyze else "unanalyzed tweets"
     print(f"📊 Found {len(tweets)} {tweet_type}")
     if analyzed_count > 0 and not force_reanalyze:
@@ -440,10 +523,9 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
     print(f"🔧 Analysis Mode: LLM + Patterns")
     print()
 
-    # Analyze each tweet with bounded concurrency
-    results = []
-    category_counts = {}
 
+def _setup_concurrency_config(analyzer_instance):
+    """Setup concurrency configuration and return semaphores and retry settings."""
     # Tunables from configuration, with safe fallbacks for mocked analyzers
     cfg = getattr(analyzer_instance, 'config', None)
     raw_max_conc = getattr(cfg, 'max_concurrency', None) if cfg is not None else None
@@ -473,6 +555,14 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
             retry_delay = ConfigDefaults.RETRY_DELAY
     except Exception:
         retry_delay = ConfigDefaults.RETRY_DELAY
+
+    return analysis_sema, llm_sema, max_retries, retry_delay
+
+
+async def _execute_analysis_tasks(tweets, analyzer_instance, analysis_sema, llm_sema, max_retries, retry_delay, tracker):
+    """Execute concurrent analysis tasks and return results."""
+    results = []
+    category_counts = {}
 
     async def analyze_one(idx: int, entry):
         (tw_id, tw_url, tw_user, content, media_links, original_content) = entry
@@ -530,10 +620,11 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
                 analysis_timestamp=datetime.now().isoformat(),
                 category=result.category,
                 categories_detected=getattr(result, 'categories_detected', []),
-                llm_explanation=result.llm_explanation,
-                analysis_method=result.analysis_method,
+                local_explanation=result.local_explanation,
+                external_explanation=result.external_explanation,
+                analysis_stages=result.analysis_stages,
+                external_analysis_used=result.external_analysis_used,
                 media_urls=getattr(result, 'media_urls', []),
-                media_analysis=getattr(result, 'media_analysis', ''),
                 media_type=getattr(result, 'media_type', ''),
                 multimodal_analysis=getattr(result, 'multimodal_analysis', False),
                 pattern_matches=getattr(result, 'pattern_matches', []),
@@ -564,11 +655,18 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
             }.get(category, '❓')
             print(f"    {category_emoji} {category}")
 
-            if result.llm_explanation and len(result.llm_explanation.strip()) > 0:
-                explanation = result.llm_explanation[:120] + "..." if len(result.llm_explanation) > 120 else result.llm_explanation
+            # Display best available explanation
+            best_explanation = result.external_explanation if result.external_explanation else result.local_explanation
+            if best_explanation and len(best_explanation.strip()) > 0:
+                explanation = best_explanation[:120] + "..." if len(best_explanation) > 120 else best_explanation
                 print(f"    💭 {explanation}")
-            method_emoji = "🧠" if result.analysis_method == "llm" else "🔍"
-            print(f"    {method_emoji} Method: {result.analysis_method}")
+
+            # Show analysis stages
+            stages_display = result.analysis_stages or "pattern"
+            if result.external_analysis_used:
+                print(f"    🌐 Stages: {stages_display} (with external)")
+            else:
+                print(f"    🔍 Stages: {stages_display}")
 
             return ("ok", tw_id, category)
 
@@ -603,7 +701,11 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
             # For now we don't reconstruct full ContentAnalysis; we maintain counts and logs
             results.append(out)
 
-    # Summary
+    return results, category_counts
+
+
+def _print_analysis_summary(results, category_counts, tracker):
+    """Print the final analysis summary and statistics."""
     print("📊 Analysis Complete!")
     print("=" * 50)
     total_processed = len(results) + category_counts.get("ERROR", 0)
@@ -633,8 +735,6 @@ async def analyze_tweets_from_db(username=None, max_tweets=None, force_reanalyze
     # Print performance summary
     metrics = stop_tracking(tracker)
     print_performance_summary(metrics)
-
-    return results
 
 
 # Utility functions for analyzer operations

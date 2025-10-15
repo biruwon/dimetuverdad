@@ -106,7 +106,7 @@
                 {% endif %}
             </div>
             {% elif tweet.analysis_category %}
-            <!-- Fallback to single category for backward compatibility -->
+            <!-- Single category display -->
             <div class="category-badges-container mb-2">
                 <span class="badge category-{{ tweet.analysis_category }} category-badge text-white primary-badge">
                     {% if tweet.analysis_category == 'hate_speech' %}🚫 Discurso de Odio
@@ -141,18 +141,58 @@
         </div>
 
         <!-- Analysis Explanation -->
-        {% if tweet.analysis_display %}
+        {% if tweet.analysis_display or tweet.local_explanation or tweet.external_explanation %}
         <div class="analysis-explanation">
             <h6 class="mb-2">
                 <i class="fas fa-robot text-primary me-2"></i>
                 Análisis Automático
-                {% if tweet.analysis_method %}
-                    <span class="badge bg-{{ 'success' if tweet.analysis_method == 'llm' else 'secondary' }} ms-2">
-                        {{ 'LLM' if tweet.analysis_method == 'llm' else 'Patrones' }}
-                    </span>
+                {% if tweet.analysis_stages %}
+                    {% if 'external' in tweet.analysis_stages %}
+                        <span class="badge bg-success ms-2" title="Análisis externo con Gemini">
+                            <i class="fas fa-star me-1"></i>Gemini Multimodal
+                        </span>
+                    {% elif 'local_llm' in tweet.analysis_stages %}
+                        <span class="badge bg-info ms-2" title="Análisis local con LLM">
+                            <i class="fas fa-brain me-1"></i>LLM Local
+                        </span>
+                    {% elif 'pattern' in tweet.analysis_stages %}
+                        <span class="badge bg-secondary ms-2" title="Detección por patrones">
+                            <i class="fas fa-search me-1"></i>Patrones
+                        </span>
+                    {% endif %}
                 {% endif %}
             </h6>
+            
+            <!-- Dual Explanation Display -->
+            {% if tweet.local_explanation and tweet.external_explanation %}
+            <div class="dual-explanation-container">
+                <ul class="nav nav-pills mb-3" id="pills-tab-{{ tweet.tweet_id }}" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="pills-local-tab-{{ tweet.tweet_id }}" data-bs-toggle="pill" 
+                                data-bs-target="#pills-local-{{ tweet.tweet_id }}" type="button" role="tab">
+                            <i class="fas fa-brain me-1"></i>Análisis Local
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="pills-external-tab-{{ tweet.tweet_id }}" data-bs-toggle="pill" 
+                                data-bs-target="#pills-external-{{ tweet.tweet_id }}" type="button" role="tab">
+                            <i class="fas fa-star me-1"></i>Análisis Externo (Gemini)
+                        </button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="pills-tabContent-{{ tweet.tweet_id }}">
+                    <div class="tab-pane fade show active" id="pills-local-{{ tweet.tweet_id }}" role="tabpanel">
+                        <p class="mb-0">{{ tweet.local_explanation }}</p>
+                    </div>
+                    <div class="tab-pane fade" id="pills-external-{{ tweet.tweet_id }}" role="tabpanel">
+                        <p class="mb-0">{{ tweet.external_explanation }}</p>
+                    </div>
+                </div>
+            </div>
+            {% else %}
             <p class="mb-0">{{ tweet.analysis_display }}</p>
+            {% endif %}
+            
             {% if tweet.analysis_timestamp %}
             <small class="text-muted">
                 <i class="fas fa-clock me-1"></i>
@@ -160,7 +200,7 @@
             </small>
             {% endif %}
 
-            {% if tweet.verification_data and tweet.analysis_method != 'multimodal' %}
+            {% if tweet.verification_data and not tweet.external_analysis_used %}
             <div class="mt-3 pt-3 border-top">
                 <h6 class="mb-2">
                     <i class="fas fa-search text-info me-2"></i>

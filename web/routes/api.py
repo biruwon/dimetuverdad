@@ -4,14 +4,9 @@ Contains REST API endpoints for external integrations.
 """
 
 from flask import Blueprint, request, jsonify
-import json
-from datetime import datetime
-from typing import Optional, Dict, List, Any
-
-from web.utils.decorators import rate_limit, ANALYSIS_CATEGORIES
+from web.utils.decorators import rate_limit
 from utils import database
 import config
-
 import logging
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 api_bp.logger = logging.getLogger('web.routes.api')
@@ -95,7 +90,8 @@ def get_tweet_versions(tweet_id: str) -> str:
             current_tweet = conn.execute("""
                 SELECT
                     t.content, t.username, t.tweet_timestamp, t.tweet_url,
-                    ca.category, ca.llm_explanation
+                    ca.category, ca.local_explanation, ca.external_explanation,
+                    ca.analysis_stages, ca.external_analysis_used
                 FROM tweets t
                 LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
                 WHERE t.tweet_id = ?
@@ -136,7 +132,10 @@ def get_tweet_versions(tweet_id: str) -> str:
                 'tweet_timestamp': current_tweet['tweet_timestamp'],
                 'tweet_url': current_tweet['tweet_url'],
                 'category': current_tweet['category'],
-                'llm_explanation': current_tweet['llm_explanation']
+                'local_explanation': current_tweet['local_explanation'],
+                'external_explanation': current_tweet['external_explanation'],
+                'analysis_stages': current_tweet['analysis_stages'],
+                'external_analysis_used': current_tweet['external_analysis_used']
             },
             'previous_versions': version_history,
             'total_versions': len(version_history) + 1  # +1 for current version
@@ -159,7 +158,7 @@ def get_tweet_status(tweet_id: str) -> str:
             tweet = conn.execute("""
                 SELECT 
                     t.tweet_id, t.username, t.content,
-                    ca.category, ca.analysis_method
+                    ca.category, ca.analysis_stages, ca.external_analysis_used
                 FROM tweets t
                 LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
                 WHERE t.tweet_id = ?
@@ -172,7 +171,8 @@ def get_tweet_status(tweet_id: str) -> str:
                 'username': tweet['username'],
                 'analyzed': tweet['category'] is not None,
                 'category': tweet['category'],
-                'analysis_method': tweet['analysis_method']
+                'analysis_stages': tweet['analysis_stages'],
+                'external_analysis_used': tweet['external_analysis_used']
             })
         else:
             return jsonify({'exists': False}), 404

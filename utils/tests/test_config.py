@@ -206,8 +206,31 @@ class TestConfig(unittest.TestCase):
 
     def test_load_env_file_with_dotenv(self):
         """Test .env file loading when dotenv is available."""
-        # Skip this test as dotenv is conditionally imported and hard to mock
-        self.skipTest("Dotenv conditional import is hard to test reliably")
+        # Create a mock .env file in the expected location
+        env_file = Path(self.temp_dir) / '.env.development'  # Since _get_environment_no_load returns 'development'
+        env_file.write_text('DOTENV_TEST_VAR=dotenv_value\nDOTENV_EMPTY_VAR=\n')
+
+        # Change to temp directory so the .env file is found
+        original_cwd = os.getcwd()
+        os.chdir(self.temp_dir)
+
+        try:
+            # Reset env loaded flag
+            Config._env_loaded = False
+
+            # Mock the dotenv.load_dotenv function
+            with patch('utils.config.dotenv.load_dotenv') as mock_load_dotenv:
+                # Call the loader
+                Config._load_env_file()
+
+                # Verify dotenv.load_dotenv was called
+                mock_load_dotenv.assert_called_once()
+                # Check that it was called with override=True
+                call_args = mock_load_dotenv.call_args
+                self.assertTrue(call_args[1]['override'])  # kwargs should contain override=True
+
+        finally:
+            os.chdir(original_cwd)
 
     def test_get_environment_caching(self):
         """Test that get_environment caches results."""

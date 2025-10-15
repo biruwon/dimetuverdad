@@ -162,7 +162,7 @@ class TestAdminRoutes:
 
     def test_admin_login_success(self, client):
         """Test successful admin login."""
-        response = client.post('/admin/login', data={'token': 'admin123'}, follow_redirects=True)
+        response = client.post('/admin/login', data={'token': 'test-admin-token'}, follow_redirects=True)
         assert response.status_code == 200
         # Check that we were redirected to admin dashboard
         assert b'Panel de Administraci' in response.data or b'Admin' in response.data
@@ -180,20 +180,30 @@ class TestAdminRoutes:
 
     def test_admin_dashboard_authenticated(self, admin_client, mock_database):
         """Test admin dashboard with authentication."""
-        # Mock admin dashboard data
+        # Mock admin dashboard data with new dual explanation schema
         mock_cursor = mock_database.cursor.return_value
 
-        # Mock get_admin_stats query (fetchone)
+        # Mock get_admin_stats query (fetchone) with new fields
         mock_cursor.fetchone.side_effect = [
-            MockRow({'total_tweets': 100, 'analyzed_tweets': 80, 'pattern_analyzed': 50, 'llm_analyzed': 30}),  # stats
+            MockRow({
+                'total_tweets': 100, 
+                'analyzed_tweets': 80, 
+                'external_analyzed': 10,  # New field
+                'local_llm_analyzed': 30  # New field
+            }),  # stats
         ]
 
         # Mock database queries (fetchall calls)
         mock_cursor.fetchall.side_effect = [
-            [  # recent analyses (first fetchall)
-                MockRow({'analysis_timestamp': '2024-01-01', 'category': 'general',
-                         'analysis_method': 'pattern', 'username': 'user1',
-                         'content_preview': 'Test content...'})
+            [  # recent analyses (first fetchall) - updated with new fields
+                MockRow({
+                    'analysis_timestamp': '2024-01-01', 
+                    'category': 'general',
+                    'analysis_stages': 'pattern',  # New field (replaces analysis_method)
+                    'external_analysis_used': False,  # New field
+                    'username': 'user1',
+                    'content_preview': 'Test content...'
+                })
             ],
             [],  # feedback_rows (second fetchall - empty)
             [],  # fetch_rows (third fetchall - empty)
@@ -219,11 +229,18 @@ class TestAdminRoutes:
         response = client.post('/admin/fetch', data={'username': 'testuser'})
         assert response.status_code == 302  # Redirect to login
 
-    @pytest.mark.skip(reason="run_user_fetch is a nested function that cannot be patched at module level")
-    @patch('web.app.reanalyze_category')
-    def test_admin_reanalyze_category(self, mock_reanalyze, admin_client):
+    @patch('web.routes.admin.reanalyze_tweet_sync')
+    def test_admin_reanalyze_category(self, mock_reanalyze, admin_client, mock_database):
         """Test admin reanalyze category operation."""
-        mock_reanalyze.return_value = None
+        # Mock the database to return some tweets for the category
+        mock_cursor = mock_database.cursor.return_value
+        mock_cursor.fetchall.return_value = [
+            MockRow({'post_id': '1234567890'}),
+            MockRow({'post_id': '0987654321'})
+        ]
+        
+        # Mock reanalyze_tweet_sync to return a successful result
+        mock_reanalyze.return_value = Mock(category='hate_speech')
 
         response = admin_client.post('/admin/reanalyze',
                                    data={'action': 'category', 'category': 'hate_speech'},
@@ -231,11 +248,11 @@ class TestAdminRoutes:
         assert response.status_code == 200
         assert b'Cargando' in response.data
 
-    @pytest.mark.skip(reason="run_user_analysis is a nested function that cannot be patched at module level")
-    @patch('web.app.run_user_analysis')
-    def test_admin_reanalyze_user(self, mock_run_analysis, admin_client):
+    @patch('subprocess.run')
+    def test_admin_reanalyze_user(self, mock_subprocess, admin_client):
         """Test admin reanalyze user operation."""
-        mock_run_analysis.return_value = None
+        # Mock subprocess.run to return a successful result
+        mock_subprocess.return_value = Mock()
 
         response = admin_client.post('/admin/reanalyze',
                                    data={'action': 'user', 'username': 'testuser'},
@@ -259,7 +276,7 @@ class TestAPIEndpoints:
                     'profile_pic_url': 'https://example.com/avatar.jpg',
                     'last_activity': '2024-01-01 12:00:00'
                 })
-                # Now create test tweet
+                # Now create test tweet with new schema
                 TestHelpers.create_test_tweet(conn, {
                     'tweet_id': '9999999999',
                     'content': 'Test tweet content',
@@ -267,8 +284,8 @@ class TestAPIEndpoints:
                     'tweet_timestamp': '2024-01-01 12:00:00',
                     'tweet_url': 'https://twitter.com/testuser/status/9999999999',
                     'category': 'general',
-                    'llm_explanation': 'Test explanation',
-                    'analysis_method': 'pattern'
+                    'local_explanation': 'Test explanation',
+                    'analysis_stages': 'pattern'
                 })
 
         response = client.get('/api/tweet-status/9999999999')
@@ -280,22 +297,44 @@ class TestAPIEndpoints:
         assert data['analyzed'] == True
         assert data['category'] == 'general'
 
-    def test_usernames_api_requires_auth(self, client):
+    def test_usernames_api_requires_auth(self, client, app):
         """Test usernames API endpoint (no auth required)."""
+        # Set up test data with accounts first (FK constraint)
+        with app.app_context():
+            with get_db_connection_context() as conn:
+                # Create accounts first
+                TestHelpers.create_test_account(conn, {
+                    'username': 'user1',
+                    'profile_pic_url': 'https://example.com/user1.jpg',
+                    'last_activity': '2024-01-01 12:00:00'
+                })
+                TestHelpers.create_test_account(conn, {
+                    'username': 'user2',
+                    'profile_pic_url': 'https://example.com/user2.jpg',
+                    'last_activity': '2024-01-01 13:00:00'
+                })
+                
+                # Create test tweets to populate usernames
+                TestHelpers.create_test_tweet(conn, {
+                    'tweet_id': '1111111111',
+                    'content': 'Test tweet 1',
+                    'username': 'user1',
+                    'tweet_timestamp': '2024-01-01 12:00:00',
+                    'tweet_url': 'https://twitter.com/user1/status/1111111111'
+                })
+                TestHelpers.create_test_tweet(conn, {
+                    'tweet_id': '2222222222',
+                    'content': 'Test tweet 2',
+                    'username': 'user2',
+                    'tweet_timestamp': '2024-01-01 13:00:00',
+                    'tweet_url': 'https://twitter.com/user2/status/2222222222'
+                })
+        
         response = client.get('/api/usernames')
         assert response.status_code == 200  # Endpoint exists and is public
-
-    @pytest.mark.skip(reason="API endpoint /api/usernames does not exist in the application")
-    def test_usernames_api_authenticated(self, admin_client, mock_database):
-        """Test usernames API with authentication."""
-        mock_database.execute.return_value.fetchall.return_value = [
-            ('user1',), ('user2',), ('user3',)
-        ]
-
-        response = admin_client.get('/api/usernames')
-        assert response.status_code == 200
         data = response.get_json()
-        assert data == ['user1', 'user2', 'user3']
+        assert isinstance(data, list)
+        assert len(data) >= 2  # At least our test users
 
 
 class TestErrorHandlers:
@@ -340,60 +379,36 @@ class TestRateLimiting:
         assert response.status_code == 429
         assert b'Demasiadas solicitudes' in response.data
 
-    @pytest.mark.skip(reason="API endpoint /api/usernames does not exist in the application")
-    def test_rate_limit_api_endpoints(self, admin_client):
-        """Test rate limiting on API endpoints."""
-        for i in range(15):  # Exceed the limit
-            admin_client.get('/api/usernames')
-
-        response = admin_client.get('/api/usernames')
-        assert response.status_code == 429
-
 
 class TestTemplateRendering:
     """Test template rendering and context."""
 
-    @pytest.mark.skip(reason="Complex mocking required for user profile data - skipping to focus on core functionality")
-    def test_user_template_context(self, client, mock_database, sample_tweet_data):
+    def test_user_template_context(self, client, app, sample_tweet_data):
         """Test user template receives correct context."""
-        # Mock the database calls that user_page makes
-        mock_cursor = mock_database.cursor.return_value
-
-        # Mock get_user_profile_data query
-        mock_cursor.fetchone.side_effect = [
-            MockRow({'profile_pic_url': 'https://example.com/avatar.jpg', 'total_tweets': 100}),  # profile data
-            MockRow({'analyzed_posts': 50, 'hate_speech_count': 10, 'disinformation_count': 5, 'conspiracy_count': 3, 'far_right_count': 2, 'call_to_action_count': 1, 'general_count': 30})  # stats
-        ]
-
-        # Mock get_user_tweets_data query - return properly structured tweet data
-        mock_cursor.fetchall.side_effect = [
-            [MockRow({
-                'tweet_url': sample_tweet_data['tweet_url'],
-                'content': sample_tweet_data['content'],
-                'media_links': '[]',  # JSON string for media links
-                'hashtags': '[]',  # JSON string for hashtags
-                'mentions': '[]',  # JSON string for mentions
-                'tweet_timestamp': sample_tweet_data['tweet_timestamp'],
-                'post_type': 'original',
-                'tweet_id': sample_tweet_data['tweet_id'],
-                'analysis_category': sample_tweet_data['category'],
-                'llm_explanation': sample_tweet_data['llm_explanation'],
-                'analysis_method': sample_tweet_data['analysis_method'],
-                'analysis_timestamp': '2024-01-01 12:00:00',
-                'categories_detected': '["general"]',  # JSON string
-                'multimodal_analysis': False,
-                'media_analysis': None,
-                'is_deleted': False,
-                'is_edited': False,
-                'rt_original_analyzed': False,
-                'original_author': None,
-                'original_tweet_id': None,
-                'reply_to_username': None
-            })],  # tweets
-        ]
+        # Use the test database that's already set up by the fixtures
+        with app.app_context():
+            with get_db_connection_context() as conn:
+                # Create test account first
+                TestHelpers.create_test_account(conn, {
+                    'username': 'testuser',
+                    'profile_pic_url': 'https://example.com/avatar.jpg',
+                    'last_activity': '2024-01-01 12:00:00'
+                })
+                
+                # Create test tweet with analysis
+                TestHelpers.create_test_tweet(conn, {
+                    'tweet_id': '1234567890123456789',
+                    'content': 'Test tweet content for template context',
+                    'username': 'testuser',
+                    'tweet_timestamp': '2024-01-01 12:00:00',
+                    'tweet_url': 'https://twitter.com/testuser/status/1234567890123456789',
+                    'category': 'general',
+                    'local_explanation': 'Test explanation',
+                    'analysis_stages': 'pattern'
+                })
 
         response = client.get('/user/testuser')
         assert response.status_code == 200
         assert b'@testuser' in response.data
-        assert b'analysisChart' in response.data  # User analysis chart
+        assert b'analysisChart' in response.data  # User analysis chart should be present
         assert b'filter-buttons' in response.data  # Filter buttons should be present

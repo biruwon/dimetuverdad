@@ -11,6 +11,7 @@ from .categories import Categories
 
 
 @dataclass
+@dataclass
 class PatternMatch:
     category: str
     matched_text: str

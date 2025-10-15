@@ -39,10 +39,9 @@ class TestContentAnalysis(unittest.TestCase):
 
         # Check default values
         self.assertEqual(analysis.categories_detected, [])
-        self.assertEqual(analysis.llm_explanation, "")
-        self.assertEqual(analysis.analysis_method, "pattern")
+        self.assertEqual(analysis.local_explanation, "")
+        self.assertEqual(analysis.analysis_stages, "")  # Empty by default, set during analysis
         self.assertEqual(analysis.media_urls, [])
-        self.assertEqual(analysis.media_analysis, "")
         self.assertEqual(analysis.media_type, "")
         self.assertFalse(analysis.multimodal_analysis)
         self.assertEqual(analysis.pattern_matches, [])
@@ -157,10 +156,9 @@ class TestContentAnalysis(unittest.TestCase):
             analysis_timestamp="2024-01-01T00:00:00Z",
             category="hate_speech",
             categories_detected=["hate_speech", "far_right_bias"],
-            llm_explanation="This content shows hate speech",
-            analysis_method="llm",
+            local_explanation="This content shows hate speech",
+            analysis_stages="pattern->local_llm",
             media_urls=["https://example.com/image.jpg"],
-            media_analysis="Image analysis result",
             media_type="image",
             multimodal_analysis=True,
             pattern_matches=[{"pattern": "hate", "score": 0.9}],
@@ -176,10 +174,10 @@ class TestContentAnalysis(unittest.TestCase):
         self.assertEqual(analysis.post_id, "123")
         self.assertEqual(analysis.category, "hate_speech")
         self.assertEqual(analysis.categories_detected, ["hate_speech", "far_right_bias"])
-        self.assertEqual(analysis.llm_explanation, "This content shows hate speech")
-        self.assertEqual(analysis.analysis_method, "llm")
+        self.assertEqual(analysis.local_explanation, "This content shows hate speech")
+        self.assertEqual(analysis.analysis_stages, "pattern->local_llm")  # Test actual value passed in
         self.assertEqual(analysis.media_urls, ["https://example.com/image.jpg"])
-        self.assertEqual(analysis.media_analysis, "Image analysis result")
+        self.assertTrue(analysis.multimodal_analysis)  # Boolean flag
         self.assertEqual(analysis.media_type, "image")
         self.assertTrue(analysis.multimodal_analysis)
         self.assertEqual(analysis.pattern_matches, [{"pattern": "hate", "score": 0.9}])

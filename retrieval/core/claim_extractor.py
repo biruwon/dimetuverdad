@@ -4,7 +4,7 @@ Identifies claims that warrant verification from text content.
 """
 
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -105,7 +105,7 @@ class ClaimExtractor:
 
     def extract_claims(self, text: str, max_targets: int = 5) -> List[VerificationTarget]:
         """
-        Alias for extract_verification_targets for backward compatibility.
+        Convenience method - alias for extract_verification_targets.
         """
         return self.extract_verification_targets(text, max_targets)
 
@@ -401,12 +401,12 @@ def extract_verification_targets(text: str, max_targets: int = 5) -> List[Verifi
     return extractor.extract_verification_targets(text, max_targets)
 
 
-# Alias for backward compatibility
+# Type alias for cleaner code
 Claim = VerificationTarget
 
 
 def extract_claims(text: str, max_targets: int = 5) -> List[VerificationTarget]:
     """
-    Extract claims from text (alias for extract_verification_targets).
+    Convenience function - extracts verification targets from text.
     """
     return extract_verification_targets(text, max_targets)

@@ -11,13 +11,18 @@ import subprocess
 import traceback
 import csv
 import io
+import asyncio
+import concurrent.futures
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 
+from analyzer.external_analyzer import ExternalAnalyzer
+from utils.database import get_db_connection_context
 from web.utils.decorators import admin_required, rate_limit, handle_db_errors, validate_input, ANALYSIS_CATEGORIES
 from web.utils.helpers import (
-    get_db_connection, get_tweet_data, reanalyze_tweet, reanalyze_tweet_sync,
+    get_tweet_data, reanalyze_tweet_sync,
     handle_reanalyze_action, handle_refresh_action, handle_refresh_and_reanalyze_action,
     handle_manual_update_action
 )
@@ -26,7 +31,6 @@ import config
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 # Set up logger for admin blueprint
-import logging
 admin_bp.logger = logging.getLogger('web.routes.admin')
 
 @admin_bp.route('/login', methods=['GET', 'POST'])
@@ -65,8 +69,8 @@ def admin_dashboard() -> str:
             SELECT
                 COUNT(*) AS total_tweets,
                 SUM(CASE WHEN ca.post_id IS NOT NULL THEN 1 ELSE 0 END) AS analyzed_tweets,
-                SUM(CASE WHEN ca.analysis_method = 'pattern' THEN 1 ELSE 0 END) AS pattern_analyzed,
-                SUM(CASE WHEN ca.analysis_method = 'llm' THEN 1 ELSE 0 END) AS llm_analyzed
+                SUM(CASE WHEN ca.external_analysis_used = 1 THEN 1 ELSE 0 END) AS external_analyzed,
+                SUM(CASE WHEN ca.analysis_stages LIKE '%local_llm%' THEN 1 ELSE 0 END) AS local_llm_analyzed
             FROM tweets t
             LEFT JOIN content_analyses ca ON ca.post_id = t.tweet_id
         """).fetchone()
@@ -74,13 +78,13 @@ def admin_dashboard() -> str:
         stats = {
             'total_tweets': stats_row['total_tweets'] if stats_row else 0,
             'analyzed_tweets': stats_row['analyzed_tweets'] if stats_row else 0,
-            'pattern_analyzed': stats_row['pattern_analyzed'] if stats_row else 0,
-            'llm_analyzed': stats_row['llm_analyzed'] if stats_row else 0,
+            'external_analyzed': stats_row['external_analyzed'] if stats_row else 0,
+            'local_llm_analyzed': stats_row['local_llm_analyzed'] if stats_row else 0,
         }
 
         # Recent analyses (last 10)
         recent_rows = conn.execute("""
-            SELECT ca.analysis_timestamp, ca.category, ca.analysis_method, t.username,
+            SELECT ca.analysis_timestamp, ca.category, ca.analysis_stages, ca.external_analysis_used, t.username,
                    SUBSTR(t.content, 1, 100) AS content_preview
             FROM content_analyses ca
             JOIN tweets t ON t.tweet_id = ca.post_id
@@ -118,10 +122,17 @@ def admin_dashboard() -> str:
 
     recent_analyses = []
     for r in recent_rows or []:
+        # Determine display method from analysis stages
+        stages = r['analysis_stages'] or 'pattern'
+        if r['external_analysis_used']:
+            display_method = f"{stages} (external)"
+        else:
+            display_method = stages
+            
         recent_analyses.append({
             'analysis_timestamp': r['analysis_timestamp'],
             'category': r['category'],
-            'analysis_method': r['analysis_method'],
+            'analysis_method': display_method,
             'username': r['username'],
             'content_preview': r['content_preview'] if 'content_preview' in r else r['content'][:100] if 'content' in r else '',
             'activity_type': 'analysis'
@@ -358,7 +369,8 @@ def admin_edit_analysis(tweet_id: str) -> str:
                 t.username,
                 t.tweet_timestamp,
                 ca.category,
-                ca.llm_explanation,
+                ca.local_explanation,
+                ca.external_explanation,
                 t.tweet_url,
                 t.original_content,
                 ca.verification_data,
@@ -373,12 +385,17 @@ def admin_edit_analysis(tweet_id: str) -> str:
         return redirect(url_for('admin.admin_dashboard'))
 
     # Extract data from row using column names (sqlite3.Row supports dict-like access)
+    # Use best explanation for display (external if available, otherwise local)
+    best_explanation = row['external_explanation'] if row['external_explanation'] else row['local_explanation'] if row['local_explanation'] else ''
+    
     tweet_dict = {
         'content': row['content'],
         'username': row['username'],
         'tweet_timestamp': row['tweet_timestamp'],
         'category': row['category'] if row['category'] is not None else 'general',
-        'llm_explanation': row['llm_explanation'] if row['llm_explanation'] is not None else '',
+        'best_explanation': best_explanation,
+        'local_explanation': row['local_explanation'] if row['local_explanation'] is not None else '',
+        'external_explanation': row['external_explanation'] if row['external_explanation'] is not None else '',
         'tweet_url': row['tweet_url'] if row['tweet_url'] is not None else '',
         'original_content': row['original_content'] if row['original_content'] is not None else '',
         'verification_data': json.loads(row['verification_data']) if row['verification_data'] is not None else None,
@@ -391,6 +408,63 @@ def admin_edit_analysis(tweet_id: str) -> str:
                            tweet_id=tweet_id,
                            categories=ANALYSIS_CATEGORIES,
                            referrer=referrer)
+
+@admin_bp.route('/trigger-external/<tweet_id>', methods=['POST'])
+@admin_required
+def trigger_external_analysis(tweet_id: str):
+    """Manually trigger external Gemini analysis on a tweet (admin-only)."""
+    try:
+        # Get tweet content and media
+        tweet_data = get_tweet_data(tweet_id)
+        if not tweet_data:
+            return jsonify({'success': False, 'error': 'Tweet no encontrado'}), 404
+        
+        content = tweet_data.get('content', '')
+        media_urls = tweet_data.get('media_urls', [])
+        
+        # Run external analysis with admin override
+        external_analyzer = ExternalAnalyzer(verbose=True)
+        
+        # Use asyncio to run the async analysis
+        try:
+            loop = asyncio.get_running_loop()
+            # If loop is already running, create a task
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, external_analyzer.analyze(content, media_urls))
+                external_explanation = future.result(timeout=120)  # 2 minute timeout
+        except RuntimeError:
+            # No event loop running, create a new one
+            external_explanation = asyncio.run(external_analyzer.analyze(content, media_urls))
+        
+        if not external_explanation:
+            return jsonify({'success': False, 'error': 'No se pudo generar el análisis externo'}), 500
+        
+        # Save external explanation to database
+        with get_db_connection_context() as conn:
+            # Update content_analyses with external explanation
+            conn.execute("""
+                UPDATE content_analyses 
+                SET external_explanation = ?,
+                    external_analysis_used = 1,
+                    analysis_stages = CASE 
+                        WHEN analysis_stages LIKE '%external%' THEN analysis_stages
+                        ELSE analysis_stages || ',external'
+                    END,
+                    analysis_timestamp = CURRENT_TIMESTAMP
+                WHERE post_id = ?
+            """, (external_explanation, tweet_id))
+            conn.commit()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Análisis externo completado',
+            'external_explanation': external_explanation
+        })
+        
+    except Exception as e:
+        admin_bp.logger.error(f"Error triggering external analysis: {str(e)}")
+        admin_bp.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @admin_bp.route('/reanalyze-single/<tweet_id>', methods=['POST'])
 @admin_required
@@ -453,8 +527,10 @@ def admin_view_category(category_name: str) -> str:
                     t.tweet_timestamp,
                     t.tweet_id,
                     ca.category,
-                    ca.llm_explanation,
-                    ca.analysis_method,
+                    ca.local_explanation,
+                    ca.external_explanation,
+                    ca.analysis_stages,
+                    ca.external_analysis_used,
                     ca.analysis_timestamp,
                     t.is_deleted,
                     t.is_edited,
@@ -466,11 +542,11 @@ def admin_view_category(category_name: str) -> str:
                 LIMIT ? OFFSET ?
             """, (category_name, per_page, offset)).fetchall()
 
-            # 4) Category stats (llm vs pattern, unique users)
+            # 4) Category stats (external vs local, unique users)
             stats_row = conn.execute("""
                 SELECT 
-                    SUM(CASE WHEN analysis_method='llm' THEN 1 ELSE 0 END) AS llm_count,
-                    SUM(CASE WHEN analysis_method='pattern' THEN 1 ELSE 0 END) AS pattern_count,
+                    SUM(CASE WHEN external_analysis_used=1 THEN 1 ELSE 0 END) AS external_count,
+                    SUM(CASE WHEN analysis_stages LIKE '%local_llm%' THEN 1 ELSE 0 END) AS local_llm_count,
                     COUNT(DISTINCT author_username) AS unique_users
                 FROM content_analyses
                 WHERE category = ?
@@ -489,6 +565,15 @@ def admin_view_category(category_name: str) -> str:
         # Build tweets list
         processed_tweets = []
         for r in recent_rows or []:
+            # Determine best explanation
+            best_explanation = r['external_explanation'] if r['external_explanation'] else r['local_explanation']
+            # Determine display method from analysis stages
+            stages = r['analysis_stages'] or 'pattern'
+            if r['external_analysis_used']:
+                display_method = f"{stages} (external)"
+            else:
+                display_method = stages
+                
             processed_tweets.append({
                 'tweet_url': r['tweet_url'],
                 'content': r['content'],
@@ -496,8 +581,8 @@ def admin_view_category(category_name: str) -> str:
                 'tweet_timestamp': r['tweet_timestamp'],
                 'tweet_id': r['tweet_id'],
                 'category': r['category'],
-                'llm_explanation': r['llm_explanation'],
-                'analysis_method': r['analysis_method'],
+                'best_explanation': best_explanation,
+                'analysis_stages': display_method,
                 'analysis_timestamp': r['analysis_timestamp'],
                 'is_deleted': r['is_deleted'],
                 'is_edited': r['is_edited'],
@@ -505,15 +590,16 @@ def admin_view_category(category_name: str) -> str:
             })
 
         # Category stats
-        llm_count = stats_row['llm_count'] if stats_row else 0
-        pattern_count = stats_row['pattern_count'] if stats_row else 0
+        external_count = stats_row['external_count'] if stats_row else 0
+        local_llm_count = stats_row['local_llm_count'] if stats_row else 0
         unique_users = stats_row['unique_users'] if stats_row else 0
 
         category_stats = {
             'total_tweets': total_count,
             'unique_users': unique_users,
-            'llm_analyzed': llm_count,
-            'pattern_analyzed': pattern_count
+            'local_llm_analyzed': local_llm_count,
+            'pattern_analyzed': total_count - external_count - local_llm_count,
+            'external_analyzed': external_count
         }
 
         top_users = []
@@ -563,8 +649,15 @@ def admin_quick_edit_category(tweet_id: str) -> str:
         # Check if analysis exists
         row = conn.execute("SELECT post_id FROM content_analyses WHERE post_id = ?", (tweet_id,)).fetchone()
         if row:
-            # Update existing analysis
-            conn.execute("UPDATE content_analyses SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = CURRENT_TIMESTAMP WHERE post_id = ?", (new_category, 'Categoría asignada manualmente por administrador', tweet_id))
+            # Update existing analysis with manual annotation
+            conn.execute("""
+                UPDATE content_analyses 
+                SET category = ?, 
+                    local_explanation = ?, 
+                    analysis_stages = 'manual', 
+                    analysis_timestamp = CURRENT_TIMESTAMP 
+                WHERE post_id = ?
+            """, (new_category, 'Categoría asignada manualmente por administrador', tweet_id))
             conn.commit()
             success = True
         else:
@@ -576,7 +669,10 @@ def admin_quick_edit_category(tweet_id: str) -> str:
                 tweet_url = tweet_row['tweet_url']
                 
                 conn.execute("""
-                    INSERT INTO content_analyses (post_id, category, llm_explanation, analysis_method, author_username, post_content, post_url, analysis_timestamp)
+                    INSERT INTO content_analyses (
+                        post_id, category, local_explanation, analysis_stages, 
+                        author_username, post_content, post_url, analysis_timestamp
+                    )
                     VALUES (?, ?, ?, 'manual', ?, ?, ?, CURRENT_TIMESTAMP)
                 """, (tweet_id, new_category, 'Categoría asignada manualmente por administrador', username, content, tweet_url))
                 conn.commit()
@@ -606,8 +702,10 @@ def export_csv() -> str:
                     ca.post_id,
                     ca.author_username,
                     ca.category,
-                    ca.llm_explanation,
-                    ca.analysis_method,
+                    ca.local_explanation,
+                    ca.external_explanation,
+                    ca.analysis_stages,
+                    ca.external_analysis_used,
                     ca.analysis_timestamp,
                     t.content as tweet_content,
                     t.tweet_url,
@@ -624,16 +722,17 @@ def export_csv() -> str:
 
         # Write header
         writer.writerow([
-            'Post ID', 'Author Username', 'Category', 'LLM Explanation',
-            'Analysis Method', 'Analysis Timestamp', 'Post Content',
+            'Post ID', 'Author Username', 'Category', 'Local Explanation', 'External Explanation',
+            'Analysis Stages', 'External Analysis Used', 'Analysis Timestamp', 'Post Content',
             'Post URL', 'Post Timestamp'
         ])
 
         # Write data
         for r in rows:
             writer.writerow([
-                r['post_id'], r['author_username'], r['category'], r['llm_explanation'],
-                r['analysis_method'], r['analysis_timestamp'], r['tweet_content'], r['tweet_url'], r['tweet_timestamp']
+                r['post_id'], r['author_username'], r['category'], r['local_explanation'], r['external_explanation'],
+                r['analysis_stages'], r['external_analysis_used'], r['analysis_timestamp'], r['tweet_content'], 
+                r['tweet_url'], r['tweet_timestamp']
             ])
 
         output.seek(0)
@@ -670,8 +769,10 @@ def export_json() -> str:
                     ca.post_id,
                     ca.author_username,
                     ca.category,
-                    ca.llm_explanation,
-                    ca.analysis_method,
+                    ca.local_explanation,
+                    ca.external_explanation,
+                    ca.analysis_stages,
+                    ca.external_analysis_used,
                     ca.analysis_timestamp,
                     ca.post_content,
                     ca.post_url,
@@ -694,8 +795,10 @@ def export_json() -> str:
                 'post_id': r['post_id'],
                 'author_username': r['author_username'],
                 'category': r['category'],
-                'llm_explanation': r['llm_explanation'],
-                'analysis_method': r['analysis_method'],
+                'local_explanation': r['local_explanation'],
+                'external_explanation': r['external_explanation'],
+                'analysis_stages': r['analysis_stages'],
+                'external_analysis_used': bool(r['external_analysis_used']),
                 'analysis_timestamp': r['analysis_timestamp'],
                 'post_content': r['post_content'],
                 'post_url': r['post_url'],

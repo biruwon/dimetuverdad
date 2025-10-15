@@ -5,7 +5,6 @@ Database operations for content analysis storage and retrieval.
 import os
 import sqlite3
 import json
-import time
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 from contextlib import contextmanager
@@ -40,60 +39,52 @@ class ContentAnalysisRepository:
 
     def save(self, analysis: ContentAnalysis) -> None:
         """
-        Save content analysis to database with retry logic.
+        Save content analysis to database (fail-fast, no retries).
 
         Args:
             analysis: ContentAnalysis object to save
 
         Raises:
-            sqlite3.OperationalError: If database remains locked after retries
+            sqlite3.OperationalError: If database operation fails
         """
-        retry_delay = DatabaseConstants.RETRY_DELAY  # Use local variable to avoid modifying global constant
-        for attempt in range(DatabaseConstants.MAX_RETRIES):
-            try:
-                with self._get_connection() as conn:
-                    cursor = conn.cursor()
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
 
-                    cursor.execute(f'''
-                    INSERT OR REPLACE INTO {DatabaseConstants.TABLE_NAME}
-                    (post_id, post_url, author_username, platform, post_content, category,
-                     llm_explanation, analysis_method, analysis_json, analysis_timestamp,
-                     categories_detected, media_urls, media_analysis, media_type, multimodal_analysis,
-                     verification_data, verification_confidence)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        analysis.post_id,
-                        analysis.post_url,
-                        analysis.author_username,
-                        'twitter',  # Default platform for existing Twitter data
-                        analysis.post_content,
-                        analysis.category,
-                        analysis.llm_explanation,
-                        analysis.analysis_method,
-                        analysis.analysis_json,
-                        analysis.analysis_timestamp,
-                        json.dumps(analysis.categories_detected, ensure_ascii=False),
-                        json.dumps(analysis.media_urls, ensure_ascii=False),
-                        analysis.media_analysis,
-                        analysis.media_type,
-                        analysis.multimodal_analysis,
-                        json.dumps(analysis.verification_data, ensure_ascii=False, default=str) if analysis.verification_data else None,
-                        analysis.verification_confidence
-                    ))
+                cursor.execute(f'''
+                INSERT OR REPLACE INTO {DatabaseConstants.TABLE_NAME}
+                (post_id, post_url, author_username, platform, post_content, category,
+                 local_explanation, external_explanation, analysis_stages, external_analysis_used,
+                 analysis_json, analysis_timestamp, categories_detected, 
+                 media_urls, media_type, multimodal_analysis,
+                 verification_data, verification_confidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    analysis.post_id,
+                    analysis.post_url,
+                    analysis.author_username,
+                    'twitter',  # Default platform for existing Twitter data
+                    analysis.post_content,
+                    analysis.category,
+                    analysis.local_explanation,
+                    analysis.external_explanation or '',
+                    analysis.analysis_stages,
+                    analysis.external_analysis_used,
+                    analysis.analysis_json,
+                    analysis.analysis_timestamp,
+                    json.dumps(analysis.categories_detected, ensure_ascii=False),
+                    json.dumps(analysis.media_urls, ensure_ascii=False),
+                    analysis.media_type,
+                    analysis.multimodal_analysis,
+                    json.dumps(analysis.verification_data, ensure_ascii=False, default=str) if analysis.verification_data else None,
+                    analysis.verification_confidence
+                ))
 
-                    conn.commit()
-                return  # Success
+                conn.commit()
 
-            except sqlite3.OperationalError as e:
-                if attempt < DatabaseConstants.MAX_RETRIES - 1:
-                    print(f"⚠️ Database locked, retrying in {retry_delay}s... "
-                          f"(attempt {attempt + 1}/{DatabaseConstants.MAX_RETRIES})")
-                    time.sleep(retry_delay)
-                    # Exponential backoff with local variable
-                    retry_delay *= 2
-                else:
-                    print(f"❌ Database remains locked after {DatabaseConstants.MAX_RETRIES} attempts: {e}")
-                    raise
+        except sqlite3.OperationalError as e:
+            print(f"❌ Database operation failed (no retry): {e}")
+            raise
 
     def get_by_post_id(self, post_id: str) -> Optional[ContentAnalysis]:
         """
@@ -228,10 +219,11 @@ class ContentAnalysisRepository:
                 analysis_timestamp=datetime.now().isoformat(),
                 category="ERROR",
                 categories_detected=["ERROR"],
-                llm_explanation=f"Analysis failed: {error_message}",
-                analysis_method="error",
+                local_explanation=f"Analysis failed: {error_message}",
+                external_explanation="",
+                analysis_stages="error",
+                external_analysis_used=False,
                 media_urls=media_urls or [],
-                media_analysis="",
                 media_type="",
                 multimodal_analysis=bool(media_urls),
                 pattern_matches=[],
@@ -437,11 +429,12 @@ class ContentAnalysisRepository:
             analysis_timestamp=_g('analysis_timestamp'),
             category=_g('category'),
             categories_detected=json.loads(categories_detected_raw or '[]'),
-            llm_explanation=_g('llm_explanation'),
-            analysis_method=_g('analysis_method'),
+            local_explanation=_g('local_explanation', ''),
+            external_explanation=_g('external_explanation', ''),
+            analysis_stages=_g('analysis_stages', ''),
+            external_analysis_used=bool(_g('external_analysis_used', False)),
             media_urls=json.loads(media_urls_raw or '[]'),
-            media_analysis=_g('media_analysis'),
-            media_type=_g('media_type'),
+            media_type=_g('media_type', ''),
             multimodal_analysis=bool(_g('multimodal_analysis')),
             pattern_matches=json.loads(analysis_json_raw).get('pattern_matches', []) if analysis_json_raw else [],
             topic_classification=json.loads(analysis_json_raw).get('topic_classification', {}) if analysis_json_raw else {},

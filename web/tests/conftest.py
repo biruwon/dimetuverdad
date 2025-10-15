@@ -6,20 +6,18 @@ Comprehensive testing for Flask application routes, templates, and functionality
 import pytest
 import tempfile
 import os
-import atexit
 import glob
 import uuid
 import sqlite3
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import sys
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from web.app import create_app
-from config import ADMIN_TOKEN
-from utils.database import init_test_database, cleanup_test_databases, _create_test_database_schema
+from utils.database import _create_test_database_schema
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -158,19 +156,22 @@ def make_count_row(count: int = 0, key: str = 'cnt') -> MockRow:
 
 def make_post_export_row(post_id: str, author: str, category: str = 'general', explanation: str = '',
                          method: str = 'pattern', timestamp: str = '2024-01-01 12:00:00',
-                         content: str = None, url: str = None, post_ts: str = None, categories_detected=None) -> MockRow:
+                         content: str = None, url: str = None, post_ts: str = None, categories_detected=None,
+                         local_explanation: str = '', external_explanation: str = '', analysis_stages: str = 'pattern') -> MockRow:
     """Return a MockRow shaped for export endpoints (CSV/JSON)."""
     return MockRow({
         'post_id': post_id,
         'author_username': author,
         'category': category,
-        'llm_explanation': explanation,
-        'analysis_method': method,
+        'local_explanation': local_explanation or explanation,
+        'external_explanation': external_explanation,
+        'analysis_stages': analysis_stages,
         'analysis_timestamp': timestamp,
         'post_content': content or '',
         'post_url': url or '',
         'post_timestamp': post_ts or timestamp,
-        'categories_detected': categories_detected
+        'categories_detected': categories_detected,
+        'external_analysis_used': bool(external_explanation)
     })
 
 
@@ -225,7 +226,13 @@ def sample_tweet_data():
 def cleanup_session_db_tables(session_test_db_path):
     """Clean up database tables between tests to ensure test isolation."""
     # Truncate all tables to ensure clean state between tests
-    conn = sqlite3.connect(session_test_db_path)
+    try:
+        conn = sqlite3.connect(session_test_db_path, timeout=5.0)
+        conn.execute("PRAGMA busy_timeout = 5000")  # 5 second timeout
+    except sqlite3.Error:
+        # If we can't connect to the database (e.g., it's mocked or locked), skip cleanup
+        return
+
     try:
         cursor = conn.cursor()
         # Disable foreign key checks temporarily
@@ -238,18 +245,31 @@ def cleanup_session_db_tables(session_test_db_path):
         # Truncate all tables
         for table in tables:
             table_name = table[0]
-            cursor.execute(f"DELETE FROM {table_name}")
+            try:
+                cursor.execute(f"DELETE FROM {table_name}")
+            except sqlite3.Error:
+                # If table deletion fails (e.g., due to mocking), continue
+                continue
 
         # Reset auto-increment counters only if sqlite_sequence table exists
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'")
         if cursor.fetchone():
-            cursor.execute("DELETE FROM sqlite_sequence")
+            try:
+                cursor.execute("DELETE FROM sqlite_sequence")
+            except sqlite3.Error:
+                pass  # Ignore if this fails
 
         # Re-enable foreign key checks
         cursor.execute("PRAGMA foreign_keys = ON")
         conn.commit()
+    except sqlite3.Error:
+        # If any database operation fails, skip cleanup entirely
+        pass
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except sqlite3.Error:
+            pass
 
 
 class TestHelpers:
@@ -273,14 +293,17 @@ class TestHelpers:
         if 'category' in tweet_data:
             db_connection.execute("""
                 INSERT INTO content_analyses (
-                    post_id, category, llm_explanation, analysis_method,
+                    post_id, category, local_explanation, external_explanation, 
+                    analysis_stages, external_analysis_used,
                     analysis_timestamp, author_username
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 tweet_data['tweet_id'],
                 tweet_data['category'],
-                tweet_data.get('llm_explanation', ''),
-                tweet_data.get('analysis_method', 'pattern'),
+                tweet_data.get('local_explanation', tweet_data.get('llm_explanation', '')),
+                tweet_data.get('external_explanation', ''),
+                tweet_data.get('analysis_stages', 'pattern'),
+                tweet_data.get('external_analysis_used', False),
                 tweet_data.get('analysis_timestamp', '2024-01-01 12:00:00'),
                 tweet_data['username']
             ))

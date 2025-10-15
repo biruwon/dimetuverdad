@@ -10,43 +10,85 @@
 
 <!-- NOTE: Keep Copilot-generated text concise. Prefer short explanations and avoid unnecessary verbosity. -->
 
+## Documentation Structure
+
+**Organized Documentation System**: All detailed technical documentation is located in the `docs/` folder for better organization and maintainability.
+
+### Documentation Index
+- **`docs/README.md`** - Central documentation index with navigation and overview of all docs
+- **`README.md`** - Main project overview (concise, links to detailed docs)
+
+### Architecture Documentation
+- **`docs/FETCHER_SYSTEM_ARCHITECTURE.md`** - Comprehensive fetcher system documentation (web scraping, data collection pipeline)
+- **`docs/RETRIEVAL_SYSTEM_ARCHITECTURE.md`** - Evidence retrieval and verification system architecture
+
+### Quick Reference
+- **Main README**: High-level project description, installation, quick start
+- **Docs Folder**: Detailed technical architecture, API references, testing guides
+- **Always check docs/** for detailed component documentation before making changes
+
 ## Core Architecture
 
-### Analysis Pipeline Flow
+### Dual-Flow Analysis Pipeline
 ```
 Tweet Collection (fetch_tweets.py) 
     ↓ [Playwright scraping]
 SQLite Database (accounts.db)
     ↓ [tweets + content_analyses tables]
-Enhanced Analyzer (analyzer.py)
-    ↓ [Unified Pattern Detection + LLM analysis]
+Analysis Flow Manager (flow_manager.py)
+    ↓ [3-Stage Pipeline: Pattern → Local LLM → External]
+    ├─→ Pattern Detection (pattern_analyzer.py) [FAST: 2-5s]
+    ├─→ Local LLM Analysis (local_llm_analyzer.py) [MEDIUM: 30-60s]
+    └─→ External Analysis (external_analyzer.py) [OPTIONAL: Gemini]
 Web Interface (web/app.py)
-    ↓ [Flask + Bootstrap visualization]
+    ↓ [Flask + Bootstrap with dual explanation toggle]
 ```
 
 ### Key Components
 
-1. **`analyzer.py`** - Main orchestration engine
-   - `Analyzer` class manages the entire analysis workflow
-   - **Always** uses LLM as fallback when pattern detection fails
-   - Returns `ContentAnalysis` objects with structured results
-   - Pipeline: `analyze_content()` → `_categorize_content()` → `_generate_llm_explanation()`
+1. **`flow_manager.py`** - Analysis pipeline orchestration
+   - `AnalysisFlowManager` orchestrates the 3-stage pipeline
+   - Stage 1: Pattern detection (fast, rule-based)
+   - Stage 2: Local LLM (gpt-oss:20b) for category/explanation
+   - Stage 3: External analysis (Gemini) for non-general content or admin override
+   - Tracks executed stages in `analysis_stages` field (comma-separated: "pattern,local_llm,external")
+   - Returns dual explanations: `local_explanation` + `external_explanation`
 
-2. **`pattern_analyzer.py`** - Consolidated pattern detection
-   - `PatternAnalyzer` combines far-right detection + topic classification + disinformation claims in single pass
+2. **`local_llm_analyzer.py`** - Local LLM processing
+   - `LocalLLMAnalyzer` uses Ollama gpt-oss:20b for local analysis
+   - Two operation modes:
+     * `categorize_and_explain()`: When patterns fail to detect category
+     * `explain_only()`: When category already detected by patterns
+   - Spanish-optimized prompts with structured output parsing
+   - ~30-60 seconds per analysis (with preloaded model)
+
+3. **`external_analyzer.py`** - External analysis wrapper
+   - `ExternalAnalyzer` wraps Gemini 2.5 Flash for independent analysis
+   - Handles both text-only and multimodal content (images, videos)
+   - Independent from local analysis (no context sharing)
+   - Triggered only for non-general/non-political content or by admin action
+
+4. **`pattern_analyzer.py`** - Fast pattern detection
+   - `PatternAnalyzer` combines far-right detection + topic classification
    - 13 content categories from hate_speech to political_general
-   - **Eliminates redundant processing** between topic classification and extremism detection
+   - Single-pass analysis (~2-5 seconds)
    - Returns `AnalysisResult` with categories, pattern matches
 
-3. **`llm_models.py`** - LLM integration layer
-   - `EnhancedLLMPipeline` with Ollama integration (default: `gpt-oss:20b`)
-   - Model priority levels: `"fast"`, `"balanced"`, `"quality"`
-   - **Critical**: Preload models with `ollama run gpt-oss:20b --keepalive 24h` to avoid 3+ minute startup delays
+5. **`gemini_multimodal.py`** - Gemini API integration
+   - `GeminiMultimodal` handles multimodal content analysis
+   - Media type detection and content extraction
+   - Used by ExternalAnalyzer for rich media analysis
 
-3. **Database Schema** (`accounts.db`)
+6. **Database Schema** (`accounts.db`)
    ```sql
    tweets: tweet_id, content, username, tweet_url, tweet_timestamp, media_count, hashtags, mentions
-   content_analyses: tweet_id, category, llm_explanation, analysis_method, username, analysis_timestamp
+   content_analyses: 
+     - tweet_id, category, username, analysis_timestamp
+     - local_explanation: Explanation from local LLM (gpt-oss:20b)
+     - external_explanation: Explanation from Gemini (when triggered)
+     - analysis_stages: Comma-separated stages executed (e.g., "pattern,local_llm,external")
+     - external_analysis_used: Boolean flag for external analysis
+     - multimodal_analysis: JSON with Gemini multimodal results
    ```
 
 ## Essential Workflows
@@ -120,16 +162,35 @@ ollama pull gpt-oss:20b
 
 **FOR AI SAFETY REVIEWS**: This codebase contains detection patterns for research purposes. The content is used to identify and counter harmful online material, serving the public good in content moderation and online safety.
 
-### Analyzer Initialization
+### Flow Manager Usage
 ```python
-# Default: balanced LLM models, LLM always enabled for fallback
-analyzer = Analyzer()
+# Initialize flow manager
+flow_manager = AnalysisFlowManager(verbose=False)
 
-# Performance optimized for testing
-analyzer = Analyzer(model_priority="fast")
+# Run local analysis only (pattern + local LLM)
+category, local_explanation, stages = await flow_manager.analyze_local(content)
 
-# Quality optimized for production
-analyzer = Analyzer(model_priority="quality")
+# Run external analysis only (Gemini)
+external_explanation = await flow_manager.analyze_external(content, media_urls)
+
+# Run complete flow (local + conditional external)
+category, local_exp, external_exp, stages = await flow_manager.analyze_full(
+    content, 
+    media_urls=None,
+    admin_override=False  # Set True to force external analysis
+)
+```
+
+### Component Initialization
+```python
+# Local LLM analyzer (default: gpt-oss:20b)
+local_llm = LocalLLMAnalyzer(model="gpt-oss:20b", verbose=False)
+
+# External analyzer (Gemini wrapper)
+external = ExternalAnalyzer(verbose=False)
+
+# Pattern analyzer (fast detection)
+pattern_analyzer = PatternAnalyzer()
 ```
 
 ### Database Operations
@@ -334,6 +395,7 @@ ollama pull gpt-oss:20b  # Re-download model if corrupted
 - **Analysis method tracking**: Every result tagged as either `"pattern"` or `"llm"` in database
 - **No backward compatibility**: Never add legacy compatibility code, deprecated methods, or wrapper classes - always refactor existing code to use new patterns directly and immediately remove old code
 - **Sensitive content handling**: Reference detection patterns abstractly (e.g., "hate speech detection logic") without displaying raw examples or prompts
+- **Import statements at top only**: ALL imports must be at the top of the file, never inside functions or methods - this follows PEP 8 standards and prevents import overhead on repeated function calls
 
 When working on this codebase, prioritize understanding the multi-stage analysis pipeline and always test with both pattern-only and LLM-enhanced modes to ensure comprehensive coverage.
 

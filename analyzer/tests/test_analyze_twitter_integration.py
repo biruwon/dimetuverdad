@@ -219,14 +219,14 @@ class TestAnalyzerIntegration:
                     print(f"   ✅ PASSED: {test_id}")
                     print(f"   📝 Content: {test_case['content'][:80]}...")
                     print(f"   🎯 Category: {actual}")
-                    print(f"   💡 Explanation: {analysis.llm_explanation[:100]}...")
+                    print(f"   💡 Explanation: {analysis.local_explanation[:100]}...")
                     passed += 1
                 else:
                     print("❌")
                     print(f"   ❌ FAILED: {test_id}")
                     print(f"   📝 Content: {test_case['content'][:80]}...")
                     print(f"   🎯 Expected: {expected_str}, Got: {actual}")
-                    print(f"   💡 Explanation: {analysis.llm_explanation[:100]}...")
+                    print(f"   💡 Explanation: {analysis.local_explanation[:100]}...")
                     failed += 1
                     # STOP ON FIRST FAILURE
                     print(f"🛑 STOPPING ON FIRST FAILURE: {test_id}")
@@ -239,8 +239,8 @@ class TestAnalyzerIntegration:
                     'success': is_success,
                     'description': test_case['description'],
                     'content': test_case['content'],
-                    'llm_explanation': analysis.llm_explanation,
-                    'analysis_method': analysis.analysis_method
+                    'local_explanation': analysis.local_explanation,
+                    'analysis_stages': analysis.analysis_stages
                 })
                 print()
                 
@@ -305,8 +305,8 @@ class TestAnalyzerIntegration:
                     'success': is_success,
                     'description': test_case['description'],
                     'content': test_case['content'],
-                    'llm_explanation': analysis.llm_explanation,
-                    'analysis_method': analysis.analysis_method
+                    'local_explanation': analysis.local_explanation,
+                    'analysis_stages': analysis.analysis_stages
                 })
                 
             except Exception as e:
@@ -415,7 +415,7 @@ class TestAnalyzerIntegration:
                 print(f"   📝 Content: {test_case['content'][:80]}...")
                 print(f"   🎯 Category: {actual}")
                 if not is_llm_test:
-                    print(f"   💡 Explanation: {analysis.llm_explanation[:100]}...")
+                    print(f"   💡 Explanation: {analysis.local_explanation[:100]}...")
                 passed = 1
                 failed = 0
             else:
@@ -424,7 +424,7 @@ class TestAnalyzerIntegration:
                 print(f"   📝 Content: {test_case['content'][:80]}...")
                 print(f"   🎯 Expected: {expected_str}, Got: {actual}")
                 if not is_llm_test:
-                    print(f"   💡 Explanation: {analysis.llm_explanation[:100]}...")
+                    print(f"   💡 Explanation: {analysis.local_explanation[:100]}...")
                 passed = 0
                 failed = 1
             
@@ -435,8 +435,8 @@ class TestAnalyzerIntegration:
                 'success': is_success,
                 'description': test_case['description'],
                 'content': test_case['content'],
-                'llm_explanation': analysis.llm_explanation,
-                'analysis_method': analysis.analysis_method
+                'local_explanation': analysis.local_explanation,
+                'analysis_stages': analysis.analysis_stages
             }]
             
         except Exception as e:

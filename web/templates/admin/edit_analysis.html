@@ -140,6 +140,21 @@
                             </form>
                         </div>
                         
+                        <div class="alert alert-primary mb-4">
+                            <h6><i class="fas fa-star me-2"></i>Análisis Externo (Gemini)</h6>
+                            <p class="mb-2">Genera un análisis externo usando Gemini Multimodal. Útil para contenido complejo o cuando necesitas una segunda opinión.</p>
+                            <button type="button" class="btn btn-primary btn-sm" id="triggerExternalBtn" onclick="triggerExternalAnalysis('{{ tweet_id }}')">
+                                <i class="fas fa-sparkles me-1"></i>Generar Análisis Externo
+                            </button>
+                            <div id="externalAnalysisResult" class="mt-3" style="display: none;">
+                                <div class="spinner-border spinner-border-sm me-2" role="status" id="externalSpinner">
+                                    <span class="visually-hidden">Analizando...</span>
+                                </div>
+                                <span id="externalStatusText">Analizando con Gemini...</span>
+                                <div id="externalExplanation" class="mt-2 p-3 bg-light border rounded" style="display: none;"></div>
+                            </div>
+                        </div>
+                        
                         <div class="mb-3 text-center">
                             <strong>— O —</strong>
                         </div>
@@ -173,7 +188,7 @@
 
                             <div class="mb-3">
                                 <label for="explanation" class="form-label">Editar Explicación Manualmente</label>
-                                <textarea name="explanation" id="explanation" class="form-control" rows="8" required>{{ tweet.llm_explanation or '' }}</textarea>
+                                <textarea name="explanation" id="explanation" class="form-control" rows="8" required>{{ tweet.external_explanation or tweet.local_explanation or '' }}</textarea>
                                 <div class="form-text">
                                     Proporciona una explicación detallada del por qué este contenido pertenece a la categoría seleccionada.
                                 </div>
@@ -222,6 +237,56 @@
                 });
             }
         });
+        
+        // Trigger external analysis via AJAX
+        function triggerExternalAnalysis(tweetId) {
+            const button = document.getElementById('triggerExternalBtn');
+            const resultDiv = document.getElementById('externalAnalysisResult');
+            const spinner = document.getElementById('externalSpinner');
+            const statusText = document.getElementById('externalStatusText');
+            const explanationDiv = document.getElementById('externalExplanation');
+            
+            // Disable button and show loading
+            button.disabled = true;
+            resultDiv.style.display = 'block';
+            spinner.style.display = 'inline-block';
+            statusText.textContent = 'Analizando con Gemini... (puede tardar 1-2 minutos)';
+            explanationDiv.style.display = 'none';
+            
+            // Make AJAX request
+            fetch(`/admin/trigger-external/${tweetId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                spinner.style.display = 'none';
+                
+                if (data.success) {
+                    statusText.textContent = '✅ Análisis externo completado';
+                    statusText.className = 'text-success fw-bold';
+                    explanationDiv.textContent = data.external_explanation;
+                    explanationDiv.style.display = 'block';
+                    
+                    // Show success message
+                    alert('Análisis externo generado exitosamente. La página se recargará para mostrar los cambios.');
+                    location.reload();
+                } else {
+                    statusText.textContent = '❌ Error: ' + (data.error || 'No se pudo generar el análisis');
+                    statusText.className = 'text-danger fw-bold';
+                    button.disabled = false;
+                }
+            })
+            .catch(error => {
+                spinner.style.display = 'none';
+                statusText.textContent = '❌ Error de conexión: ' + error.message;
+                statusText.className = 'text-danger fw-bold';
+                button.disabled = false;
+                console.error('Error:', error);
+            });
+        }
     </script>
 </body>
 </html>

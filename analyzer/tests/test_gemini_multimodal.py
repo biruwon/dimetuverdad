@@ -521,39 +521,44 @@ class TestGeminiMultimodalGeminiClient(unittest.TestCase):
         self.assertIsNone(model)
         self.assertIsNotNone(error)
 
+    @patch('PIL.Image')
     @patch('analyzer.gemini_multimodal.genai.configure')
     @patch('analyzer.gemini_multimodal.genai.GenerativeModel')
     @patch('analyzer.gemini_multimodal.genai.upload_file')
     @patch('analyzer.gemini_multimodal.genai.get_file')
-    def test_upload_media_to_gemini_success(self, mock_get_file, mock_upload_file, mock_generative_model, mock_configure):
-        """Test successful media upload to Gemini."""
+    def test_upload_media_to_gemini_success(self, mock_get_file, mock_upload_file, mock_generative_model, mock_configure, mock_image):
+        """Test successful media preparation for Gemini."""
         mock_model = MagicMock()
         mock_generative_model.return_value = mock_model
 
-        mock_file = MagicMock()
-        mock_file.state.name = "ACTIVE"
-        mock_upload_file.return_value = mock_file
-        mock_get_file.return_value = mock_file
+        # Mock file operations
+        import os
+        with patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=1024):
 
-        result = self.analyzer._upload_media_to_gemini(mock_model, "/tmp/test.jpg", "https://example.com/image.jpg")
+            mock_pil_image = MagicMock()
+            mock_image.open.return_value = mock_pil_image
+            mock_pil_image.verify.return_value = None
+            mock_pil_image.close.return_value = None
 
-        self.assertEqual(result, mock_file)
+            result = self.analyzer._upload_media_to_gemini(mock_model, "/tmp/test.jpg", "https://example.com/image.jpg")
+
+            # Should return PIL Image for images
+            self.assertEqual(result, mock_pil_image)
 
     @patch('analyzer.gemini_multimodal.genai.configure')
     @patch('analyzer.gemini_multimodal.genai.GenerativeModel')
     @patch('analyzer.gemini_multimodal.genai.upload_file')
     def test_upload_media_to_gemini_processing_failure(self, mock_upload_file, mock_generative_model, mock_configure):
-        """Test media upload failure due to processing issues."""
+        """Test media preparation failure."""
         mock_model = MagicMock()
         mock_generative_model.return_value = mock_model
 
-        mock_file = MagicMock()
-        mock_file.state.name = "FAILED"
-        mock_upload_file.return_value = mock_file
+        # Mock file not existing
+        with patch('os.path.exists', return_value=False):
+            result = self.analyzer._upload_media_to_gemini(mock_model, "/tmp/test.jpg", "https://example.com/image.jpg")
 
-        result = self.analyzer._upload_media_to_gemini(mock_model, "/tmp/test.jpg", "https://example.com/image.jpg")
-
-        self.assertIsNone(result)
+            self.assertIsNone(result)
 
 
 class TestGeminiMultimodalAsync(unittest.TestCase):
@@ -570,21 +575,17 @@ class TestGeminiMultimodalAsync(unittest.TestCase):
         )
         self.analyzer = GeminiMultimodal(self.deps)
 
+    @patch('PIL.Image')
     @patch('analyzer.gemini_multimodal.genai.configure')
     @patch('analyzer.gemini_multimodal.genai.GenerativeModel')
     @patch('analyzer.gemini_multimodal.genai.upload_file')
     @patch('analyzer.gemini_multimodal.genai.get_file')
-    def test_analyze_multimodal_content_async_success(self, mock_get_file, mock_upload_file, mock_generative_model, mock_configure):
+    def test_analyze_multimodal_content_async_success(self, mock_get_file, mock_upload_file, mock_generative_model, mock_configure, mock_image):
         """Test successful async multimodal analysis."""
 
         # Mock Gemini components
         mock_model = MagicMock()
         mock_generative_model.return_value = mock_model
-
-        mock_file = MagicMock()
-        mock_file.state.name = "ACTIVE"
-        mock_upload_file.return_value = mock_file
-        mock_get_file.return_value = mock_file
 
         mock_response = MagicMock()
         mock_response.text = "Async analysis result"
@@ -598,6 +599,12 @@ class TestGeminiMultimodalAsync(unittest.TestCase):
         self.deps.http_client.get.return_value = mock_response_dl
         self.deps.file_system.create_temp_file.return_value = "/tmp/test.jpg"
         self.deps.resource_monitor.check_file_size.return_value = 1024
+
+        # Mock PIL Image for media preparation
+        mock_pil_image = MagicMock()
+        mock_image.open.return_value = mock_pil_image
+        mock_pil_image.verify.return_value = None
+        mock_pil_image.close.return_value = None
 
         async def run_test():
             result, time_taken = await self.analyzer.analyze_multimodal_content_async(
@@ -784,52 +791,51 @@ class TestGeminiMultimodalRateLimiting(unittest.TestCase):
         self.assertEqual(len(status["available_models"]), 5)
         self.assertNotIn("gemini-2.5-pro", status["available_models"])
 
-    def test_quota_error_triggers_rate_limiting(self):
+    @patch('PIL.Image')
+    def test_quota_error_triggers_rate_limiting(self, mock_image):
         """Test that quota errors automatically trigger rate limiting."""
         # Mock Gemini components to simulate quota error
         with patch('analyzer.gemini_multimodal.genai.configure'), \
-             patch('analyzer.gemini_multimodal.genai.GenerativeModel') as mock_generative_model, \
-             patch('analyzer.gemini_multimodal.genai.upload_file') as mock_upload_file, \
-             patch('analyzer.gemini_multimodal.genai.get_file') as mock_get_file:
+             patch('analyzer.gemini_multimodal.genai.GenerativeModel') as mock_generative_model:
 
             mock_model = MagicMock()
             mock_generative_model.return_value = mock_model
 
-            # Mock successful upload
-            mock_file = MagicMock()
-            mock_file.state.name = "ACTIVE"
-            mock_upload_file.return_value = mock_file
-            mock_get_file.return_value = mock_file
-
             # Simulate quota error during content generation
             mock_model.generate_content.side_effect = Exception("Quota exceeded")
 
-            # Try analysis - should trigger rate limiting on quota error
-            result = self.analyzer._try_model_analysis(
-                "gemini-2.5-pro", "/tmp/test.jpg", "https://example.com/image.jpg",
-                "Test content", False
-            )
+            # Mock PIL Image for media preparation
+            mock_pil_image = MagicMock()
+            mock_image.open.return_value = mock_pil_image
+            mock_pil_image.verify.return_value = None
+            mock_pil_image.close.return_value = None
 
-            # Model should be marked as rate-limited
-            self.assertIn("gemini-2.5-pro", self.analyzer.rate_limited_models)
-            self.assertIsNone(result)
+            # Mock file operations to ensure media preparation succeeds
+            with patch('os.path.exists', return_value=True), \
+                 patch('os.path.getsize', return_value=1024):
 
-    def test_analysis_skips_rate_limited_models(self):
+                # Try analysis - should trigger rate limiting on quota error
+                result = self.analyzer._try_model_analysis(
+                    "gemini-2.5-pro", "/tmp/test.jpg", "https://example.com/image.jpg",
+                    "Test content", False
+                )
+
+                # Model should be marked as rate-limited
+                self.assertIn("gemini-2.5-pro", self.analyzer.rate_limited_models)
+                self.assertIsNone(result)
+
+    @patch('PIL.Image')
+    def test_analysis_skips_rate_limited_models(self, mock_image):
         """Test that analysis skips rate-limited models in priority order."""
         # Mark first model as rate-limited
         self.analyzer._mark_model_rate_limited("gemini-2.5-pro")
 
         # Mock successful analysis for second model
         with patch('analyzer.gemini_multimodal.genai.configure'), \
-             patch('analyzer.gemini_multimodal.genai.GenerativeModel') as mock_generative_model, \
-             patch('analyzer.gemini_multimodal.genai.upload_file') as mock_upload_file:
+             patch('analyzer.gemini_multimodal.genai.GenerativeModel') as mock_generative_model:
 
             mock_model = MagicMock()
             mock_generative_model.return_value = mock_model
-
-            mock_file = MagicMock()
-            mock_file.state.name = "ACTIVE"
-            mock_upload_file.return_value = mock_file
 
             mock_response = MagicMock()
             mock_response.text = "Success with fallback model"
@@ -843,6 +849,12 @@ class TestGeminiMultimodalRateLimiting(unittest.TestCase):
             self.deps.http_client.get.return_value = mock_response_dl
             self.deps.file_system.create_temp_file.return_value = "/tmp/test.jpg"
             self.deps.resource_monitor.check_file_size.return_value = 1024
+
+            # Mock PIL Image for media preparation
+            mock_pil_image = MagicMock()
+            mock_image.open.return_value = mock_pil_image
+            mock_pil_image.verify.return_value = None
+            mock_pil_image.close.return_value = None
 
             result, time_taken = self.analyzer.analyze_multimodal_content(
                 ["https://example.com/image.jpg"], "Test content"

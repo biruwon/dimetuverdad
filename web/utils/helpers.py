@@ -5,11 +5,11 @@ Contains common database operations, tweet processing, and admin actions.
 
 import sys
 import os
-import importlib.util
 import asyncio
 import concurrent.futures
+import traceback
 from pathlib import Path
-from typing import Optional, Dict, List, Any, Callable
+from typing import Optional, Dict, Any
 import json
 import math
 from datetime import datetime
@@ -21,12 +21,8 @@ from repositories import (
     get_account_repository
 )
 
-import config
-
-
 def get_db_connection():
     """Get database connection with row factory for easier access."""
-    # Legacy compatibility - repositories handle connections internally
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
@@ -40,7 +36,7 @@ def get_tweet_data(tweet_id) -> Optional[Dict[str, Any]]:
     tweet_data = tweet_repo.get_tweet_by_id(tweet_id)
 
     if tweet_data:
-        # Parse media_links into a list for backward compatibility
+        # Parse media_links into a list
         media_links = tweet_data.get('media_links', '')
         if media_links:
             tweet_data['media_urls'] = [url.strip() for url in media_links.split(',') if url.strip()]
@@ -110,11 +106,21 @@ def handle_reanalyze_action(tweet_id, referrer) -> None:
         print(f"❌ Error in reanalyze_tweet: {reanalyze_e}")
         from flask import current_app
         current_app.logger.error(f"Error in reanalyze_tweet for {tweet_id}: {str(reanalyze_e)}")
-        flash('Error interno durante el reanálisis. Inténtalo de nuevo.', 'error')
+        current_app.logger.error(f"Exception type: {type(reanalyze_e).__name__}")
+        current_app.logger.error(f"Traceback: {traceback.format_exc()}")
+        flash('Error interno durante el reanálisis. Inténtalo de nuevo más tarde.', 'error')
         return
 
     if analysis_result:
         try:
+            # Check if analysis failed (ERROR category indicates failure)
+            if analysis_result.category == "ERROR":
+                print(f"❌ Analysis failed with ERROR category")
+                from flask import current_app
+                current_app.logger.error(f"Analysis failed for tweet {tweet_id}: {analysis_result.local_explanation}")
+                flash('Error interno durante el reanálisis. Inténtalo de nuevo más tarde.', 'error')
+                return
+
             # More defensive access to category
             if hasattr(analysis_result, 'category') and analysis_result.category:
                 category = analysis_result.category
@@ -219,8 +225,8 @@ def handle_manual_update_action(tweet_id, new_category, new_explanation) -> None
         # Check if analysis exists
         row = conn.execute("SELECT post_id FROM content_analyses WHERE post_id = ?", (tweet_id,)).fetchone()
         if row:
-            # Update existing analysis
-            conn.execute("UPDATE content_analyses SET category = ?, llm_explanation = ?, analysis_method = 'manual', analysis_timestamp = CURRENT_TIMESTAMP WHERE post_id = ?", (new_category, new_explanation, tweet_id))
+            # Update existing analysis (manual override)
+            conn.execute("UPDATE content_analyses SET category = ?, local_explanation = ?, analysis_stages = 'manual', analysis_timestamp = CURRENT_TIMESTAMP WHERE post_id = ?", (new_category, new_explanation, tweet_id))
             conn.commit()
             success = True
         else:
@@ -228,7 +234,7 @@ def handle_manual_update_action(tweet_id, new_category, new_explanation) -> None
             tweet_row = conn.execute("SELECT username, content, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,)).fetchone()
             if tweet_row:
                 conn.execute("""
-                    INSERT INTO content_analyses (post_id, category, llm_explanation, analysis_method, author_username, post_content, post_url, analysis_timestamp)
+                    INSERT INTO content_analyses (post_id, category, local_explanation, analysis_stages, author_username, post_content, post_url, analysis_timestamp)
                     VALUES (?, ?, ?, 'manual', ?, ?, ?, CURRENT_TIMESTAMP)
                 """, (tweet_id, new_category, new_explanation, tweet_row['username'], tweet_row['content'], tweet_row['tweet_url']))
                 conn.commit()
@@ -265,7 +271,8 @@ def get_tweet_display_data(tweet_id, referrer) -> Any:
         'username': tweet_data.get('username', ''),
         'tweet_timestamp': tweet_data.get('tweet_timestamp', ''),
         'category': analysis_data.get('category', 'general') if analysis_data else 'general',
-        'llm_explanation': analysis_data.get('llm_explanation', '') if analysis_data else '',
+        'local_explanation': analysis_data.get('local_explanation', '') if analysis_data else '',
+        'external_explanation': analysis_data.get('external_explanation', '') if analysis_data else '',
         'tweet_url': tweet_data.get('tweet_url', ''),
         'original_content': tweet_data.get('original_content', '')
     }
@@ -342,7 +349,6 @@ def get_account_statistics(username) -> Dict[str, Any]:
 
 def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
     """Get list of all accounts with basic stats, paginated and sorted by non-general posts."""
-    # Use direct SQL for test compatibility
     from utils.database import get_db_connection_context
     with get_db_connection_context() as conn:
         rows = conn.execute("""
@@ -416,8 +422,7 @@ def get_user_profile_data(username: str) -> Optional[Dict[str, Any]]:
 
 def get_user_tweets_data(username: str, page: int, per_page: int,
                         category_filter: Optional[str], post_type_filter: Optional[str],
-                        total_tweets_all: int, date_from: Optional[str] = None, date_to: Optional[str] = None,
-                        analysis_method_filter: Optional[str] = None) -> Dict[str, Any]:
+                        total_tweets_all: int, date_from: Optional[str] = None, date_to: Optional[str] = None) -> Dict[str, Any]:
     """Get paginated tweets data with filtering."""
     tweet_repo = get_tweet_repository()
     content_analysis_repo = get_content_analysis_repository()
@@ -448,34 +453,31 @@ def get_user_tweets_data(username: str, page: int, per_page: int,
         if date_to and tweet_date > date_to:
             continue
 
-        # Apply analysis method filter
-        if analysis_method_filter and analysis_method_filter != 'all':
-            if not analysis or analysis.get('analysis_method') != analysis_method_filter:
-                continue
-
         # Add analysis data to tweet
         tweet_with_analysis = dict(tweet)
         if analysis:
             tweet_with_analysis.update({
                 'analysis_category': analysis.get('category'),
-                'llm_explanation': analysis.get('llm_explanation'),
-                'analysis_method': analysis.get('analysis_method'),
+                'local_explanation': analysis.get('local_explanation'),
+                'external_explanation': analysis.get('external_explanation'),
+                'analysis_stages': analysis.get('analysis_stages'),
+                'external_analysis_used': analysis.get('external_analysis_used', False),
                 'analysis_timestamp': analysis.get('analysis_timestamp'),
                 'categories_detected': analysis.get('categories_detected'),
                 'multimodal_analysis': analysis.get('multimodal_analysis'),
-                'media_analysis': analysis.get('media_analysis'),
                 'verification_data': analysis.get('verification_data'),
                 'verification_confidence': analysis.get('verification_confidence', 0.0)
             })
         else:
             tweet_with_analysis.update({
                 'analysis_category': None,
-                'llm_explanation': None,
-                'analysis_method': None,
+                'local_explanation': None,
+                'external_explanation': None,
+                'analysis_stages': None,
+                'external_analysis_used': False,
                 'analysis_timestamp': None,
                 'categories_detected': None,
                 'multimodal_analysis': False,
-                'media_analysis': None,
                 'verification_data': None,
                 'verification_confidence': 0.0
             })
@@ -527,12 +529,13 @@ def process_tweet_row(row) -> Dict[str, Any]:
         'post_type': row['post_type'],
         'tweet_id': row['tweet_id'],
         'analysis_category': row['analysis_category'],
-        'llm_explanation': row['llm_explanation'],
-        'analysis_method': row['analysis_method'],
+        'local_explanation': row['local_explanation'],
+        'external_explanation': row['external_explanation'],
+        'analysis_stages': row['analysis_stages'],
+        'external_analysis_used': row['external_analysis_used'],
         'analysis_timestamp': row['analysis_timestamp'],
         'categories_detected': categories_detected,
         'multimodal_analysis': bool(row['multimodal_analysis']) if row['multimodal_analysis'] is not None else False,
-        'media_analysis': row['media_analysis'],
         'is_deleted': row['is_deleted'],
         'is_edited': row['is_edited'],
         'rt_original_analyzed': row['rt_original_analyzed'],
@@ -564,11 +567,12 @@ def process_tweet_row(row) -> Dict[str, Any]:
     tweet['is_rt'] = tweet['post_type'] in ['repost_other', 'repost_own', 'repost_reply']
     tweet['rt_type'] = tweet['post_type'] if tweet['is_rt'] else None
 
-    # Use the appropriate analysis field
-    tweet['analysis_display'] = (
-        tweet['media_analysis'] if tweet['multimodal_analysis'] and tweet['media_analysis']
-        else tweet['llm_explanation'] or "Sin análisis disponible"
+    # Use the best available explanation (prefers external over local)
+    best_explanation = (
+        tweet['external_explanation'] if tweet['external_explanation'] and len(tweet['external_explanation'].strip()) > 0
+        else tweet['local_explanation'] or "Sin análisis disponible"
     )
+    tweet['analysis_display'] = best_explanation
     tweet['category'] = tweet['analysis_category'] or 'general'
     tweet['has_multiple_categories'] = len(categories_detected) > 1
 
@@ -608,8 +612,7 @@ def get_user_analysis_stats(username: str) -> Dict[str, Any]:
 def prepare_user_page_template_data(username: str, tweets_data: Dict[str, Any], user_stats: Dict[str, Any],
                                    total_tweets_all: int, page: int, per_page: int,
                                    category_filter: Optional[str], user_profile_pic: Optional[str],
-                                   date_from: Optional[str] = None, date_to: Optional[str] = None,
-                                   analysis_method: Optional[str] = None) -> Dict[str, Any]:
+                                   date_from: Optional[str] = None, date_to: Optional[str] = None) -> Dict[str, Any]:
     """Prepare all data for user page template rendering."""
     return {
         'username': username,
@@ -624,6 +627,5 @@ def prepare_user_page_template_data(username: str, tweets_data: Dict[str, Any], 
         'current_category': category_filter,
         'user_profile_pic': user_profile_pic,
         'date_from': date_from,
-        'date_to': date_to,
-        'analysis_method': analysis_method
+        'date_to': date_to
     }
