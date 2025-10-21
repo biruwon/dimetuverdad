@@ -4,10 +4,14 @@
 
 Top priority:
 
-- [L] Edited recent posts, how will affect fetching? And show the original
-- [M] Disinformation/political retrieval to get up to date data/checks
-- [L] Allow people to submit account to analyze or post to analyze
 - [M] Improve LLM explanation
+- [M] Disinformation/political retrieval to get up to date data/checks
+- What categories do we need?
+- [L] **Additional platforms**: Extend beyond Twitter/X to Telegram, Facebook, Instagram
+- [L] **Newspaper integration**: Monitor news sources
+- [M] **Historical data import**: Import older tweets for trend analysis
+- [L] Edited recent posts, how will affect fetching? And show the original
+- [L] Allow people to submit account to analyze or post to analyze
 - [M] Automate fetcher between new accounts vs latest
 - [L] Blog explanining how disinformation works easier to understand
 - [L] Instagram videos with avatar explaning disinformation
@@ -23,12 +27,6 @@ Random ideas:
 - [M] **False positive reduction**: Improve classification accuracy, especially for political_general vs extremist categories
 - [M] **Spanish language optimization**: Fine-tune models specifically for Spanish political discourse
 - [L] **Context awareness**: Implement thread/conversation context for better analysis
-
-### Data Collection & Sources
-- [L] **Additional platforms**: Extend beyond Twitter/X to Telegram, Facebook, Instagram
-- [L] **Newspaper integration**: Monitor news sources
-- [M] **Historical data import**: Import older tweets for trend analysis
-
 
 ## 🔧 Medium Priority
 

@@ -1122,6 +1122,53 @@ class EnhancedLLMPipeline:
             print(f"⚠️ Generation model classification error: {e}")
             return Categories.GENERAL
 
+    async def generate_completion(self, prompt: str, max_tokens: int = 512, temperature: float = 0.7) -> str:
+        """
+        Generate text completion using the LLM pipeline.
+        
+        Args:
+            prompt: The prompt to complete
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            
+        Returns:
+            Generated text completion
+        """
+        try:
+            if self.ollama_client:
+                # Use Ollama API
+                response = self.ollama_client.chat.completions.create(
+                    model=self.ollama_model_name,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful AI assistant."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+                return response.choices[0].message.content.strip()
+            
+            elif self.generation_model and self.generation_model != "ollama":
+                # Use transformers generation model
+                gen_config = self.model_info.get("generation", {})
+                generation_params = gen_config.get("generation_params", {}).copy()
+                generation_params.update({
+                    "temperature": temperature,
+                    "max_new_tokens": max_tokens
+                })
+                
+                response = self.generation_model(prompt, **generation_params)
+                parser_type = gen_config.get("response_parser", "text_generation")
+                result = ResponseParser.parse_response(response, parser_type, prompt, gen_config)
+                return result.strip() if result else ""
+            
+            else:
+                raise ValueError("No suitable generation model available")
+                
+        except Exception as e:
+            print(f"❌ Completion generation error: {e}")
+            return ""
+
     def cleanup_memory(self):
         """Clean up GPU/memory resources."""
         try:

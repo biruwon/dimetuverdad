@@ -167,6 +167,13 @@ class PatternAnalyzer:
                     r'\b(?:agenda\s+woke|ideología\s+woke)\b.*\b(?:destruyendo|destruye)\b',
                     r'\b(?:woke)\b.*\b(?:valores\s+cristianos|tradiciones|familia)\b',
                     r'\b(?:feminazis?|progres?|rojos?)\b.*\b(?:destruir|acabar|eliminar)\b',
+                    # Political corruption allegations - simplified patterns
+                    r'\bpersigue.*españoles.*honrados.*hermano\b',
+                    r'\bhermano.*escondido.*palacio\b',
+                    r'\bescondido.*moncloa.*evadir\b',
+                    r'\bevadir.*impuestos.*hermano\b',
+                    r'\bcorrupción.*políticos.*gobierno\b',
+                    r'\bfraude.*político.*sánchez\b',
                     # Additional patterns from former secondary
                     r'\b(?:ideolog[íi]a|doctrina)\s+(?:racial|étnica)\b',
                     r'\b(?:movimiento|organización)\s+(?:nacionalist[ao]|patriót[iao])\b',

@@ -213,9 +213,9 @@ class SQLiteContentAnalysisRepository(SQLiteRepositoryBase, ContentAnalysisRepos
                 SELECT
                     COUNT(DISTINCT t.tweet_id) as total_tweets,
                     COUNT(CASE WHEN ca.post_id IS NOT NULL THEN 1 END) as analyzed_tweets,
-                    COUNT(CASE WHEN ca.analysis_method = 'pattern' THEN 1 END) as pattern_analyzed,
-                    COUNT(CASE WHEN ca.analysis_method = 'llm' THEN 1 END) as llm_analyzed,
-                    COUNT(CASE WHEN ca.analysis_method = 'gemini' THEN 1 END) as gemini_analyzed
+                    COUNT(CASE WHEN ca.analysis_stages LIKE '%pattern%' THEN 1 END) as pattern_analyzed,
+                    COUNT(CASE WHEN ca.analysis_stages LIKE '%local_llm%' THEN 1 END) as llm_analyzed,
+                    COUNT(CASE WHEN ca.external_analysis_used = 1 THEN 1 END) as gemini_analyzed
                 FROM tweets t
                 LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
             """)

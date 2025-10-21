@@ -8,9 +8,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 from utils import paths
-from utils.database import get_db_connection
-# Import repository interfaces
-from repositories import get_tweet_repository, get_account_repository
+from repositories import get_tweet_repository
 
 DB_PATH = str(paths.get_db_path())
 
@@ -27,29 +25,31 @@ def delete_account_data(username: str) -> Dict[str, int]:
     try:
         # Use standardized repositories
         tweet_repo = get_tweet_repository()
-        account_repo = get_account_repository()
-        
-        # Get counts before deletion
-        tweets = tweet_repo.get_tweets_by_username(username)
-        tweets_count = len(tweets)
         
         # For analyses count, we need to use direct access since content analysis repo might not have username filtering
         # This is a specialized operation that may need to stay direct for now
         from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) AS analyses_count FROM content_analyses WHERE username = ?", (username,))
+            cur.execute("SELECT COUNT(*) AS analyses_count FROM content_analyses WHERE author_username = ?", (username,))
             row = cur.fetchone()
             analyses_count = row['analyses_count'] if row else 0
 
-        # Delete tweets using repository
-        deleted_tweets = tweet_repo.delete_tweets_by_username(username)
+        # Delete tweets using direct access (for now, since repository doesn't have delete method)
+        from utils.database import get_db_connection_context
+        with get_db_connection_context() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,))
+            tweets_before = cur.fetchone()[0]
+            cur.execute("DELETE FROM tweets WHERE username = ?", (username,))
+            deleted_tweets = cur.rowcount
+            conn.commit()
 
         # Delete analyses using direct access (for now)
         from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             cur = conn.cursor()
-            cur.execute("DELETE FROM content_analyses WHERE username = ?", (username,))
+            cur.execute("DELETE FROM content_analyses WHERE author_username = ?", (username,))
             conn.commit()
 
         print(f"✅ Deleted {deleted_tweets} tweets and {analyses_count} analyses for @{username}")

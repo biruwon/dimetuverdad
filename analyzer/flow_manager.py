@@ -105,8 +105,8 @@ class AnalysisFlowManager:
             print(f"   Pattern matches: {len(pattern_result.pattern_matches)}")
         
         # Check if pattern detection succeeded
-        if pattern_result.categories and Categories.GENERAL not in pattern_result.categories:
-            # Patterns found a non-general category
+        if pattern_result.categories and Categories.GENERAL not in pattern_result.categories and Categories.POLITICAL_GENERAL not in pattern_result.categories:
+            # Patterns found a specific category (not general or political_general)
             primary_category = pattern_result.categories[0]
             
             if self.verbose:

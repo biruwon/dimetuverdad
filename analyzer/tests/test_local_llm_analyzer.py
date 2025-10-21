@@ -142,12 +142,12 @@ class TestPromptBuilding:
     def test_categorization_prompt_structure(self, analyzer):
         """Test categorization prompt contains all required elements."""
         content = "Test content for analysis"
-        prompt = analyzer._build_categorization_prompt(content)
+        prompt = analyzer.prompt_generator.build_categorization_prompt(content)
         
         # Check prompt structure
-        assert "CATEGORÍAS DISPONIBLES:" in prompt
+        assert "CATEGORÍAS:" in prompt
         assert content in prompt
-        assert "FORMATO DE RESPUESTA" in prompt
+        assert "FORMATO OBLIGATORIO:" in prompt
         assert "CATEGORÍA:" in prompt
         assert "EXPLICACIÓN:" in prompt
         

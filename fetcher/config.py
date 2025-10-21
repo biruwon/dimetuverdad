@@ -88,7 +88,9 @@ DEFAULT_HANDLES = [
     "WillyTolerdoo",
     "Agenda2030_",
     "Doct_Tricornio",
-    "LosMeconios"
+    "LosMeconios",
+    "infovlogger36",
+    "daniesdsk"
 ]
 
 def get_config() -> FetcherConfig:

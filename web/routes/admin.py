@@ -228,9 +228,10 @@ def admin_fetch() -> str:
 
             # Only trigger analysis if action is fetch_and_analyze
             if action == 'fetch_and_analyze':
+                # Run analysis in a separate subprocess after fetch completes
                 analysis_cmd = ["./run_in_venv.sh", "analyze-twitter", "--username", username]
                 analysis_result = subprocess.run(analysis_cmd, cwd=base_dir, check=True, timeout=config.get_command_timeout('analyze'))
-                admin_bp.logger.info(f"Analysis completed for @{username} after fetch")
+                admin_bp.logger.info(f"Analysis completed for @{username}")
 
         except subprocess.TimeoutExpired:
             admin_bp.logger.error(f"Fetch/analysis timed out for @{username}")

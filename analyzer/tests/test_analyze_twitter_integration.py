@@ -42,7 +42,7 @@ class TestAnalyzerIntegration:
     
     def __init__(self, save_to_db: bool = False):
         print("🚀 Initializing Enhanced Analyzer...")
-        config = AnalyzerConfig(model_priority="balanced")
+        config = AnalyzerConfig()
         self.analyzer = Analyzer(config=config)
         self.save_to_db = save_to_db
     

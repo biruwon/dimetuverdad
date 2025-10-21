@@ -259,8 +259,8 @@ def verify_schema():
         c.execute("PRAGMA table_info(content_analyses)")
         ca_columns = [row['name'] for row in c.fetchall()]
         essential_ca_fields = [
-            'post_id', 'author_username', 'platform', 'category', 'analysis_method', 'analysis_timestamp',
-            'categories_detected', 'media_urls', 'media_analysis', 'media_type', 'multimodal_analysis',
+            'post_id', 'author_username', 'platform', 'category', 'analysis_stages', 'analysis_timestamp',
+            'categories_detected', 'media_urls', 'media_type', 'multimodal_analysis',
             'verification_data', 'verification_confidence'
         ]
         

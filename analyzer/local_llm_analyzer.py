@@ -53,7 +53,7 @@ class LocalLLMAnalyzer:
             print(f"📝 Content: {content[:100]}...")
         
         # Build unified prompt for category + explanation
-        prompt = self._build_categorization_prompt(content)
+        prompt = self.prompt_generator.build_categorization_prompt(content)
         
         try:
             # Single LLM call for both tasks
@@ -105,59 +105,6 @@ class LocalLLMAnalyzer:
                 print(f"❌ Error in explain_only: {e}")
             return f"Error generando explicación local: {str(e)}"
     
-    def _build_categorization_prompt(self, content: str) -> str:
-        """
-        Build prompt for combined category detection + explanation.
-        
-        Returns structured output format:
-        CATEGORÍA: [category_name]
-        EXPLICACIÓN: [2-3 sentences in Spanish]
-        """
-        all_categories = Categories.get_all_categories()
-        category_descriptions = {
-            Categories.HATE_SPEECH: "Discurso de odio, xenofobia, amenazas violentas",
-            Categories.DISINFORMATION: "Información falsa, datos fabricados, afirmaciones sin evidencia",
-            Categories.CONSPIRACY_THEORY: "Teorías conspirativas, narrativas de agenda oculta",
-            Categories.FAR_RIGHT_BIAS: "Retórica extremista, nacionalismo radical, anti-establishment",
-            Categories.CALL_TO_ACTION: "Llamadas a movilización, organización de protestas",
-            Categories.NATIONALISM: "Énfasis en identidad nacional, retórica patriótica",
-            Categories.ANTI_GOVERNMENT: "Crítica institucional, desconfianza en el gobierno",
-            Categories.HISTORICAL_REVISIONISM: "Reinterpretación histórica, minimización de atrocidades",
-            Categories.POLITICAL_GENERAL: "Discurso político neutral o general",
-            Categories.GENERAL: "Contenido neutral sin patrones problemáticos"
-        }
-        
-        category_list = "\n".join([
-            f"  - {cat}: {category_descriptions.get(cat, '')}"
-            for cat in all_categories
-        ])
-        
-        prompt = f"""Eres un experto en análisis de contenido político español, especializado en detectar discurso extremista y desinformación.
-
-Analiza el siguiente contenido y:
-1. Identifica la categoría más apropiada
-2. Proporciona una explicación clara en español (2-3 frases)
-
-CATEGORÍAS DISPONIBLES:
-{category_list}
-
-CONTENIDO A ANALIZAR:
-{content}
-
-IMPORTANTE:
-- Prioriza hate_speech si hay xenofobia o amenazas
-- Usa disinformation para afirmaciones falsas verificables
-- Usa conspiracy_theory para narrativas de conspiración
-- Usa general si no hay contenido problemático
-
-FORMATO DE RESPUESTA (obligatorio):
-CATEGORÍA: [nombre_categoría]
-EXPLICACIÓN: [2-3 frases explicando por qué pertenece a esa categoría]
-
-Responde ahora:"""
-        
-        return prompt
-    
     def _build_explanation_prompt(self, content: str, category: str) -> str:
         """
         Build prompt for explanation-only generation (category already known).
@@ -183,7 +130,7 @@ Responde ahora:"""
             response = self.ollama_client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "Eres un experto en análisis de contenido político español."},
+                    {"role": "system", "content": EnhancedPromptGenerator.build_ollama_system_prompt()},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,  # Lower temperature for more consistent categorization

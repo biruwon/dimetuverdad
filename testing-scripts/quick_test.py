@@ -14,6 +14,7 @@ from analyzer.categories import Categories
 import time
 import argparse
 import json
+import asyncio
 
 def main():
     parser = argparse.ArgumentParser(
@@ -97,7 +98,7 @@ def interactive_mode(use_llm=False, json_output=False):
     
     # Initialize analyzer once and keep it loaded
     try:
-        config = AnalyzerConfig(use_llm=use_llm)
+        config = AnalyzerConfig(verbose=True)
         analyzer = Analyzer(config=config)
         print("✅ Models loaded and ready!")
     except Exception as e:
@@ -136,7 +137,7 @@ def analyze_text(text, use_llm=False, json_output=False):
     """Analyze a single text input."""
     try:
         # Initialize analyzer with verbose output by default
-        config = AnalyzerConfig(use_llm=use_llm)
+        config = AnalyzerConfig(verbose=True)  # Always verbose for quick test
         analyzer = Analyzer(config=config)
         
         # Show mode info
@@ -154,12 +155,12 @@ def analyze_single_text(analyzer, text, json_output=False):
     """Analyze a single text with the given analyzer."""
     try:
         # Analyze content with verbose output by default
-        result = analyzer.analyze_content(
+        result = asyncio.run(analyzer.analyze_content(
             tweet_id='quick_test',
             tweet_url='https://test.com/quick_test', 
             username='test_user',
             content=text
-        )
+        ))
         
         if json_output:
             output = {
@@ -175,8 +176,8 @@ def analyze_single_text(analyzer, text, json_output=False):
             print(f"🎯 Category: {result.category}")
             
             # Show explanation from LLM analysis
-            if result.llm_explanation and result.llm_explanation.strip():
-                print(f"💭 Explanation: {result.llm_explanation}")
+            if result.local_explanation and result.local_explanation.strip():
+                print(f"💭 Explanation: {result.local_explanation}")
             
             # Add emoji indicators
             category_emojis = {

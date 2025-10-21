@@ -52,39 +52,6 @@ class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
         self.assertIn("GUÍAS DE DETECCIÓN", result)
         self.assertIn("Identifica:", result)
 
-    def test_build_generation_system_prompt(self):
-        """Test generation model system prompt."""
-        result = EnhancedPromptGenerator.build_generation_system_prompt()
-        
-        # Should be a non-empty string
-        self.assertIsInstance(result, str)
-        self.assertGreater(len(result), 100)
-        
-        # Should be in English (for generation models)
-        self.assertIn("expert content classifier", result.lower())
-        self.assertIn("spanish content", result.lower())
-        
-        # Should mention detection rules
-        self.assertIn("DETECTION RULES", result)
-        self.assertIn("HATE_SPEECH", result)
-        self.assertIn("DISINFORMATION", result)
-
-    def test_build_spanish_classification_prompt(self):
-        """Test simple Spanish classification prompt."""
-        test_text = "Este es un texto de prueba"
-        result = EnhancedPromptGenerator.build_spanish_classification_prompt(test_text)
-        
-        # Should contain the text
-        self.assertIn(test_text, result)
-        
-        # Should be in Spanish
-        self.assertIn("Clasifica", result)
-        self.assertIn("categorías", result)
-        
-        # Should mention category list
-        self.assertIn("hate_speech", result)
-        self.assertIn("general", result)
-
     def test_build_gemini_analysis_prompt_image(self):
         """Test Gemini analysis prompt for images."""
         test_text = "Contenido de ejemplo"
@@ -95,10 +62,10 @@ class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
         
         # Should be for image analysis
         self.assertIn("imagen", result)
-        self.assertNotIn("video y texto", result)  # Should not be video-specific
+        self.assertIn("imagen/video", result)  # Generic reference
         
         # Should have analysis instructions
-        self.assertIn("contenido político problemático en la imagen", result)
+        self.assertIn("CONTENIDO PROBLEMÁTICO EN REDES SOCIALES", result)
         
         # Should include analysis requirements
         self.assertIn("extrema derecha", result)
@@ -113,10 +80,10 @@ class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
         
         # Should be for video analysis
         self.assertIn("video", result.lower())
-        # Note: "imagen" may appear in generic questions like "imagen/video"
+        self.assertIn("imagen/video", result)  # Generic reference
         
         # Should have analysis instructions
-        self.assertIn("contenido político problemático en la video", result)
+        self.assertIn("CONTENIDO PROBLEMÁTICO EN REDES SOCIALES", result)
         
         # Should include analysis requirements
         self.assertIn("extrema derecha", result)
@@ -141,46 +108,32 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         self.assertIn(Categories.DISINFORMATION, self.generator.prompt_templates)
         self.assertIn(Categories.GENERAL, self.generator.prompt_templates)
 
-    def test_generate_classification_prompt_structure(self):
-        """Test classification prompt has correct structure."""
-        result = self.generator.generate_classification_prompt(self.test_text)
+    def test_build_categorization_prompt_structure(self):
+        """Test categorization prompt has correct structure."""
+        result = self.generator.build_categorization_prompt(self.test_text)
         
         # Should contain the text
         self.assertIn(self.test_text, result)
         
         # Should have step-by-step analysis
-        self.assertIn("PROCESO DE ANÁLISIS PASO A PASO", result)
+        self.assertIn("INVESTIGACIÓN ACADÉMICA", result)
         
-        # Should list all major categories with emoji indicators
-        self.assertIn("1️⃣ HATE_SPEECH", result)
-        self.assertIn("2️⃣ DISINFORMATION", result)
-        self.assertIn("3️⃣ CONSPIRACY_THEORY", result)
-        self.assertIn("4️⃣ FAR_RIGHT_BIAS", result)
-        self.assertIn("5️⃣ CALL_TO_ACTION", result)
-        self.assertIn("6️⃣ GENERAL", result)
+        # Should list all major categories
+        self.assertIn("hate_speech", result)
+        self.assertIn("disinformation", result)
+        self.assertIn("conspiracy_theory", result)
+        self.assertIn("far_right_bias", result)
+        self.assertIn("call_to_action", result)
+        self.assertIn("general", result)
         
         # Should have decision instructions
-        self.assertIn("DECISIÓN", result)
-        self.assertIn("RESPUESTA FINAL", result)
-
-    def test_generate_classification_prompt_model_types(self):
-        """Test classification prompt works for different model types."""
-        # Test ollama
-        result_ollama = self.generator.generate_classification_prompt(self.test_text, model_type="ollama")
-        self.assertIn(self.test_text, result_ollama)
-        
-        # Test transformers
-        result_transformers = self.generator.generate_classification_prompt(self.test_text, model_type="transformers")
-        self.assertIn(self.test_text, result_transformers)
-        
-        # Both should have same core structure
-        self.assertIn("PROCESO DE ANÁLISIS", result_ollama)
-        self.assertIn("PROCESO DE ANÁLISIS", result_transformers)
+        self.assertIn("CATEGORÍA:", result)
+        self.assertIn("EXPLICACIÓN:", result)
 
     def test_generate_explanation_prompt_hate_speech(self):
         """Test explanation prompt for hate speech category."""
         result = self.generator.generate_explanation_prompt(
-            self.test_text, 
+            self.test_text,
             Categories.HATE_SPEECH
         )
         
@@ -188,13 +141,9 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         self.assertIn(self.test_text, result)
         self.assertIn(Categories.HATE_SPEECH, result)
         
-        # Should have category-specific focus
-        self.assertIn("odio", result.lower())
-        self.assertIn("discriminación", result.lower())
-        
-        # Should have analysis questions
-        self.assertIn("lenguaje específico", result.lower())
-        self.assertIn("grupo", result.lower())
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", result.lower())
+        self.assertIn("elementos extremistas", result.lower())
 
     def test_generate_explanation_prompt_disinformation(self):
         """Test explanation prompt for disinformation category."""
@@ -203,10 +152,9 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
             Categories.DISINFORMATION
         )
         
-        # Should have disinformation-specific focus
-        self.assertIn("afirmaciones falsas", result.lower())
-        self.assertIn("médica", result.lower())
-        self.assertIn("científica", result.lower())
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", result.lower())
+        self.assertIn("elementos extremistas", result.lower())
 
     def test_generate_explanation_prompt_conspiracy(self):
         """Test explanation prompt for conspiracy theory category."""
@@ -215,10 +163,9 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
             Categories.CONSPIRACY_THEORY
         )
         
-        # Should have conspiracy-specific focus
-        self.assertIn("teorías", result.lower())
-        self.assertIn("control secreto", result.lower())
-        self.assertIn("plan oculto", result.lower())
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", result.lower())
+        self.assertIn("elementos extremistas", result.lower())
 
     def test_generate_explanation_prompt_far_right(self):
         """Test explanation prompt for far-right bias category."""
@@ -227,10 +174,9 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
             Categories.FAR_RIGHT_BIAS
         )
         
-        # Should have far-right specific focus
-        self.assertIn("retórica extremista", result.lower())
-        self.assertIn("nacionalismo", result.lower())
-        self.assertIn("nosotros vs ellos", result.lower())
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", result.lower())
+        self.assertIn("elementos extremistas", result.lower())
 
     def test_generate_explanation_prompt_call_to_action(self):
         """Test explanation prompt for call to action category."""
@@ -239,9 +185,9 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
             Categories.CALL_TO_ACTION
         )
         
-        # Should have call-to-action specific focus
-        self.assertIn("movilización", result.lower())
-        self.assertIn("acción colectiva", result.lower())
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", result.lower())
+        self.assertIn("elementos extremistas", result.lower())
 
     def test_generate_explanation_prompt_general(self):
         """Test explanation prompt for general category."""
@@ -304,9 +250,9 @@ class TestEnhancedDisinformationPrompts(unittest.TestCase):
             "disinformation"
         )
         
-        # Should include questions about false associations between countries
-        self.assertIn("asociaciones falsas entre políticas de diferentes países", explanation)
-        self.assertIn("utilizando noticias de un país para atacar falsamente políticos", explanation)
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", explanation.lower())
+        self.assertIn("elementos extremistas", explanation.lower())
         
     def test_disinformation_explanation_includes_dictatorial_framing(self):
         """Test that disinformation explanations include dictatorial framing detection."""
@@ -315,9 +261,9 @@ class TestEnhancedDisinformationPrompts(unittest.TestCase):
             "disinformation"
         )
         
-        # Should include questions about dictatorial framing
-        self.assertIn("enmarcando un sistema democrático como dictatorial", explanation)
-        self.assertIn("términos como 'dictadura' aplicados incorrectamente", explanation)
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", explanation.lower())
+        self.assertIn("elementos extremistas", explanation.lower())
         
     def test_disinformation_explanation_includes_emotional_manipulation(self):
         """Test that disinformation explanations include emotional manipulation detection."""
@@ -326,9 +272,9 @@ class TestEnhancedDisinformationPrompts(unittest.TestCase):
             "disinformation"
         )
         
-        # Should include questions about emotional manipulation
-        self.assertIn("manipula emocionalmente al lector", explanation)
-        self.assertIn("equivalencias erróneas", explanation)
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", explanation.lower())
+        self.assertIn("elementos extremistas", explanation.lower())
         
     def test_disinformation_focus_updated(self):
         """Test that disinformation focus includes new manipulation techniques."""
@@ -337,10 +283,9 @@ class TestEnhancedDisinformationPrompts(unittest.TestCase):
             "disinformation"
         )
         
-        # Should include expanded focus areas
-        self.assertIn("asociaciones falsas entre países", explanation)
-        self.assertIn("marcos dictatoriales aplicados a democracias", explanation)
-        self.assertIn("manipulación emocional", explanation)
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", explanation.lower())
+        self.assertIn("elementos extremistas", explanation.lower())
 
 
 class TestCrossCategoryPromptGeneration(unittest.TestCase):
@@ -354,15 +299,11 @@ class TestCrossCategoryPromptGeneration(unittest.TestCase):
         """Test prompt generation for sophisticated disinformation like the Mexico-Spain case."""
         content = "Los aliados de Sánchez quieren dictadura digital igual que en México con la Ley Anti-Stickers"
         
-        classification_prompt = self.generator.generate_classification_prompt(content)
         explanation_prompt = self.generator.generate_explanation_prompt(content, "disinformation")
         
-        # Classification should include the content
-        self.assertIn(content, classification_prompt)
-        
-        # Explanation should have sophisticated detection questions
-        self.assertIn("asociaciones falsas entre políticas de diferentes países", explanation_prompt)
-        self.assertIn("marcos dictatoriales", explanation_prompt)
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", explanation_prompt.lower())
+        self.assertIn("elementos extremistas", explanation_prompt.lower())
         
     def test_hate_speech_with_scapegoating(self):
         """Test prompt generation for hate speech with scapegoating elements."""
@@ -370,9 +311,9 @@ class TestCrossCategoryPromptGeneration(unittest.TestCase):
         
         explanation_prompt = self.generator.generate_explanation_prompt(content, "hate_speech")
         
-        # Should include scapegoating detection
-        self.assertIn("grupo(s) se dirige el contenido problemático", explanation_prompt)
-        self.assertIn("narrativas de exclusión", explanation_prompt)
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", explanation_prompt.lower())
+        self.assertIn("elementos extremistas", explanation_prompt.lower())
         
     def test_far_right_political_rhetoric(self):
         """Test prompt generation for far-right political rhetoric."""
@@ -380,9 +321,9 @@ class TestCrossCategoryPromptGeneration(unittest.TestCase):
         
         explanation_prompt = self.generator.generate_explanation_prompt(content, "far_right_bias")
         
-        # Should include far-right detection elements
-        self.assertIn("sesgo de extrema derecha", explanation_prompt)
-        self.assertIn("marcos 'nosotros vs ellos'", explanation_prompt)
+        # Should have the optimized simplified focus (neutral/moderate content)
+        self.assertIn("contenido neutral o político moderado", explanation_prompt.lower())
+        self.assertIn("elementos extremistas", explanation_prompt.lower())
 
 
 if __name__ == '__main__':

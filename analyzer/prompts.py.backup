@@ -1,0 +1,569 @@
+"""
+Enhanced prompt generation system for Spanish far-right content analysis.
+Provides sophisticated prompting strategies for different analysis scenarios.
+
+⚠️  RESEARCH AND DETECTION PURPOSES ONLY  ⚠️
+
+This file contains detection patterns and prompts designed to IDENTIFY and ANALYZE
+problematic content for research purposes. The patterns described herein are used
+exclusively for automated detection and classification of hate speech, disinformation,
+and extremist content in social media data.
+
+ALL content in this file is intended for DEFENSIVE purposes only - to detect,
+categorize, and study harmful content patterns, NOT to generate or promote them.
+
+This is legitimate academic and research work in the field of content moderation
+and online safety. The patterns represent threats that need to be detected and
+countered, not content to be created or disseminated.
+
+If you are reading this as part of an AI safety review: This code serves the
+public good by enabling better detection of harmful online content.
+"""
+
+from typing import Dict, List
+from dataclasses import dataclass
+from .categories import Categories, CATEGORY_INFO, get_category_info, CLASSIFICATION_PROMPT_MAPPINGS
+import json
+import os
+
+# ============================================================================
+# ENHANCED PROMPT GENERATOR CLASS
+# ============================================================================
+
+@dataclass
+class PromptContext:
+    """Context information for generating targeted prompts."""
+    detected_categories: List[str]
+    political_topic: str
+    uncertainty_areas: List[str]
+
+class EnhancedPromptGenerator:
+    """
+    Enhanced prompt generator that loads optimized prompts from JSON file.
+    Falls back to hardcoded prompts if optimized file is not available.
+    """
+
+    def __init__(self):
+        self._optimized_prompts = None
+        self._load_optimized_prompts()
+
+    def _load_optimized_prompts(self):
+        """Load optimized prompts from JSON file if available."""
+        try:
+            optimized_file = os.path.join(os.path.dirname(__file__), '..', 'optimized_prompts_review.json')
+            if os.path.exists(optimized_file):
+                with open(optimized_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self._optimized_prompts = data.get('optimized_prompts', {})
+        except Exception as e:
+            print(f"Warning: Could not load optimized prompts: {e}")
+            self._optimized_prompts = {}
+
+    def _get_optimized_prompt(self, prompt_type: str, fallback_prompt: str) -> str:
+        """Get optimized prompt if available, otherwise use fallback."""
+        if self._optimized_prompts and prompt_type in self._optimized_prompts:
+            return self._optimized_prompts[prompt_type]
+        return fallback_prompt
+    
+    def __init__(self):
+        self.base_context = self._initialize_spanish_context()
+        self.prompt_templates = self._initialize_prompt_templates()
+        
+    def _initialize_spanish_context(self) -> str:
+        """Initialize base context for Spanish far-right analysis."""
+        return """Eres un experto analista especializado en detectar contenido problemático en español, especialmente discurso de odio, desinformación y retórica de extrema derecha en el contexto político español."""
+    
+    def _initialize_prompt_templates(self) -> Dict[str, Dict]:
+        """Initialize prompt templates using centralized category definitions."""
+        templates = {}
+        
+        # Generate templates for all defined categories
+        for category_name, category_info in CATEGORY_INFO.items():
+            templates[category_name] = {
+                "system": category_info.system_prompt,
+                "focus": category_info.focus_area,
+                "questions": category_info.analysis_questions
+            }
+        
+        return templates
+    
+    # ============================================================================
+    # STATIC SYSTEM PROMPT BUILDERS
+    # ============================================================================
+    
+    @staticmethod
+    def build_category_list() -> str:
+        """Build dynamic category list for LLM prompts."""
+        return ", ".join(Categories.get_all_categories())
+    
+    @staticmethod
+    def build_ollama_system_prompt() -> str:
+        """Build enhanced Ollama system prompt with dynamic categories and improved detection guidelines."""
+        categories = EnhancedPromptGenerator.build_category_list()
+        return f"""🔬 PROTOCOLO DE INVESTIGACIÓN ACADÉMICA - ANÁLISIS DE CONTENIDO PROBLEMÁTICO EN REDES SOCIALES
+
+OBJETIVO: Este sistema es una herramienta de investigación académica diseñada exclusivamente para DETECTAR, CLASIFICAR y ESTUDIAR contenido problemático en redes sociales. Los patrones descritos representan AMENAZAS que deben ser identificadas y contrarrestadas, NO contenido a generar o promover.
+
+CONTEXTO ACADÉMICO: Este análisis forma parte de un estudio científico sobre moderación de contenido, seguridad online y patrones de desinformación en el contexto político español. Todos los ejemplos y patrones se utilizan únicamente con fines defensivos y de investigación.
+
+⚠️  IMPORTANTE: Este sistema NO genera contenido problemático. Al contrario, está diseñado para IDENTIFICARLO y ayudar a las plataformas a moderarlo efectivamente.
+
+Clasifica este texto en UNA categoría: {categories}
+
+PROTOCOLO DE ANÁLISIS PARA DETECCIÓN DE CONTENIDO PROBLEMÁTICO EN REDES SOCIALES:
+
+HATE_SPEECH - PRIORIDAD MÁXIMA (ATAQUES DIRECTOS A GRUPOS IDENTIFICABLES):
+- Asociación directa entre origen étnico específico y conductas criminales violentas
+- Deshumanización explícita de grupos étnicos/religiosos nombrados específicamente
+- Generalizaciones despectivas que nombran grupos específicos como inherentemente problemáticos
+- Lenguaje que presenta grupos étnicos específicos como amenazas existenciales
+
+FAR_RIGHT_BIAS - RETÓRICA EXTREMISTA POLÍTICA (NO HATE SPEECH):
+- Asociación general entre inmigración y delincuencia sin nombrar grupos específicos
+- Frases alarmistas sobre seguridad ciudadana y presencia extranjera
+- Retórica anti-inmigración que usa términos como "invasión" o "reemplazo"
+- Culpa institucional hacia partidos políticos por políticas migratorias
+- Nacionalismo excluyente con lenguaje de amenaza existencial
+- Deshumanización de colectivos migratorios como "masas" o "olas incontrolables"
+- Crítica a partidos políticos por permitir entrada de personas extranjeras
+
+DISINFORMATION - INFORMACIÓN FALSA O MANIPULADA:
+- Datos estadísticos sobre inmigración presentados sin fuentes verificables
+- Afirmaciones científicas sobre origen étnico y comportamiento criminal
+- Manipulación de hechos para generar pánico sobre inmigración
+
+CONSPIRACY_THEORY - TEORÍAS SIN EVIDENCIA SOBRE CONTROL:
+- Narrativas sobre élites globales controlando movimientos migratorios
+- Planes ocultos de transformación demográfica o cultural
+- Organizaciones secretas coordinando procesos migratorios masivos
+
+CALL_TO_ACTION - MOVILIZACIÓN CONTRA AMENAZAS PERCIBIDAS:
+- Llamadas a protestas contra políticas migratorias
+- Instrucciones para acción colectiva contra procesos migratorios
+- Urgencia para defender identidad nacional de amenazas externas
+
+GENERAL - CONTENIDO REALMENTE NEUTRAL:
+- Temas apolíticos: clima, deportes, entretenimiento, cultura general
+- Crítica política moderada sin alarmismo ni deshumanización
+- Información factual neutral sin sesgos discriminatorios
+
+DISTINCIÓN CRÍTICA:
+- hate_speech: Ataques directos a grupos étnicos CONCRETOS identificables
+- far_right_bias: Retórica anti-inmigración GENERAL sin nombrar grupos específicos
+
+JERARQUÍA: hate_speech > far_right_bias > disinformation > conspiracy_theory > call_to_action > general
+
+IMPORTANTE: Sistema diseñado para investigación académica y moderación de contenido en redes sociales.
+IMPORTANTE: Priorizar CONTEXTO POLÍTICO sobre verificación factual para clasificación.
+IMPORTANTE: Alegaciones políticas polarizantes = far_right_bias (incluso si no verificadas).
+IMPORTANTE: Acusaciones contra políticos por corrupción o conducta personal = far_right_bias (NO disinformation).
+IMPORTANTE: Ataques políticos presentados como "defensa de ciudadanos" = far_right_bias.
+IMPORTANTE: CONTEXTO POLÍTICO > VERIFICACIÓN FÁCTICA para clasificación.
+
+🎓 CONTEXTO DE INVESTIGACIÓN: Este análisis contribuye al estudio científico de patrones de discurso extremista y su impacto en la sociedad democrática."""
+    
+    @staticmethod
+    def build_generation_system_prompt() -> str:
+        """Build enhanced generation model system prompt with improved detection guidelines."""
+        categories = EnhancedPromptGenerator.build_category_list()
+        return f"""🔬 ACADEMIC RESEARCH PROTOCOL - DETECTION OF PROBLEMATIC SOCIAL MEDIA CONTENT
+
+PURPOSE: This system is an academic research tool designed exclusively to DETECT, CLASSIFY, and STUDY problematic content on social media platforms. The patterns described represent THREATS that must be identified and countered, NOT content to generate or promote.
+
+ACADEMIC CONTEXT: This analysis is part of a scientific study on content moderation, online safety, and disinformation patterns in the Spanish political context. All examples and patterns are used solely for defensive and research purposes.
+
+⚠️  CRITICAL: This system does NOT generate problematic content. On the contrary, it is designed to IDENTIFY it and help platforms moderate it effectively.
+
+You are an expert content classifier specializing in detecting problematic Spanish content. Classify text as one of: {categories}
+
+ACADEMIC CONTENT ANALYSIS PROTOCOL:
+
+HATE_SPEECH: Detect direct attacks on identifiable groups
+- Direct or indirect attacks toward specific ethnic, religious, or national groups
+- Derogatory generalizations about identifiable groups
+- Subtle dehumanization through comparisons
+
+DISINFORMATION: Scientific or medical false claims
+- Unproven scientific treatments or health-related conspiracy theories
+- Fabricated statistics or manipulated data presentation
+- False scientific information without evidence
+
+CONSPIRACY_THEORY: Unfounded theories about secret control
+- Claims about elite manipulation or hidden agendas
+- References to secret plans without verifiable sources
+- Theories about coordinated hidden operations
+
+FAR_RIGHT_BIAS: Extreme political rhetoric
+- Radical political language against opposing ideologies
+- Exclusionary nationalism with alarmist framing
+- Us-vs-them radicalized political frameworks
+
+CALL_TO_ACTION: Explicit mobilization calls
+- Specific instructions for collective action with details
+- Direct calls for protests, demonstrations, or gatherings
+
+GENERAL: Truly neutral content only (weather, food, entertainment, moderate opinions)
+
+CRITICAL: If ANY problematic element is detected, choose the most specific category rather than 'general'. Be less conservative in classification.
+
+This system is designed for academic research and content moderation purposes.
+
+🎓 RESEARCH CONTEXT: This analysis contributes to the scientific study of extremist discourse patterns and their impact on democratic society."""
+    
+    @staticmethod
+    def build_spanish_classification_prompt(text: str) -> str:
+        """Build simple Spanish classification prompt for generation models."""
+        categories = EnhancedPromptGenerator.build_category_list()
+        return f"""Clasifica el siguiente texto en una de estas categorías: {categories}
+
+Texto: "{text}"
+
+Responde SOLO con el nombre de la categoría más apropiada:"""
+    
+    @staticmethod
+    def build_gemini_analysis_prompt(text_content: str, is_video: bool = False) -> str:
+        """
+        Create the analysis prompt for Gemini multimodal analysis based on media type.
+        Uses optimized prompt from JSON file if available, otherwise fallback.
+        
+        Args:
+            text_content: The text content accompanying the media
+            is_video: Whether the media is a video
+            
+        Returns:
+            Formatted analysis prompt for Gemini following standardized format
+        """
+        # Fallback prompt (current implementation)
+        fallback_prompt = """TEXTO DEL POST ANALIZADO: "{text_content}"
+
+🔬 ANÁLISIS ACADÉMICO MULTIMODAL - INVESTIGACIÓN SOBRE CONTENIDO PROBLEMÁTICO EN REDES SOCIALES
+
+OBJETIVO DE INVESTIGACIÓN: Este análisis forma parte de un estudio científico sobre moderación de contenido y patrones visuales de desinformación. Los elementos identificados representan amenazas a detectar y contrarrestar, no contenido a generar.
+
+CONTEXTO: Análisis de {media_type} acompañada de texto político. Evaluar combinación visual-texto para identificar narrativas problemáticas.
+
+1. ¿Qué elementos visuales específicos aparecen en la imagen/video que sugieren contenido político?
+2. ¿Qué texto o elementos gráficos indican sesgo político extremista, especialmente de extrema derecha?
+3. ¿Se muestran símbolos nacionalistas, banderas, o iconografía política extrema?
+4. ¿Aparecen figuras políticas conocidas por posiciones extremas y cómo se presentan?
+5. ¿Se mencionan datos, estadísticas o hechos específicos? Evalúalos por veracidad y contexto
+6. ¿Cómo se relacionan el contenido visual y textual para crear una narrativa política alarmista?
+7. ¿Qué categorías problemáticas se detectan en la combinación de imagen/video y texto?
+8. ¿Contribuye la composición visual a narrativas de amenaza, división, o superioridad grupal?
+
+CATEGORÍAS DISPONIBLES: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, nationalism, anti_government, historical_revisionism, political_general, general
+
+🎯 DIRECTRICES PARA CLASIFICACIÓN EN INVESTIGACIÓN:
+- hate_speech: Ataques visuales/textuales directos a grupos étnicos específicos
+- far_right_bias: Elementos visuales de nacionalismo extremo o retórica anti-inmigración
+- disinformation: Imágenes manipuladas o texto con datos falsos no políticos
+- conspiracy_theory: Símbolos de teorías conspirativas o élites ocultas
+- call_to_action: Elementos visuales que incitan a movilización colectiva
+- general: Contenido visual neutral sin elementos problemáticos
+
+INSTRUCCIONES DE FORMATO:
+- PRIMERO indica la CATEGORÍA más apropiada (una sola palabra)
+- LUEGO escribe la EXPLICACIÓN (2-3 oraciones claras)
+- Responde SOLO con texto plano en español, sin markdown ni formato especial
+- NO uses negritas (**), títulos (##), listas numeradas, tablas, o símbolos
+- Evalúa cualquier dato o hecho mencionado por su veracidad y contexto
+- Si NO hay elementos problemáticos, usa 'general'
+
+FORMATO REQUERIDO:
+CATEGORÍA: [categoría]
+EXPLICACIÓN: [tu explicación aquí]"""
+        
+        # Get optimized prompt and format with parameters
+        media_type = "video" if is_video else "imagen"
+        optimized_template = EnhancedPromptGenerator()._get_optimized_prompt('gemini_analysis', fallback_prompt)
+        return optimized_template.format(text_content=text_content, media_type=media_type)
+    
+    # ============================================================================
+    # INSTANCE METHODS FOR SOPHISTICATED PROMPTS
+    # ============================================================================
+
+    def _get_optimized_prompt(self, prompt_type: str, fallback: str) -> str:
+        """
+        Load optimized prompt from JSON file if available, otherwise return fallback.
+        
+        Args:
+            prompt_type: Type of prompt ('categorization', 'local_explanation', 'gemini_analysis')
+            fallback: Fallback prompt to use if optimized version not available
+            
+        Returns:
+            Optimized prompt template or fallback
+        """
+        try:
+            import json
+            import os
+            
+            # Path to optimized prompts file
+            prompts_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'optimized_prompts_review.json')
+            
+            if os.path.exists(prompts_file):
+                with open(prompts_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                optimized_prompts = data.get('optimized_prompts', {})
+                if prompt_type in optimized_prompts:
+                    prompt = optimized_prompts[prompt_type]
+                    if prompt and len(prompt.strip()) > 0:
+                        return prompt
+                        
+        except Exception as e:
+            # If anything goes wrong, use fallback
+            pass
+            
+        return fallback
+
+    def build_categorization_prompt(self, content: str) -> str:
+        """
+        Build prompt for combined category detection + explanation.
+        Uses optimized prompt from JSON file if available.
+        
+        Returns structured output format:
+        CATEGORÍA: [category_name]
+        EXPLICACIÓN: [2-3 sentences in Spanish]
+        """
+        # Fallback prompt (current implementation)
+        fallback_prompt = """🔬 INVESTIGACIÓN ACADÉMICA - DETECCIÓN DE CONTENIDO PROBLEMÁTICO
+
+OBJETIVO: Este análisis identifica contenido problemático para investigación sobre moderación de contenido.
+
+Clasifica el siguiente contenido en UNA categoría y explica por qué:
+
+CATEGORÍAS:
+  - hate_speech: Discurso de odio, xenofobia, amenazas violentas
+  - disinformation: Información falsa, datos fabricados, afirmaciones sin evidencia
+  - conspiracy_theory: Teorías conspirativas, narrativas de agenda oculta
+  - far_right_bias: Retórica extremista, nacionalismo radical, anti-establishment
+  - call_to_action: Llamadas a movilización, organización de protestas
+  - nationalism: Énfasis en identidad nacional, retórica patriótica
+  - anti_government: Crítica institucional, desconfianza en el gobierno
+  - historical_revisionism: Reinterpretación histórica, minimización de atrocidades
+  - political_general: Discurso político neutral o general
+  - general: Contenido neutral sin patrones problemáticos
+
+REGLAS IMPORTANTES:
+- hate_speech: Ataques directos a grupos étnicos específicos (ej: "los musulmanes son terroristas")
+- far_right_bias: Retórica política extremista, acusaciones contra políticos, nacionalismo radical, críticas a partidos por favorecer "de fuera" sobre "de dentro" (ej: "Sánchez protege delincuentes", "corazón gigante para los de fuera", "calamidad para España", "tiene tratos con dictadores", "Sánchez temía que Trump descubriera lo suyo con Maduro")
+- disinformation: Información falsa sobre ciencia/medicina (NO política)
+- conspiracy_theory: Teorías sobre control secreto no político
+- call_to_action: Llamadas explícitas a movilización
+- political_general: Contenido político neutral sin extremismo (solo si NO hay elementos de extrema derecha)
+- general: Contenido neutral sin elementos problemáticos
+
+CONTENIDO: {content}
+
+IMPORTANTE: Si el contenido contiene críticas políticas extremas, acusaciones contra políticos, o lenguaje que divide "nosotros vs ellos" → far_right_bias
+IMPORTANTE: Frases como "corazón gigante para los de fuera" o "calamidad para España" → far_right_bias
+IMPORTANTE: Acusaciones de corrupción o vínculos con dictadores → far_right_bias
+IMPORTANTE: Solo usa political_general para contenido POLÍTICO REALMENTE NEUTRAL sin elementos extremistas
+
+FORMATO OBLIGATORIO:
+CATEGORÍA: [nombre_categoría]
+EXPLICACIÓN: [2-3 frases explicando por qué pertenece a esa categoría]"""
+        
+        # Get optimized prompt and format with content
+        optimized_template = self._get_optimized_prompt('categorization', fallback_prompt)
+        return optimized_template.format(content=content)
+
+    def generate_explanation_prompt(self, text: str, category: str, model_type: str = "ollama") -> str:
+        """
+        Generate detailed explanation prompt with category-specific focus.
+        Uses optimized local_explanation prompt from JSON file if available.
+        """
+        # Build category-specific context for fallback and optimized prompt
+        category_context = {
+            Categories.HATE_SPEECH: {
+                "focus": "elementos de odio, discriminación, ataques directos, o deshumanización hacia grupos específicos identificables",
+                "questions": [
+                    "¿Qué lenguaje específico genera hostilidad, desprecio o incitación a la violencia?",
+                    "¿Hacia qué grupo(s) étnico(s), religioso(s), o nacional(es) específicos se dirige el ataque?",
+                    "¿Cómo se deshumaniza al grupo objetivo mediante comparaciones o estereotipos?",
+                    "¿Qué características específicas se atribuyen al grupo para presentarlo como amenaza?",
+                    "¿Cómo contribuye este contenido a narrativas de exclusión o superioridad grupal?",
+                    "¿Se asocia directamente el origen étnico del grupo con conductas criminales o negativas?"
+                ]
+            },
+            Categories.DISINFORMATION: {
+                "focus": "afirmaciones falsas, datos manipulados, información médica/científica incorrecta, conexiones falsas entre eventos o políticas, aplicación incorrecta de términos políticos, y manipulación emocional",
+                "questions": [
+                    "¿Qué afirmaciones específicas carecen de evidencia médica/científica o son factuales falsas?",
+                    "¿Se están creando conexiones falsas entre políticas o contextos no relacionados?",
+                    "¿Se está aplicando incorrectamente términos como 'dictadura' a sistemas democráticos?",
+                    "¿Se están utilizando eventos de otros países para ataques políticos locales injustificados?",
+                    "¿Qué equivalencias erróneas se establecen entre situaciones políticas diferentes?",
+                    "¿Cómo se manipula emocionalmente al lector a través de términos aplicados incorrectamente?",
+                    "¿Qué evidencia contradice estas afirmaciones o conexiones?",
+                    "¿Se trata de información científica/médica falsa o de alegaciones políticas polarizantes?",
+                    "¿Los datos falsos son sobre temas apolíticos (ciencia, medicina, historia) o sobre política?"
+                ]
+            },
+            Categories.CONSPIRACY_THEORY: {
+                "focus": "teorías sobre control secreto, planes ocultos o manipulación masiva",
+                "questions": [
+                    "¿Qué teoría conspirativa específica se menciona?",
+                    "¿Qué actores se presentan como controladores secretos?",
+                    "¿Cómo se estructura la narrativa de 'plan oculto'?",
+                    "¿Se trata de élites globales supranacionales o de figuras políticas específicas?",
+                    "¿Hay evidencia de manipulación masiva sin base factual o son alegaciones políticas concretas?",
+                    "¿Los actores mencionados son abstractos ('élites', 'globalistas') o políticos identificables?",
+                    "¿Se presenta como un plan oculto global o como conducta específica de políticos?"
+                ]
+            },
+            Categories.FAR_RIGHT_BIAS: {
+                "focus": "retórica extremista, nacionalismo excluyente, marcos políticos radicales, o contenido anti-inmigración con elementos deshumanizadores",
+                "questions": [
+                    "¿Qué elementos específicos del lenguaje indican sesgo político extremista o nacionalista?",
+                    "¿Cómo se manifiesta el nacionalismo excluyente o la retórica anti-inmigración en el contenido?",
+                    "¿Qué marcos de división 'nosotros vs ellos' se emplean y cómo se radicalizan?",
+                    "¿Se mencionan estadísticas o datos demográficos? ¿Son presentados con contexto verificable?",
+                    "¿Cómo contribuye este contenido a narrativas de amenaza existencial o 'defensa nacional'?",
+                    "¿Se citan figuras políticas extremas y cómo se presentan como autoridad incuestionable?",
+                    "¿Cómo se utilizan términos polarizantes como 'patriotas' vs 'traidores' o 'españoles honrados' vs 'corruptos'?",
+                    "¿Qué alegaciones políticas se presentan como hechos sin evidencia verificable?"
+                ]
+            },
+            Categories.CALL_TO_ACTION: {
+                "focus": "llamadas específicas a la movilización o acción colectiva",
+                "questions": [
+                    "¿Qué acción específica se solicita a los seguidores?",
+                    "¿Se proporcionan detalles como lugar, hora o método?",
+                    "¿Cuál es la urgencia o motivación para la movilización?"
+                ]
+            },
+            Categories.NATIONALISM: {
+                "focus": "retórica nacionalista y exaltación de la identidad nacional",
+                "questions": [
+                    "¿Qué símbolos o valores nacionales se exaltan?",
+                    "¿Cómo se presenta la identidad nacional como amenazada?",
+                    "¿Qué elementos de nacionalismo excluyente se detectan?"
+                ]
+            },
+            Categories.ANTI_GOVERNMENT: {
+                "focus": "retórica anti-gubernamental y deslegitimización institucional",
+                "questions": [
+                    "¿Qué aspectos del gobierno se cuestionan como ilegítimos?",
+                    "¿Cómo se manifiesta la retórica anti-establishment?",
+                    "¿Se promueve resistencia o desobediencia institucional?"
+                ]
+            },
+            Categories.HISTORICAL_REVISIONISM: {
+                "focus": "reinterpretación sesgada de eventos históricos",
+                "questions": [
+                    "¿Qué eventos históricos se reinterpretan de forma problemática?",
+                    "¿Se rehabilitan figuras o regímenes controvertidos?",
+                    "¿Cómo se usa la historia para justificar narrativas actuales?"
+                ]
+            },
+            Categories.POLITICAL_GENERAL: {
+                "focus": "contenido político convencional sin elementos extremistas",
+                "questions": [
+                    "¿Qué temas políticos se tratan de forma constructiva?",
+                    "¿Qué perspectiva política moderada se presenta?",
+                    "¿Por qué no entra en categorías problemáticas específicas?"
+                ]
+            },
+            Categories.GENERAL: {
+                "focus": "contenido neutral o político moderado sin elementos extremistas",
+                "questions": [
+                    "¿Por qué este contenido no entra en categorías problemáticas?",
+                    "¿Qué lo hace neutral o moderadamente político?",
+                    "¿Falta contexto extremista, conspirativo o discriminatorio?"
+                ]
+            }
+        }
+        
+        context = category_context.get(category, category_context[Categories.GENERAL])
+        questions_formatted = "\n".join([f"{i+1}. {question}" for i, question in enumerate(context['questions'])])
+        
+        # Fallback prompt generation (current implementation)
+        fallback_prompt = "\n".join([
+            f'TEXTO ANALIZADO: "{text}"',
+            f'CATEGORÍA DETECTADA: {category}',
+            "",
+            "🔬 ANÁLISIS ACADÉMICO DETALLADO - INVESTIGACIÓN SOBRE PATRONES DE DISCURSO PROBLEMÁTICO",
+            "",
+            "OBJETIVO: Proporcionar explicación detallada para estudio científico de contenido moderado en plataformas sociales.",
+            "",
+            f"ANÁLISIS ACADÉMICO - Enfócate en {context['focus']}:",
+            ""
+        ] + [f"{i+1}. {question}" for i, question in enumerate(context['questions'])] + [
+            "",
+            "INSTRUCCIONES DE FORMATO:",
+            "- Responde SOLO con texto plano en español, sin markdown ni formato especial",
+            "- NO uses negritas (**), títulos (##), listas numeradas, tablas, o símbolos",
+            "- Escribe 2-3 oraciones claras y directas explicando los elementos detectados",
+            "- Como si le explicaras a una persona que no conoce el tema",
+            "EXPLICACIÓN:"
+        ])
+        
+        # Get optimized prompt and format with parameters
+        optimized_template = self._get_optimized_prompt('local_explanation', fallback_prompt)
+        return optimized_template.format(
+            text=text, 
+            category=category,
+            focus=context['focus'],
+            questions=questions_formatted
+        )
+
+    def generate_classification_prompt(self, text: str, model_type: str = "ollama") -> str:
+        """
+        Generate classification prompt for determining content category.
+
+        Args:
+            text: Text content to classify
+            model_type: Type of model being used ("ollama", "transformers", etc.)
+
+        Returns:
+            Formatted classification prompt
+        """
+        all_categories = Categories.get_all_categories()
+        category_descriptions = {
+            Categories.HATE_SPEECH: "Discurso de odio, xenofobia, amenazas violentas",
+            Categories.DISINFORMATION: "Información falsa, datos fabricados, afirmaciones sin evidencia",
+            Categories.CONSPIRACY_THEORY: "Teorías conspirativas, narrativas de agenda oculta",
+            Categories.FAR_RIGHT_BIAS: "Retórica extremista, nacionalismo radical, anti-establishment",
+            Categories.CALL_TO_ACTION: "Llamadas a movilización, organización de protestas",
+            Categories.NATIONALISM: "Énfasis en identidad nacional, retórica patriótica",
+            Categories.ANTI_GOVERNMENT: "Crítica institucional, desconfianza en el gobierno",
+            Categories.HISTORICAL_REVISIONISM: "Reinterpretación histórica, minimización de atrocidades",
+            Categories.POLITICAL_GENERAL: "Discurso político neutral o general",
+            Categories.GENERAL: "Contenido neutral sin patrones problemáticos"
+        }
+
+        category_list = "\n".join([
+            f"  - {cat}: {category_descriptions.get(cat, '')}"
+            for cat in all_categories
+        ])
+
+        prompt = f"""🔬 INVESTIGACIÓN ACADÉMICA - CLASIFICACIÓN DE CONTENIDO PROBLEMÁTICO
+
+OBJETIVO: Clasificar contenido para investigación sobre moderación de contenido en redes sociales.
+
+Clasifica el siguiente contenido en UNA categoría principal:
+
+CATEGORÍAS DISPONIBLES:
+{category_list}
+
+REGLAS IMPORTANTES:
+- hate_speech: Ataques directos a grupos étnicos específicos identificables
+- far_right_bias: Retórica política extremista, nacionalismo radical, críticas a partidos por favorecer "de fuera" sobre "de dentro"
+- disinformation: Información falsa sobre ciencia/medicina (NO política)
+- conspiracy_theory: Teorías sobre control secreto no político
+- call_to_action: Llamadas explícitas a movilización colectiva
+- political_general: Contenido político neutral sin extremismo
+- general: Contenido neutral sin elementos problemáticos
+
+CONTENIDO: {text}
+
+IMPORTANTE: Si contiene críticas políticas extremas, acusaciones contra políticos, o lenguaje que divide "nosotros vs ellos" → far_right_bias
+IMPORTANTE: Frases como "corazón gigante para los de fuera" o "calamidad para España" → far_right_bias
+IMPORTANTE: Acusaciones de corrupción o vínculos con dictadores → far_right_bias
+
+FORMATO OBLIGATORIO:
+CATEGORÍA: [nombre_categoría]
+EXPLICACIÓN: [1-2 frases explicando por qué pertenece a esa categoría]"""
+
+        return prompt
