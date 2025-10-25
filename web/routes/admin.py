@@ -84,7 +84,7 @@ def admin_dashboard() -> str:
 
         # Recent analyses (last 10)
         recent_rows = conn.execute("""
-            SELECT ca.analysis_timestamp, ca.category, ca.analysis_stages, ca.external_analysis_used, t.username,
+            SELECT ca.post_id, ca.analysis_timestamp, ca.category, ca.analysis_stages, ca.external_analysis_used, t.username,
                    SUBSTR(t.content, 1, 100) AS content_preview
             FROM content_analyses ca
             JOIN tweets t ON t.tweet_id = ca.post_id
@@ -130,6 +130,7 @@ def admin_dashboard() -> str:
             display_method = stages
             
         recent_analyses.append({
+            'post_id': r['post_id'],
             'analysis_timestamp': r['analysis_timestamp'],
             'category': r['category'],
             'analysis_method': display_method,
@@ -380,6 +381,7 @@ def admin_edit_analysis(tweet_id: str) -> str:
                 t.content,
                 t.username,
                 t.tweet_timestamp,
+                t.is_deleted,
                 ca.category,
                 ca.local_explanation,
                 ca.external_explanation,
@@ -400,18 +402,35 @@ def admin_edit_analysis(tweet_id: str) -> str:
     # Use best explanation for display (external if available, otherwise local)
     best_explanation = row['external_explanation'] if row['external_explanation'] else row['local_explanation'] if row['local_explanation'] else ''
     
+    # Get analysis stages and external analysis used
+    analysis_stages = 'pattern'  # Default
+    external_analysis_used = False
+    if row['local_explanation'] and row['external_explanation']:
+        analysis_stages = 'pattern,local_llm,external'
+        external_analysis_used = True
+    elif row['local_explanation']:
+        analysis_stages = 'pattern,local_llm'
+    elif row['external_explanation']:
+        analysis_stages = 'external'
+        external_analysis_used = True
+    
     tweet_dict = {
         'content': row['content'],
         'username': row['username'],
         'tweet_timestamp': row['tweet_timestamp'],
-        'category': row['category'] if row['category'] is not None else 'general',
-        'best_explanation': best_explanation,
+        'is_deleted': row['is_deleted'],
+        'tweet_id': tweet_id,
+        'tweet_url': row['tweet_url'] if row['tweet_url'] is not None else '',
+        'analysis_category': row['category'] if row['category'] is not None else 'general',
+        'categories_detected': [row['category']] if row['category'] else ['general'],
+        'analysis_display': best_explanation,
         'local_explanation': row['local_explanation'] if row['local_explanation'] is not None else '',
         'external_explanation': row['external_explanation'] if row['external_explanation'] is not None else '',
-        'tweet_url': row['tweet_url'] if row['tweet_url'] is not None else '',
-        'original_content': row['original_content'] if row['original_content'] is not None else '',
+        'analysis_stages': analysis_stages,
+        'external_analysis_used': external_analysis_used,
         'verification_data': json.loads(row['verification_data']) if row['verification_data'] is not None else None,
-        'verification_confidence': row['verification_confidence'] if row['verification_confidence'] is not None else 0.0
+        'verification_confidence': row['verification_confidence'] if row['verification_confidence'] is not None else 0.0,
+        'has_multiple_categories': False
     }
 
     from web.utils.decorators import ANALYSIS_CATEGORIES

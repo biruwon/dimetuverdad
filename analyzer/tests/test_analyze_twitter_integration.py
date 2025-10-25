@@ -320,13 +320,129 @@ class TestAnalyzerIntegration:
         print(f"📊 LLM Tests: {passed}/{passed+failed} passed ({passed/(passed+failed)*100:.1f}%)")
         return {'passed': passed, 'failed': failed, 'results': results}
     
+    def run_real_analysis_tests(self) -> Dict[str, Any]:
+        """Run tests that call real analysis methods (integration-style tests)."""
+        print("🔬 TESTING REAL ANALYSIS METHODS")
+        print("=" * 60)
+        print("⚡ Running integration tests with real analysis calls...")
+        
+        passed = 0
+        failed = 0
+        results = []
+        
+        # Test 1: Empty content analysis
+        print("⚡ test_analyze_content_empty... ", end="", flush=True)
+        try:
+            async def test_empty():
+                result = await self.analyzer.analyze_content(
+                    tweet_id="test_empty_123",
+                    tweet_url="https://twitter.com/test/status/test_empty_123",
+                    username="test_user",
+                    content=""
+                )
+                return result
+            
+            result = asyncio.run(test_empty())
+            self.assertIn(result.category, [Categories.GENERAL, "ERROR"])
+            self.assertIsNotNone(result.local_explanation)
+            self.assertTrue(len(result.local_explanation) > 0)
+            print("✅")
+            passed += 1
+            results.append({'test': 'test_analyze_content_empty', 'status': 'passed'})
+        except Exception as e:
+            print("❌")
+            print(f"   💥 ERROR: {str(e)}")
+            failed += 1
+            results.append({'test': 'test_analyze_content_empty', 'status': 'failed', 'error': str(e)})
+        
+        # Test 2: Short content analysis
+        print("⚡ test_analyze_content_short... ", end="", flush=True)
+        try:
+            async def test_short():
+                result = await self.analyzer.analyze_content(
+                    tweet_id="test_short_123",
+                    tweet_url="https://twitter.com/test/status/test_short_123",
+                    username="test_user",
+                    content="Hi"
+                )
+                return result
+            
+            result = asyncio.run(test_short())
+            self.assertIn(result.category, [Categories.GENERAL, "ERROR"])
+            self.assertIsNotNone(result.local_explanation)
+            self.assertTrue(len(result.local_explanation) > 0)
+            print("✅")
+            passed += 1
+            results.append({'test': 'test_analyze_content_short', 'status': 'passed'})
+        except Exception as e:
+            print("❌")
+            print(f"   💥 ERROR: {str(e)}")
+            failed += 1
+            results.append({'test': 'test_analyze_content_short', 'status': 'failed', 'error': str(e)})
+        
+        # Test 3: Metrics tracking analysis
+        print("⚡ test_analyze_content_with_metrics_tracking... ", end="", flush=True)
+        try:
+            async def test_metrics():
+                result = await self.analyzer.analyze_content(
+                    tweet_id="test_metrics_123",
+                    tweet_url="https://twitter.com/test/status/test_metrics_123",
+                    username="test_user",
+                    content="Test content with hate speech"
+                )
+                return result
+            
+            result = asyncio.run(test_metrics())
+            summary = self.analyzer.metrics.get_summary()
+            self.assertIsInstance(summary['total_analyses'], int)
+            self.assertGreaterEqual(summary['total_analyses'], 1)
+            self.assertGreaterEqual(summary['total_time'], 0)
+            self.assertGreater(result.analysis_time_seconds, 0)
+            print("✅")
+            passed += 1
+            results.append({'test': 'test_analyze_content_with_metrics_tracking', 'status': 'passed'})
+        except Exception as e:
+            print("❌")
+            print(f"   💥 ERROR: {str(e)}")
+            failed += 1
+            results.append({'test': 'test_analyze_content_with_metrics_tracking', 'status': 'failed', 'error': str(e)})
+        
+        # Test 4: Multimodal content with no valid media URLs
+        print("⚡ test_analyze_multimodal_content_no_media_urls... ", end="", flush=True)
+        try:
+            from analyzer.gemini_multimodal import GeminiMultimodal, GeminiMultimodalConfig, DependencyContainer
+            from unittest.mock import MagicMock
+            
+            # Create Gemini analyzer with mocked dependencies
+            deps = DependencyContainer(
+                http_client=MagicMock(),
+                file_system=MagicMock(),
+                resource_monitor=MagicMock(),
+                metrics_collector=MagicMock(),
+                config=GeminiMultimodalConfig(api_key="test_key")
+            )
+            gemini_analyzer = GeminiMultimodal(deps)
+            
+            # Test with no media URLs
+            result, time_taken = gemini_analyzer.analyze_multimodal_content([], "Test content")
+            self.assertIsNone(result)
+            self.assertGreater(time_taken, 0)
+            print("✅")
+            passed += 1
+            results.append({'test': 'test_analyze_multimodal_content_no_media_urls', 'status': 'passed'})
+        except Exception as e:
+            print("❌")
+            print(f"   💥 ERROR: {str(e)}")
+            failed += 1
+            results.append({'test': 'test_analyze_multimodal_content_no_media_urls', 'status': 'failed', 'error': str(e)})
+    
     def run_comprehensive_suite(self, quick_mode: bool = False) -> Dict[str, Any]:
         """Run the complete test suite."""
         print(f"🚀  TEST SUITE")
         if quick_mode:
-            print("⚡ Quick mode: Running 4 tests only (2 pattern + 2 LLM)...")
+            print("⚡ Quick mode: Running 7 tests only (2 pattern + 2 LLM + 3 real analysis)...")
         else:
-            print("📊 Full mode: Running all 20 tests (10 pattern + 10 LLM)...")
+            print("📊 Full mode: Running all 23 tests (10 pattern + 10 LLM + 3 real analysis)...")
         print("=" * 70)
         
         start_time = time.time()
@@ -337,9 +453,12 @@ class TestAnalyzerIntegration:
         # Run LLM tests  
         llm_results = self.run_llm_tests(quick_mode=quick_mode)
         
+        # Run real analysis integration tests
+        real_analysis_results = self.run_real_analysis_tests()
+        
         # Calculate totals
-        total_passed = pattern_results['passed'] + llm_results['passed']
-        total_failed = pattern_results['failed'] + llm_results['failed']
+        total_passed = pattern_results['passed'] + llm_results['passed'] + real_analysis_results['passed']
+        total_failed = pattern_results['failed'] + llm_results['failed'] + real_analysis_results['failed']
         total_tests = total_passed + total_failed
         success_rate = (total_passed / total_tests * 100) if total_tests > 0 else 0
         
@@ -350,7 +469,8 @@ class TestAnalyzerIntegration:
         print("=" * 50)
         print(f"✅ Pattern Tests: {pattern_results['passed']}/{pattern_results['passed'] + pattern_results['failed']} passed")
         print(f"🧠 LLM Tests: {llm_results['passed']}/{llm_results['passed'] + llm_results['failed']} passed")
-        print(f"📈 Overall Success Rate: {success_rate:.1f}% ({total_passed}/{total_tests})")
+        print(f"� Real Analysis Tests: {real_analysis_results['passed']}/{real_analysis_results['passed'] + real_analysis_results['failed']} passed")
+        print(f"�📈 Overall Success Rate: {success_rate:.1f}% ({total_passed}/{total_tests})")
         print(f"⏱️  Total Execution Time: {elapsed_time:.2f} seconds")
         
         if total_failed > 0:
@@ -361,6 +481,7 @@ class TestAnalyzerIntegration:
         return {
             'pattern_results': pattern_results,
             'llm_results': llm_results,
+            'real_analysis_results': real_analysis_results,
             'total_passed': total_passed,
             'total_failed': total_failed,
             'success_rate': success_rate,

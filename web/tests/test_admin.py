@@ -31,7 +31,8 @@ class TestAdminEditAnalysis:
             'tweet_url': sample_tweet_data['tweet_url'],
             'original_content': None,
             'verification_data': None,
-            'verification_confidence': 0.0
+            'verification_confidence': 0.0,
+            'is_deleted': False
         })
 
         response = admin_client.get('/admin/edit-analysis/1234567890')

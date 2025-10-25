@@ -117,10 +117,12 @@ CONSPIRACY_THEORY - TEORÍAS SIN EVIDENCIA SOBRE CONTROL:
 - Planes ocultos de transformación demográfica o cultural
 - Organizaciones secretas coordinando procesos migratorios masivos
 
-CALL_TO_ACTION - MOVILIZACIÓN CONTRA AMENAZAS PERCIBIDAS:
-- Llamadas a protestas contra políticas migratorias
-- Instrucciones para acción colectiva contra procesos migratorios
-- Urgencia para defender identidad nacional de amenazas externas
+**call_to_action** (MOVILIZACIÓN - ÚLTIMA PRIORIDAD PARA CLAIMS POLÍTICOS):
+- Llamadas directas a protestar, manifestarse, o actuar colectivamente
+- NO usar para claims políticos presentados como "confirmados" sin fuente
+- Si un texto dice "CONFIRMADO: El Gobierno prohíbe..." → ES disinformation, NO call_to_action
+- Si un texto dice "Ya está firmado el decreto..." → ES disinformation, NO call_to_action
+- Call_to_action requiere LLAMADA DIRECTA A ACCIÓN, no solo información sobre decisiones políticas
 
 GENERAL - CONTENIDO REALMENTE NEUTRAL:
 - Temas apolíticos: clima, deportes, entretenimiento, cultura general
@@ -131,7 +133,14 @@ DISTINCIÓN CRÍTICA:
 - hate_speech: Ataques directos a grupos étnicos CONCRETOS identificables
 - far_right_bias: Retórica anti-inmigración GENERAL sin nombrar grupos específicos
 
-JERARQUÍA: hate_speech > far_right_bias > disinformation > conspiracy_theory > call_to_action > general
+JERARQUÍA DE CLASIFICACIÓN (de mayor a menor prioridad):
+1. hate_speech (ataques directos a grupos específicos)
+2. disinformation (información falsa verificable, ESPECIALMENTE claims políticos sin fuente oficial)
+3. far_right_bias (retórica extremista política)
+4. conspiracy_theory (teorías conspirativas)
+5. call_to_action (llamadas a movilización)
+6. political_general (análisis político neutral)
+7. general (contenido neutral)
 
 IMPORTANTE: Sistema diseñado para investigación académica y moderación de contenido en redes sociales.
 IMPORTANTE: Priorizar CONTEXTO POLÍTICO sobre verificación factual para clasificación.
@@ -230,6 +239,8 @@ CATEGORÍAS Y REGLAS DE PRIORIDAD (de mayor a menor severidad):
 8. call_to_action
 9. general
 
+CATEGORÍAS:
+
 REGLAS DE CLASIFICACIÓN - LÉELAS CON CUIDADO:
 
 **hate_speech** (PRIORIDAD MÁXIMA - SOLO SI CUMPLE TODOS LOS CRITERIOS):
@@ -251,27 +262,61 @@ REGLAS DE CLASIFICACIÓN - LÉELAS CON CUIDADO:
 **nationalism**: Orgullo nacional sin anti-inmigración ni lenguaje divisivo
 **anti_government**: Crítica institucional sin extremismo ni vínculos internacionales
 **political_general**: Análisis político neutral sin extremismo
-**disinformation**: Información falsa verificable sobre ciencia/medicina
-**conspiracy_theory**: Teorías conspirativas no políticas
-**call_to_action**: Verbos imperativos de movilización/difusión
-**general**: Contenido neutral sin patrones problemáticos
+**disinformation**: Información falsa verificable sobre ciencia/medicina O información política falsa sobre eventos, decretos, nombramientos, destituciones, renuncias, alianzas políticas, o hechos verificables sin fuente creíble.
 
-PATRONES CRÍTICOS PARA EVITAR CONFUSIONES:
+DISINFORMATION DETECTION - SEÑALES DE ALERTA EXPANDIDAS:
 
-🔴 HATE_SPEECH vs FAR_RIGHT_BIAS:
-- Si menciona "inmigrantes" genérico → far_right_bias
-- Si nombra grupo étnico específico + palabra negativa fuerte → hate_speech
-- Si solo critica políticas migratorias → far_right_bias
+� FORMATO DE NOTICIA FALSA POLÍTICA:
+- "ÚLTIMA HORA" / "URGENTE" / "BOMBAZO" / "EXCLUSIVA" + claim político específico SIN fuente oficial
+- Afirmaciones sobre decretos, leyes, nombramientos, destituciones sin BOE, fuente gubernamental, o medio verificable
+- Claims sobre renuncias, dimisiones, ceses sin confirmación oficial
+- Afirmaciones sobre alianzas políticas, pactos, acuerdos sin fuente creíble
+- Eventos políticos presentados como "confirmado" o "ya está" sin especificar quién confirma
 
-🔴 FAR_RIGHT_BIAS vs ANTI_GOVERNMENT:
-- Si incluye "corrupción con extranjeros" → far_right_bias
-- Si solo critica gestión interna → anti_government
+🚨 PATRONES DE DESINFORMACIÓN POLÍTICA EXPANDIDOS:
+- "El Gobierno ha aprobado un decreto que..." SIN citar BOE, Ministerio, o fuente oficial
+- "CONFIRMADO: X ha dimitido/renunciado" SIN especificar fuente de confirmación
+- "Ya está firmado/promulgado/aprobado" SIN citar documento o autoridad
+- "Según fuentes" SIN nombrar las fuentes específicas
+- "Se ha confirmado oficialmente" SIN decir qué autoridad confirma
+- "El Gobierno PROHÍBE/OBLIGA/APRUEBA [acción específica]" SIN fuente oficial
+- "DECRETO aprobado que [prohíbe/obliga/impone]" SIN BOE o Ministerio
+- "LEY promulgada que [restringe/limita/prohíbe]" SIN fuente legislativa
+- "El Ejecutivo ha decidido [medida restrictiva]" SIN confirmación oficial
 
-🔴 POLÍTICO_GENERAL vs FAR_RIGHT_BIAS:
-- Si tiene lenguaje divisivo o alarmista → far_right_bias
-- Si es análisis neutral → political_general
+🚨 CLAIMS POLÍTICOS VERIFICABLES REQUIEREN FUENTE OFICIAL:
+- Decretos/leyes → Necesitan BOE, Ministerio, o fuente gubernamental oficial
+- Renuncias/dimisiones → Necesitan confirmación oficial del partido/gobierno
+- Nombramientos/ceses → Necesitan fuente oficial del organismo correspondiente
+- Alianzas políticas → Necesitan declaración oficial de los partidos
+- Eventos judiciales → Necesitan fuente judicial o legal verificable
 
-**HIERARCHÍA ESTRICTA**: Si cumple criterios de categoría superior, USAR LA SUPERIOR.
+**REGLA CRÍTICA PARA DESINFORMACIÓN POLÍTICA** (APLICA SIEMPRE):
+Si el texto presenta un HECHO POLÍTICO ESPECÍFICO VERIFICABLE (decreto aprobado, renuncia, nombramiento, alianza, cese, prohibición, obligación) SIN FUENTE OFICIAL (BOE, Ministerio, partido oficial, medio verificable con evidencia) → CLASIFICAR COMO **disinformation** INMEDIATAMENTE.
+
+PALABRAS CLAVE QUE INDICAN DESINFORMACIÓN POLÍTICA:
+- "CONFIRMADO:" + claim político sin fuente
+- "Ya está firmado/aprobado/promulgado" sin documento oficial
+- "Según fuentes oficiales" sin nombrar fuente específica
+- "Es oficial" sin autoridad que lo confirme
+- "El Gobierno ha decidido/prohibido/obligado" sin fuente oficial
+- "Decreto aprobado" sin BOE o Ministerio
+- "Renuncia confirmada" sin fuente oficial
+- "Cese anunciado" sin autoridad oficial
+
+Ejemplos de disinformation política:
+- "CONFIRMADO: El Gobierno prohíbe las manifestaciones" (NO fuente oficial)
+- "EXCLUSIVA: Sánchez ha dimitido esta mañana" (NO confirmación oficial)
+- "Ya está firmado el decreto de estado de alarma" (NO cita fuente)
+- "Montero ha sido destituida por corrupción" (NO fuente oficial)
+- "PP y Vox llegan a un acuerdo secreto" (NO fuente creíble)
+- "CONFIRMADO: El Gobierno ha aprobado un decreto que prohíbe las manifestaciones públicas. Ya está firmado y entra en vigor mañana." (NO fuente oficial - decreto sin BOE)
+- "El Gobierno ha decidido obligar a todos los ciudadanos a..." (NO fuente oficial - medida restrictiva sin confirmación)
+
+Ejemplos de political_general (con fuente):
+- "Según BOE, el Gobierno aprueba nuevo decreto" (SÍ fuente: BOE)
+- "El PSOE confirma la dimisión de X, informa Europa Press" (SÍ fuente)
+- "Moncloa anuncia cese de ministra por motivos personales" (SÍ fuente oficial)
 
 FORMATO OBLIGATORIO:
 CATEGORÍA: [nombre_categoría]
@@ -279,35 +324,84 @@ EXPLICACIÓN: [2‑3 frases explicando por qué pertenece a esa categoría, cita
         
         # Add the content at the end
         if content:
-            prompt = prompt.replace("FORMATO OBLIGATORIO:", f"CONTENIDO: {content}\n\nFORMATO OBLIGATORIO:")
+            prompt = prompt.replace("FORMATO OBLIGATORIO:", f"CONTENIDO A ANALIZAR:\n{content}\n\nFORMATO OBLIGATORIO:")
         
         return prompt
 
     def generate_explanation_prompt(self, text: str, category: str, model_type: str = "ollama") -> str:
         """
         Generate detailed explanation prompt with category-specific focus.
+        For explain_only mode - explains WHY content belongs to the given category.
         """
+        # Category-specific explanation prompts
+        category_explanations = {
+            "hate_speech": [
+                "Este contenido contiene lenguaje de odio porque:",
+                "1. ¿Qué grupos específicos son atacados o estereotipados negativamente?",
+                "2. ¿Qué palabras o frases expresan desprecio, inferioridad o amenaza?",
+                "3. ¿Cómo se vincula al grupo con violencia, criminalidad o características negativas?"
+            ],
+            "disinformation": [
+                "Este contenido es desinformación porque:",
+                "1. ¿Qué afirmación específica se hace sobre hechos verificables?",
+                "2. ¿Por qué carece de fuente oficial o creíble?",
+                "3. ¿Cómo se presenta como cierto sin evidencia verificable?"
+            ],
+            "conspiracy_theory": [
+                "Este contenido promueve una teoría conspirativa porque:",
+                "1. ¿Qué narrativa oculta o agenda secreta se sugiere?",
+                "2. ¿Qué grupos o instituciones son acusados de conspirar?",
+                "3. ¿Cómo se presenta evidencia circunstancial como prueba definitiva?"
+            ],
+            "far_right_bias": [
+                "Este contenido muestra sesgo de extrema derecha porque:",
+                "1. ¿Qué retórica nacionalista extrema o anti-inmigración se usa?",
+                "2. ¿Cómo divide entre 'nosotros vs ellos' de manera alarmista?",
+                "3. ¿Qué acusaciones de traición o corrupción internacional se hacen?"
+            ],
+            "call_to_action": [
+                "Este contenido incita a la acción porque:",
+                "1. ¿Qué acción específica se pide realizar?",
+                "2. ¿Cómo se usa lenguaje urgente o temporal para presionar?",
+                "3. ¿Qué movilización colectiva se promueve?"
+            ],
+            "general": [
+                "Este contenido neutral es porque:",
+                "1. ¿Por qué no contiene elementos extremistas o problemáticos?",
+                "2. ¿Qué lo hace informativo o moderadamente político?",
+                "3. ¿Falta contexto discriminatorio, conspirativo o alarmista?"
+            ]
+        }
+        
+        # Get category-specific questions, fallback to general
+        questions = category_explanations.get(category.lower(), category_explanations["general"])
+        
         prompt_parts = [
             f'TEXTO ANALIZADO: "{text}"',
             f'CATEGORÍA DETECTADA: {category}',
             "",
-            "🔬 ANÁLISIS ACADÉMICO DETALLADO - INVESTIGACIÓN SOBRE PATRONES DE DISCURSO PROBLEMÁTICO",
+            "🔬 ANÁLISIS ACADÉMICO DETALLADO - INVESTIGACIÓN SOBRE PATRONES DE DISCURSO",
             "",
-            "OBJETIVO: Proporcionar explicación detallada para estudio científico de contenido moderado en plataformas sociales.",
+            "OBJETIVO: Explicar por qué este contenido pertenece a la categoría detectada.",
             "",
-            "ANÁLISIS ACADÉMICO - Enfócate en contenido neutral o político moderado sin elementos extremistas:",
+            f"{questions[0]}",
             "",
-            "1. ¿Por qué este contenido no entra en categorías problemáticas?",
-            "2. ¿Qué lo hace neutral o moderadamente político?",
-            "3. ¿Falta contexto extremista, conspirativo o discriminatorio?",
+            questions[1],
+            questions[2],
+            questions[3] if len(questions) > 3 else "",
             "",
             "INSTRUCCIONES DE FORMATO:",
             "- Responde SOLO con texto plano en español, sin markdown ni formato especial",
             "- NO uses negritas (**), títulos (##), listas numeradas, tablas, o símbolos",
-            "- Escribe 2-3 oraciones claras y directas explicando los elementos detectados",
-            "- Como si le explicaras a una persona que no conoce el tema",
+            "- Escribe 2-3 oraciones claras explicando por qué pertenece a esta categoría",
+            "- Cita elementos específicos del texto que justifican la clasificación",
+            "- NO menciones por qué NO pertenece a otras categorías",
+            "- Enfócate ÚNICAMENTE en explicar por qué SÍ pertenece a la categoría detectada",
             "EXPLICACIÓN:"
         ]
+        
+        # Remove empty lines
+        prompt_parts = [line for line in prompt_parts if line.strip()]
         
         return "\n".join(prompt_parts)
 

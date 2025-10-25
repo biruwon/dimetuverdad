@@ -169,7 +169,7 @@ class TestAnalyzeLocal:
         """Test local flow when pattern detection succeeds."""
         content = "Los inmigrantes destruyen nuestra cultura"
         
-        category, explanation, stages, pattern_data = await flow_manager.analyze_local(content)
+        category, explanation, stages, pattern_data, verification_data = await flow_manager.analyze_local(content)
         
         assert category == Categories.HATE_SPEECH
         assert explanation == "Explicación para categoría detectada por patrones."
@@ -204,7 +204,7 @@ class TestAnalyzeLocal:
         
         content = "Contenido neutral sin patrones"
         
-        category, explanation, stages, pattern_data = await flow_manager.analyze_local(content)
+        category, explanation, stages, pattern_data, verification_data = await flow_manager.analyze_local(content)
         
         assert category == Categories.HATE_SPEECH  # From LLM mock
         assert explanation == "Este contenido contiene discurso de odio xenófobo."
@@ -233,7 +233,7 @@ class TestAnalyzeLocal:
         
         content = "Test content"
         
-        category, explanation, stages, pattern_data = await flow_manager.analyze_local(content)
+        category, explanation, stages, pattern_data, verification_data = await flow_manager.analyze_local(content)
         
         # Should use LLM for both category and explanation
         mock_local_llm.categorize_and_explain.assert_called_once()
@@ -261,7 +261,7 @@ class TestAnalyzeLocal:
         
         content = "Fake news content"
         
-        category, explanation, stages, pattern_data = await flow_manager.analyze_local(content)
+        category, explanation, stages, pattern_data, verification_data = await flow_manager.analyze_local(content)
         
         assert category == Categories.DISINFORMATION  # First category
         mock_local_llm.explain_only.assert_called_once_with(content, Categories.DISINFORMATION)
@@ -307,7 +307,7 @@ class TestAnalyzeFull:
         """Test full flow triggers external for hate_speech category."""
         content = "Hate speech content"
         
-        category, local_exp, external_exp, stages, pattern_data = await flow_manager.analyze_full(content)
+        category, local_exp, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full(content)
         
         assert category == Categories.HATE_SPEECH
         assert local_exp == "Explicación para categoría detectada por patrones."
@@ -343,7 +343,7 @@ class TestAnalyzeFull:
         
         content = "Normal neutral content"
         
-        category, local_exp, external_exp, stages, pattern_data = await flow_manager.analyze_full(content)
+        category, local_exp, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full(content)
         
         assert category == Categories.GENERAL
         assert external_exp is None  # Should NOT run external
@@ -376,7 +376,7 @@ class TestAnalyzeFull:
         
         content = "General political discussion"
         
-        category, local_exp, external_exp, stages, pattern_data = await flow_manager.analyze_full(content)
+        category, local_exp, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full(content)
         
         assert category == Categories.POLITICAL_GENERAL
         assert external_exp is None
@@ -407,7 +407,7 @@ class TestAnalyzeFull:
         
         content = "Content requiring admin review"
         
-        category, local_exp, external_exp, stages, pattern_data = await flow_manager.analyze_full(
+        category, local_exp, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full(
             content,
             admin_override=True
         )
@@ -430,7 +430,7 @@ class TestAnalyzeFull:
         content = "Content with images"
         media_urls = ["https://example.com/image.jpg"]
         
-        category, local_exp, external_exp, stages, pattern_data = await flow_manager.analyze_full(
+        category, local_exp, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full(
             content,
             media_urls=media_urls
         )
@@ -473,7 +473,7 @@ class TestAnalyzeFull:
             )
             mock_external.analyze.reset_mock()
             
-            _, _, external_exp, stages, pattern_data = await flow_manager.analyze_full("Test content")
+            _, _, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full("Test content")
             
             assert external_exp is not None, f"External should run for {category}"
             assert stages.external is True, f"External stage should be True for {category}"

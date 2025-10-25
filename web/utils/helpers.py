@@ -411,7 +411,7 @@ def get_user_profile_data(username: str) -> Optional[Dict[str, Any]]:
     tweet_repo = get_tweet_repository()
 
     account_data = account_repo.get_account_by_username(username)
-    if account_data:
+    if account_data and isinstance(account_data, dict):
         tweet_count = tweet_repo.get_tweet_count_by_username(username)
         return {
             'profile_pic_url': account_data.get('profile_pic_url'),

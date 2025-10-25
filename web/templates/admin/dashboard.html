@@ -37,10 +37,6 @@
             background-color: #f8f9fa !important;
             transition: background-color 0.2s ease;
         }
-        .category-badge:hover {
-            transform: scale(1.05);
-            transition: transform 0.2s ease;
-        }
     </style>
 </head>
 <body>
@@ -251,7 +247,7 @@
                     </div>
                     <div class="card-body recent-activity">
                         {% for analysis in recent_analyses %}
-                            <div class="border-bottom py-2 hover-bg-light" style="cursor: pointer;" {% if analysis.activity_type == 'analysis' and analysis.username %}onclick="window.open('{{ url_for('admin.admin_view_user_category', username=analysis.username, category=analysis.category) }}', '_blank')"{% endif %}>
+                            <div class="border-bottom py-2 hover-bg-light" style="cursor: pointer;" {% if analysis.activity_type == 'analysis' and analysis.post_id %}onclick="window.open('{{ url_for('admin.admin_edit_analysis', tweet_id=analysis.post_id) }}', '_blank')"{% endif %}>
                                 <div class="row align-items-center">
                                     <div class="col-md-2">
                                         <small class="text-muted">{{ analysis.analysis_timestamp[:16].replace('T', ' ') if analysis.analysis_timestamp else '' }}</small>

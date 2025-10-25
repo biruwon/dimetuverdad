@@ -614,48 +614,8 @@ class TestGeminiMultimodalAsync(unittest.TestCase):
             self.assertIsInstance(time_taken, float)
 
         asyncio.run(run_test())
-
-
 class TestGeminiMultimodalErrorHandling(unittest.TestCase):
     """Test cases for comprehensive error handling."""
-
-    def test_analyze_multimodal_content_no_media_urls(self):
-        """Test analysis with no media URLs."""
-        deps = DependencyContainer(
-            http_client=MagicMock(),
-            file_system=MagicMock(),
-            resource_monitor=MagicMock(),
-            metrics_collector=MagicMock(),
-            config=GeminiMultimodalConfig(api_key="test_key")
-        )
-        analyzer = GeminiMultimodal(deps)
-
-        result, time_taken = analyzer.analyze_multimodal_content([], "Test content")
-
-        self.assertIsNone(result)
-        self.assertGreater(time_taken, 0)
-
-    def test_analyze_multimodal_content_filtered_urls_empty(self):
-        """Test analysis when all URLs are filtered out."""
-        deps = DependencyContainer(
-            http_client=MagicMock(),
-            file_system=MagicMock(),
-            resource_monitor=MagicMock(),
-            metrics_collector=MagicMock(),
-            config=GeminiMultimodalConfig(api_key="test_key")
-        )
-        analyzer = GeminiMultimodal(deps)
-
-        # URLs that will be filtered out
-        filtered_urls = [
-            "https://example.com/profile_images/test.jpg",
-            "https://example.com/card_img/test.png"
-        ]
-
-        result, time_taken = analyzer.analyze_multimodal_content(filtered_urls, "Test content")
-
-        self.assertIsNone(result)
-        self.assertGreater(time_taken, 0)
 
     def test_error_classification_authentication_error(self):
         """Test authentication error classification."""

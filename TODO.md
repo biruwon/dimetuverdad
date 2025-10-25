@@ -7,7 +7,8 @@ Top priority:
 - [M] Improve LLM explanation
 - [M] Disinformation/political retrieval to get up to date data/checks
 - What categories do we need?
-- [L] **Additional platforms**: Extend beyond Twitter/X to Telegram, Facebook, Instagram
+- deteled posts should be shown, example post id 1962875705101869390
+- [L] **Additional platforms**: Extend beyond Twitter/X to Telegram, Facebook, Instagram. We need to use post_id instead of tweet_id
 - [L] **Newspaper integration**: Monitor news sources
 - [M] **Historical data import**: Import older tweets for trend analysis
 - [L] Edited recent posts, how will affect fetching? And show the original
@@ -18,6 +19,9 @@ Top priority:
 - [L] Detect topic of the day/week: which accounts promote it, real data, what do they target
 - [M] **Pattern refinement**: Review and improve pattern matching rules based on analysis results
 - [L] **A/B testing framework**: Compare different LLM models and prompting strategies
+- Post deletion: Mostrar una sección de post eliminados, darle más visibilidad, que muestre el media o "hacer screenshoot", ex:  1962875705101869390
+- Improve styles and split css/js/html
+- Get ready to deploy to production and deploy it
 
 Random ideas:
 

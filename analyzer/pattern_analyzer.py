@@ -131,8 +131,35 @@ class PatternAnalyzer:
                     r'\b(?:propaganda|adoctrinamiento|lavado\s+de\s+cerebro)\b',
                     r'\b(?:censura|silenciamiento|ocultación)\b',
                     r'\b(?:verdad\s+(?:oculta|alternativa)|realidad\s+alternativa)\b',
+                    # Government decrees/laws without official sources
+                    r'\b(?:el\s+gobierno|gobierno)\s+(?:ha\s+aprobado|aprueba|ha\s+firmado|firma)\s+(?:un\s+)?decreto\b',
+                    r'\b(?:decreto\s+(?:aprobado|firmado|promulgado)|ley\s+aprobada)\s+(?:que\s+)?(?:prohíbe|obliga|impone|restringe)\b',
+                    r'\b(?:ya\s+está\s+(?:firmado|aprobado|promulgado)|ya\s+está\s+firmado)\s+(?:el\s+)?decreto\b',
+                    # Political dismissals/resignations without sources
+                    r'\b(?:ha\s+(?:sido\s+)?(?:destituido|cesado|dimiti[dt]o)|abandona\s+el\s+cargo)\s+(?:por|después\s+de)\b',
+                    r'\b(?:ministro|ministra|director|directora|líder\s+de\s+(?:la\s+)?oposición).*?(?:ha\s+(?:sido\s+)?)?(?:destituido|destituida|cesado|cesada|dimiti[dt]o|dimitida)\b',
+                    r'\b(?:exclusiva|confirmado)\s*:\s*(?:el\s+)?(?:líder|ministro|ministra|director|directora)\s+(?:ha\s+(?:sido\s+)?)?(?:destituido|cesado|dimiti[dt]o)\b',
+                    # Official claims without specific sources
+                    r'\b(?:ya\s+es\s+oficial|es\s+oficial|confirmado|según\s+fuentes\s+(?:oficiales?|del\s+gobierno))\b',
+                    r'\b(?:según\s+fuentes\s+del\s+(?:ministerio|palacio|gobierno))\s+(?:sin\s+especificar|que\s+no\s+quieren\s+identificarse)\b',
+                    # Fake official source citations
+                    r'\b(?:boe|boletín\s+oficial)\s+(?:ya\s+)?(?:publicado|publicada)\b(?!\s+(?:\d+|número|num\.|\d{1,2}/\d{4}))',
+                    r'\b(?:boe|boletín\s+oficial)\s+(?:ya\s+)?(?:publicado|publicada)\b(?!\s+(?:del?\s+)?\d{1,2}\s+de\s+\w+\s+de\s+\d{4})',
+                    r'ya\s+está\s+publicado\s+en\s+el\s+boe\b(?!\s+(?:\d+|número|num\.|\d{1,2}/\d{4}))',
+                    r'boe\s+ya\s+publicado\b(?!\s+(?:\d+|número|num\.|\d{1,2}/\d{4}))',
+                    # International agreements without sources
+                    r'\b(?:acuerdo\s+(?:secreto|confidencial)|pacto\s+secreto)\s+(?:con|entre)\b',
+                    r'\b(?:ha\s+firmado|firmó)\s+(?:un\s+)?acuerdo\s+(?:secreto|confidencial)\b',
+                    # Mandatory measures without sources
+                    r'\b(?:obliga\s+a\s+(?:todos|todas)\s+(?:los\s+)?ciudadanos?\s+a|será\s+obligatorio)\b',
+                    r'\b(?:bajo\s+pena\s+de\s+(?:multa|sanciones?|castigo))\b',
+                    # Border/immigration measures without sources
+                    r'\b(?:cierra\s+(?:todas\s+)?(?:las\s+)?fronteras|cerrar\s+(?:todas\s+)?(?:las\s+)?fronteras)\b',
+                    r'\b(?:por\s+tiempo\s+indefinido|de\s+forma\s+permanente)\b',
+                    # Digital dictatorship patterns
+                    r'\b(?:dictadura\s+digital|imponen\s+(?:la\s+)?dictadura\s+digital|quieren\s+(?:una\s+)?dictadura\s+digital)\b',
                 ],
-                'keywords': ['desinformación', 'bulo', 'mentira', 'manipulación', 'vacunas', 'covid', 'estadísticas', 'estudios'],
+                'keywords': ['desinformación', 'bulo', 'mentira', 'manipulación', 'vacunas', 'covid', 'estadísticas', 'estudios', 'decreto', 'oficial', 'confirmado', 'fuentes', 'gobierno', 'aprobado', 'firmado'],
                 'description': 'False information including health, statistical, and factual disinformation'
             },
             
@@ -186,7 +213,8 @@ class PatternAnalyzer:
                 'patterns': [
                     # Direct mobilization calls
                     r'\b(?:movilizaos|organizaos|organicen|retirad|sacad|actuad\s+ya)\b',
-                    r'\b(?:todos\s+a|mañana|convocatoria|difunde)\b',
+                    r'\b(?:todos\s+a\s+(?:las\s+calles|protestar|manifestar|movilizar))\b',
+                    r'\b(?:convocatoria|difunde\s+(?:esta|la)\s+(?:convocatoria|manifestación))\b',
                     r'\b(?:concentración|manifestación|protesta|marcha)\s+(?:el\s+)?\w+',
                     r'\b(?:boicot|boicotear|boicoteemos)\b',
                     # Action language
@@ -223,6 +251,7 @@ class PatternAnalyzer:
                 'keywords': ['nacionalismo', 'patria', 'identidad', 'soberanía'],
                 'description': 'Nationalist rhetoric and identity politics'
             },
+
             
             Categories.ANTI_GOVERNMENT: {
                 'patterns': [

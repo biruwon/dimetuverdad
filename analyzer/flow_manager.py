@@ -13,6 +13,7 @@ from .pattern_analyzer import PatternAnalyzer
 from .local_llm_analyzer import LocalLLMAnalyzer
 from .external_analyzer import ExternalAnalyzer
 from .categories import Categories
+from retrieval.integration.analyzer_hooks import create_analyzer_hooks
 
 
 @dataclass
@@ -65,6 +66,7 @@ class AnalysisFlowManager:
         self.pattern_analyzer = PatternAnalyzer()
         self.local_llm = LocalLLMAnalyzer(verbose=verbose)
         self.external = ExternalAnalyzer(verbose=verbose)
+        self.analyzer_hooks = create_analyzer_hooks(verbose=verbose)
         self.verbose = verbose
         
         if self.verbose:
@@ -74,7 +76,7 @@ class AnalysisFlowManager:
         self,
         content: str,
         media_urls: Optional[List[str]] = None
-    ) -> Tuple[str, str, AnalysisStages, dict]:
+    ) -> Tuple[str, str, AnalysisStages, dict, dict]:
         """
         Run local analysis flow (pattern + local LLM).
         
@@ -83,8 +85,9 @@ class AnalysisFlowManager:
             media_urls: Optional media URLs (not used in local flow)
         
         Returns:
-            Tuple of (category, local_explanation, stages, pattern_data)
+            Tuple of (category, local_explanation, stages, pattern_data, verification_data)
             where pattern_data contains pattern_matches and topic_classification
+            and verification_data contains verification results if triggered
         """
         stages = AnalysisStages()
         
@@ -92,6 +95,12 @@ class AnalysisFlowManager:
             print("=" * 80)
             print("🔄 Starting LOCAL analysis flow")
             print(f"📝 Content: {content[:100]}...")
+        
+        # Handle empty content as special case
+        if not content or len(content.strip()) < 3:
+            if self.verbose:
+                print("⚠️  Empty or very short content detected")
+            return Categories.GENERAL, "Contenido vacío o muy corto para analizar.", stages, {}, {}
         
         # Stage 1: Pattern Detection
         if self.verbose:
@@ -105,7 +114,7 @@ class AnalysisFlowManager:
             print(f"   Pattern matches: {len(pattern_result.pattern_matches)}")
         
         # Check if pattern detection succeeded
-        if pattern_result.categories and Categories.GENERAL not in pattern_result.categories and Categories.POLITICAL_GENERAL not in pattern_result.categories:
+        if pattern_result.categories and Categories.GENERAL not in pattern_result.categories:
             # Patterns found a specific category (not general or political_general)
             primary_category = pattern_result.categories[0]
             
@@ -120,6 +129,24 @@ class AnalysisFlowManager:
             if self.verbose:
                 print(f"   ✅ Local explanation: {local_explanation[:100]}...")
             
+            # Check if LLM explanation indicates this should be disinformation
+            if self.analyzer_hooks.explanation_indicates_disinformation(local_explanation):
+                if self.verbose:
+                    print("   🔄 LLM explanation indicates disinformation - overriding pattern category")
+                primary_category = Categories.DISINFORMATION
+            
+            # Phase 2: Verification feedback enhancement
+            if self.verbose:
+                print("\n🔍 Phase 2: Verification Feedback Enhancement")
+            
+            primary_category, local_explanation, verification_data = await self._enhance_with_verification_feedback(
+                content, primary_category, local_explanation, stages
+            )
+            
+            if self.verbose:
+                print(f"   ✅ Final category after verification: {primary_category}")
+                print(f"   ✅ Enhanced explanation: {local_explanation[:100]}...")
+            
             # Return pattern data
             pattern_data = {
                 'pattern_matches': [match.__dict__ for match in pattern_result.pattern_matches],
@@ -131,7 +158,7 @@ class AnalysisFlowManager:
                 }
             }
             
-            return primary_category, local_explanation, stages, pattern_data
+            return primary_category, local_explanation, stages, pattern_data, verification_data
         
         # Stage 2: Pattern detection failed or returned general → Use local LLM for both
         if self.verbose:
@@ -145,6 +172,18 @@ class AnalysisFlowManager:
             print(f"   ✅ Local LLM category: {category}")
             print(f"   ✅ Local LLM explanation: {local_explanation[:100]}...")
         
+        # Phase 2: Verification feedback enhancement
+        if self.verbose:
+            print("\n🔍 Phase 2: Verification Feedback Enhancement")
+        
+        category, local_explanation, verification_data = await self._enhance_with_verification_feedback(
+            content, category, local_explanation, stages
+        )
+        
+        if self.verbose:
+            print(f"   ✅ Final category after verification: {category}")
+            print(f"   ✅ Enhanced explanation: {local_explanation[:100]}...")
+        
         # Return pattern data (even if patterns didn't find categories)
         pattern_data = {
             'pattern_matches': [match.__dict__ for match in pattern_result.pattern_matches],
@@ -156,7 +195,72 @@ class AnalysisFlowManager:
             }
         }
         
-        return category, local_explanation, stages, pattern_data
+        return category, local_explanation, stages, pattern_data, verification_data
+    
+    async def _enhance_with_verification_feedback(
+        self,
+        content: str,
+        initial_category: str,
+        initial_explanation: str,
+        stages: AnalysisStages
+    ) -> Tuple[str, str, dict]:
+        """
+        Check for verifiable claims and enhance categorization with verification feedback.
+        
+        Args:
+            content: Original content
+            initial_category: Category from initial analysis
+            initial_explanation: Explanation from initial analysis
+            stages: Analysis stages tracking
+            
+        Returns:
+            Tuple of (updated_category, enhanced_explanation, verification_data)
+        """
+        # Skip verification for categories that don't need it
+        if initial_category in [Categories.GENERAL]:
+            return initial_category, initial_explanation, {}
+        
+        # Check if verification should be triggered
+        analyzer_result = {'category': initial_category, 'confidence': 0.8}
+        should_trigger, reason = self.analyzer_hooks.should_trigger_verification(content, analyzer_result)
+        
+        if not should_trigger:
+            return initial_category, initial_explanation, {}
+        
+        if self.verbose:
+            print(f"🔍 Verification triggered: {reason}")
+        
+        try:
+            # Run verification
+            analysis_result = await self.analyzer_hooks.analyze_with_verification(
+                content, 
+                original_result=analyzer_result
+            )
+            
+            verification_data = analysis_result.verification_data
+            
+            # Check if verification found contradictions
+            if verification_data and verification_data.get('contradictions_detected'):
+                if self.verbose:
+                    print("⚠️  Verification found contradictions - updating category to disinformation")
+                
+                # Update category to disinformation
+                updated_category = Categories.DISINFORMATION
+                
+                # Use the already enhanced explanation from analyzer_hooks
+                return updated_category, analysis_result.explanation_with_verification, verification_data
+            
+            # No contradictions found, but add verification context if sources were checked
+            elif verification_data and verification_data.get('sources_cited'):
+                # Use the already enhanced explanation from analyzer_hooks
+                return initial_category, analysis_result.explanation_with_verification, verification_data
+            
+        except Exception as e:
+            if self.verbose:
+                print(f"⚠️  Verification failed: {e}")
+            # Continue with original results if verification fails
+        
+        return initial_category, initial_explanation, {}
     
     async def analyze_external(
         self,
@@ -195,8 +299,9 @@ class AnalysisFlowManager:
         self,
         content: str,
         media_urls: Optional[List[str]] = None,
-        admin_override: bool = False
-    ) -> Tuple[str, str, Optional[str], AnalysisStages, dict]:
+        admin_override: bool = False,
+        force_disable_external: bool = False
+    ) -> Tuple[str, str, Optional[str], AnalysisStages, dict, dict]:
         """
         Run complete analysis flow (local + conditional external).
         
@@ -204,22 +309,25 @@ class AnalysisFlowManager:
         - Category is NOT general AND NOT political_general
         - OR admin_override is True (admin-triggered analysis)
         
+        For disinformation detection, external analysis takes precedence over local analysis.
+        
         Args:
             content: Text content to analyze
             media_urls: Optional media URLs
             admin_override: Force external analysis regardless of category (admin action)
         
         Returns:
-            Tuple of (category, local_explanation, external_explanation, stages, pattern_data)
+            Tuple of (category, local_explanation, external_explanation, stages, pattern_data, verification_data)
             where pattern_data contains pattern_matches and topic_classification
+            and verification_data contains verification results if triggered
         """
         # Run local analysis
-        category, local_explanation, stages, pattern_data = await self.analyze_local(content, media_urls)
+        category, local_explanation, stages, pattern_data, verification_data = await self.analyze_local(content, media_urls)
         
         # Determine if external analysis should run
         should_run_external = (
-            admin_override or 
-            (category not in [Categories.GENERAL, Categories.POLITICAL_GENERAL])
+            not force_disable_external and
+            (admin_override or category not in [Categories.GENERAL, Categories.POLITICAL_GENERAL])
         )
         
         # Run external analysis if conditions met
@@ -231,6 +339,12 @@ class AnalysisFlowManager:
             
             external_explanation = await self.analyze_external(content, media_urls)
             stages.external = True
+            
+            # Check if external analysis detects disinformation - if so, override local category
+            if self.analyzer_hooks.external_analysis_indicates_disinformation(external_explanation):
+                if self.verbose:
+                    print("🔄 External analysis detected disinformation - overriding local category")
+                category = Categories.DISINFORMATION
         elif self.verbose:
             print(f"   ℹ️  Skipping external analysis for category: {category}")
         
@@ -243,4 +357,4 @@ class AnalysisFlowManager:
                 print(f"   External: {external_explanation[:100]}...")
             print(f"   Stages: {stages.to_string()}")
         
-        return category, local_explanation, external_explanation, stages, pattern_data
+        return category, local_explanation, external_explanation, stages, pattern_data, verification_data

@@ -38,36 +38,37 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIn("DISINFORMATION", result)
         self.assertIn("CONSPIRACY_THEORY", result)
         self.assertIn("FAR_RIGHT_BIAS", result)
-        self.assertIn("CALL_TO_ACTION", result)
+        self.assertIn("**call_to_action**", result)
         self.assertIn("GENERAL", result)
 
     def test_build_generation_system_prompt(self):
-        """Test build_generation_system_prompt includes all required elements."""
-        result = EnhancedPromptGenerator.build_generation_system_prompt()
+        """Test build_ollama_system_prompt includes all required elements."""
+        result = EnhancedPromptGenerator.build_ollama_system_prompt()
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
 
         # Check that it includes the expert classifier description
-        self.assertIn("expert content classifier", result)
-        self.assertIn("problematic Spanish content", result)
+        self.assertIn("clasificador experto", result)
+        self.assertIn("contenido problemático en español", result)
 
         # Check that it includes category list
         categories = EnhancedPromptGenerator.build_category_list()
         self.assertIn(categories, result)
 
         # Check that it includes detection rules
-        self.assertIn("ENHANCED DETECTION RULES", result)
-        self.assertIn("HATE_SPEECH:", result)
-        self.assertIn("DISINFORMATION:", result)
-        self.assertIn("CONSPIRACY_THEORY:", result)
-        self.assertIn("FAR_RIGHT_BIAS:", result)
-        self.assertIn("CALL_TO_ACTION:", result)
-        self.assertIn("GENERAL:", result)
+        self.assertIn("GUÍAS DE DETECCIÓN", result)
+        self.assertIn("HATE_SPEECH - PRIORIDAD MÁXIMA", result)
+        self.assertIn("DISINFORMATION - INFORMACIÓN FALSA", result)
+        self.assertIn("CONSPIRACY_THEORY - TEORÍAS SIN EVIDENCIA", result)
+        self.assertIn("FAR_RIGHT_BIAS - RETÓRICA EXTREMISTA", result)
+        self.assertIn("**call_to_action** (MOVILIZACIÓN", result)
+        self.assertIn("GENERAL - CONTENIDO REALMENTE NEUTRAL", result)
 
     def test_build_spanish_classification_prompt(self):
-        """Test build_spanish_classification_prompt formats correctly."""
+        """Test build_categorization_prompt formats correctly."""
         test_text = "Este es un texto de prueba"
-        result = EnhancedPromptGenerator.build_spanish_classification_prompt(test_text)
+        generator = EnhancedPromptGenerator()
+        result = generator.build_categorization_prompt(test_text)
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
 
@@ -75,12 +76,13 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIn(test_text, result)
 
         # Check that it includes category list
-        categories = EnhancedPromptGenerator.build_category_list()
-        self.assertIn(categories, result)
+        self.assertIn("hate_speech", result)
+        self.assertIn("disinformation", result)
+        self.assertIn("general", result)
 
         # Check that it includes the instruction
-        self.assertIn("Clasifica el siguiente texto", result)
-        self.assertIn("Responde SOLO con el nombre", result)
+        self.assertIn("CLASIFICA EL TEXTO EN UNA SÓLO CATEGORÍA", result)
+        self.assertIn("FORMATO OBLIGATORIO", result)
 
     def test_build_gemini_analysis_prompt_text_only(self):
         """Test build_gemini_analysis_prompt for text-only content."""
@@ -97,7 +99,7 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIn(test_text, result)
 
         # Check that it includes analysis questions
-        self.assertIn("ANÁLISIS DETALLADO", result)
+        self.assertIn("ANÁLISIS ACADÉMICO MULTIMODAL", result)
         self.assertIn("elementos visuales específicos", result)
 
         # Check that it includes categories
@@ -129,7 +131,7 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
         # Should still include the analysis structure
-        self.assertIn("ANÁLISIS DETALLADO", result)
+        self.assertIn("ANÁLISIS ACADÉMICO MULTIMODAL", result)
 
 
 class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
@@ -159,9 +161,9 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
             self.assertIn("questions", template)
 
     def test_generate_classification_prompt(self):
-        """Test generate_classification_prompt creates detailed prompt."""
+        """Test build_categorization_prompt creates detailed prompt."""
         test_text = "Texto de prueba para clasificación"
-        result = self.generator.generate_classification_prompt(test_text)
+        result = self.generator.build_categorization_prompt(test_text)
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
 
@@ -169,17 +171,18 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         self.assertIn(test_text, result)
 
         # Check that it includes analysis steps
-        self.assertIn("PROCESO DE ANÁLISIS PASO A PASO", result)
-        self.assertIn("HATE_SPEECH - ¿Contiene el texto", result)
-        self.assertIn("DISINFORMATION - ¿Presenta", result)
-        self.assertIn("CONSPIRACY_THEORY - ¿Menciona", result)
-        self.assertIn("FAR_RIGHT_BIAS - ¿Muestra", result)
-        self.assertIn("CALL_TO_ACTION - ¿Incluye", result)
-        self.assertIn("GENERAL - Solo si", result)
+        self.assertIn("CLASIFICA EL TEXTO EN UNA SÓLO CATEGORÍA", result)
+        self.assertIn("**hate_speech**", result)
+        self.assertIn("**disinformation**", result)
+        self.assertIn("conspiracy_theory", result)
+        self.assertIn("**far_right_bias**", result)
+        self.assertIn("call_to_action", result)
+        self.assertIn("general", result)
 
         # Check that it includes decision instructions
-        self.assertIn("DECISIÓN:", result)
-        self.assertIn("RESPUESTA FINAL", result)
+        self.assertIn("FORMATO OBLIGATORIO", result)
+        self.assertIn("CATEGORÍA:", result)
+        self.assertIn("EXPLICACIÓN:", result)
 
     def test_generate_explanation_prompt_hate_speech(self):
         """Test generate_explanation_prompt for hate_speech category."""
@@ -193,8 +196,8 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         self.assertIn(Categories.HATE_SPEECH, result)
 
         # Check that it includes hate speech focus
-        self.assertIn("elementos de odio", result)
-        self.assertIn("discriminación", result)
+        self.assertIn("lenguaje de odio", result)
+        self.assertIn("grupos específicos", result)
 
         # Check format instructions
         self.assertIn("INSTRUCCIONES DE FORMATO", result)
@@ -208,8 +211,8 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         self.assertGreater(len(result), 0)
 
         # Check that it includes disinformation focus
-        self.assertIn("afirmaciones falsas", result)
-        self.assertIn("datos manipulados", result)
+        self.assertIn("hechos verificables", result)
+        self.assertIn("fuente oficial", result)
 
     def test_generate_explanation_prompt_general(self):
         """Test generate_explanation_prompt for general category."""

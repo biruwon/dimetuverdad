@@ -198,6 +198,7 @@ class TestAdminRoutes:
         mock_cursor.fetchall.side_effect = [
             [  # recent analyses (first fetchall) - updated with new fields
                 MockRow({
+                    'post_id': '1234567890123456789',  # Added post_id
                     'analysis_timestamp': '2024-01-01', 
                     'category': 'general',
                     'analysis_stages': 'pattern',  # New field (replaces analysis_method)
@@ -400,36 +401,32 @@ class TestTemplateRendering:
         """Test user template receives correct context."""
         # Use the test database that's already set up by the fixtures
         with app.app_context():
-            # Override DATABASE_PATH environment variable to ensure we use the correct database
-            old_db_path = os.environ.get('DATABASE_PATH')
-            os.environ['DATABASE_PATH'] = session_test_db_path
+            # Connect directly to the test database to avoid connection issues
+            import sqlite3
+            conn = sqlite3.connect(session_test_db_path, timeout=30.0)
+            conn.row_factory = sqlite3.Row
             
             try:
-                with get_db_connection_context() as conn:
-                    # Create test account first
-                    TestHelpers.create_test_account(conn, {
-                        'username': 'testuser',
-                        'profile_pic_url': 'https://example.com/avatar.jpg',
-                        'last_activity': '2024-01-01 12:00:00'
-                    })
-                    
-                    # Create test tweet with analysis
-                    TestHelpers.create_test_tweet(conn, {
-                        'tweet_id': '1234567890123456789',
-                        'content': 'Test tweet content for template context',
-                        'username': 'testuser',
-                        'tweet_timestamp': '2024-01-01 12:00:00',
-                        'tweet_url': 'https://twitter.com/testuser/status/1234567890123456789',
-                        'category': 'general',
-                        'local_explanation': 'Test explanation',
-                        'analysis_stages': 'pattern'
-                    })
+                # Create test account first
+                TestHelpers.create_test_account(conn, {
+                    'username': 'testuser',
+                    'profile_pic_url': 'https://example.com/avatar.jpg',
+                    'last_activity': '2024-01-01 12:00:00'
+                })
+                
+                # Create test tweet with analysis
+                TestHelpers.create_test_tweet(conn, {
+                    'tweet_id': '1234567890123456789',
+                    'content': 'Test tweet content for template context',
+                    'username': 'testuser',
+                    'tweet_timestamp': '2024-01-01 12:00:00',
+                    'tweet_url': 'https://twitter.com/testuser/status/1234567890123456789',
+                    'category': 'general',
+                    'local_explanation': 'Test explanation',
+                    'analysis_stages': 'pattern'
+                })
             finally:
-                # Restore original DATABASE_PATH environment variable
-                if old_db_path is not None:
-                    os.environ['DATABASE_PATH'] = old_db_path
-                else:
-                    os.environ.pop('DATABASE_PATH', None)
+                conn.close()
 
         response = client.get('/user/testuser')
         assert response.status_code == 200

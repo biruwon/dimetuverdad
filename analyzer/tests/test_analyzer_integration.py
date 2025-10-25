@@ -325,7 +325,7 @@ class TestAsyncAnalyzeContent(unittest.TestCase):
         # Mock the flow manager to return analysis results
         from analyzer.flow_manager import AnalysisStages
         stages = AnalysisStages(pattern=True, local_llm=True, external=True)
-        mock_flow_analyze.return_value = ("disinformation", "This contains disinformation.", "External analysis confirms this.", stages, {})
+        mock_flow_analyze.return_value = ("disinformation", "This contains disinformation.", "External analysis confirms this.", stages, {}, {})
 
         # Mock the enhancement to return enhanced analysis
         with patch.object(self.analyzer, '_enhance_with_evidence_retrieval') as mock_enhance:
@@ -372,7 +372,7 @@ class TestAsyncAnalyzeContent(unittest.TestCase):
         # Mock the flow manager to return analysis results
         from analyzer.flow_manager import AnalysisStages
         stages = AnalysisStages(pattern=True, local_llm=True, external=False)
-        mock_flow_analyze.return_value = ("general", "This is general content.", None, stages, {})
+        mock_flow_analyze.return_value = ("general", "This is general content.", None, stages, {}, {})
 
         async def test_async():
             result = await self.analyzer.analyze_content(
@@ -473,7 +473,7 @@ class TestIntegrationEndToEnd(unittest.TestCase):
         # Mock initial analysis
         from analyzer.flow_manager import AnalysisStages
         stages = AnalysisStages(pattern=True, local_llm=True, external=True)
-        mock_flow_analyze.return_value = ("disinformation", "This appears to be a conspiracy theory about vaccines.", "External analysis confirms this.", stages, {})
+        mock_flow_analyze.return_value = ("disinformation", "This appears to be a conspiracy theory about vaccines.", "External analysis confirms this.", stages, {}, {})
 
         # Mock evidence enhancement
         with patch.object(self.analyzer, '_enhance_with_evidence_retrieval') as mock_enhance:
@@ -520,7 +520,7 @@ class TestIntegrationEndToEnd(unittest.TestCase):
         """Test complete flow for general content without evidence retrieval."""
         from analyzer.flow_manager import AnalysisStages
         stages = AnalysisStages(pattern=True, local_llm=True, external=False)
-        mock_flow_analyze.return_value = ("general", "This is a positive, general statement.", None, stages, {})
+        mock_flow_analyze.return_value = ("general", "This is a positive, general statement.", None, stages, {}, {})
 
         async def test_async():
             result = await self.analyzer.analyze_content(

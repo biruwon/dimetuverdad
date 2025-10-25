@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from ..core.models import VerificationResult, VerificationVerdict
 from ..verification.claim_verifier import ClaimVerifier, VerificationContext, VerificationReport
+from ..verification.political_event_verifier import PoliticalEventVerifier
 
 
 @dataclass
@@ -37,24 +38,131 @@ class AnalyzerHooks:
     Provides conditional triggering and result verification.
     """
 
-    def __init__(self, verifier: Optional[ClaimVerifier] = None):
+    def __init__(self, verifier: Optional[ClaimVerifier] = None, verbose: bool = False):
         self.verifier = verifier or ClaimVerifier()
+        self.political_verifier = PoliticalEventVerifier()
         self.logger = logging.getLogger(__name__)
+        self.verbose = verbose
 
         # Default trigger configuration
         self.default_trigger = AnalysisTrigger(
-            content_categories=['disinformation', 'conspiracy_theory', 'far_right_bias'],
-            confidence_threshold=0.6,
+            content_categories=['disinformation', 'conspiracy_theory', 'far_right_bias', 'political_general', 'call_to_action'],
+            confidence_threshold=0.4,  # Lower threshold to catch more cases
             keywords=[
+                # EXISTING - Keep all existing keywords
                 'estadística', 'dato', 'cifra', 'millón', 'porcentaje', '%',
                 'según', 'informe', 'estudio', 'investigación',
                 'pandemia', 'covid', 'vacuna', 'muerte', 'contagio',
                 'elecciones', 'voto', 'partido', 'gobierno',
-                'economía', 'paro', 'empleo', 'pib', 'déficit'
+                'economía', 'paro', 'empleo', 'pib', 'déficit',
+                
+                # NEW: Breaking news/urgency markers
+                'última hora', 'urgente', 'breaking', 'bombazo', 
+                'exclusiva', 'confirmado', 'confirmada', 'al descubierto',
+                
+                # NEW: Legal/judicial events
+                'ingresa', 'ingreso', 'prisión', 'cárcel', 'soto del real',
+                'juez', 'jueza', 'fiscal', 'tribunal', 'juzgado', 'corte',
+                'arresta', 'arrestado', 'detiene', 'detenido', 'detención',
+                'imputa', 'imputado', 'imputación', 
+                'procesa', 'procesado', 'procesamiento',
+                'condena', 'condenado', 'sentencia',
+                
+                # NEW: High-profile political targets (common fake news subjects)
+                'ábalos', 'sánchez', 'iglesias', 'montero', 'grande-marlaska',
+                'redondo', 'calvo', 'belarra', 'yolanda díaz',
+                
+                # NEW: Government action keywords (decrees, laws, resignations)
+                'decreto', 'ley', 'real decreto', 'dimite', 'dimisión', 'dimitido', 'renuncia', 'renunciado',
+                'aprueba', 'aprobado', 'firma', 'firmado', 'promulga', 'promulgado',
+                'prohíbe', 'prohibido', 'obliga', 'obligatorio', 'manda', 'orden',
+                'cesa', 'cesado', 'destituye', 'destituido', 'nombramiento', 'nombrado',
+                'alianza', 'pacto', 'acuerdo', 'coalición', 'gobierno', 'consejo de ministros',
+                
+                # NEW: Confirmation and finality markers
+                'ya está', 'ya es oficial', 'confirmado por', 'según fuentes oficiales',
+                'ha sido', 'se ha confirmado', 'queda demostrado', 'está claro que',
+                'oficialmente', 'formalmente', 'definitivamente', 'inmediatamente',
             ],
             claim_types=['numerical', 'statistical', 'temporal', 'attribution'],
             min_claims=1
         )
+
+    def explanation_indicates_disinformation(self, explanation: str) -> bool:
+        """
+        Check if the LLM explanation indicates the content should be categorized as disinformation.
+        
+        Args:
+            explanation: The explanation text from the LLM
+            
+        Returns:
+            True if explanation suggests disinformation, False otherwise
+        """
+        explanation_lower = explanation.lower()
+        
+        # Check for key phrases that indicate disinformation detection
+        disinformation_indicators = [
+            "desinformación",
+            "sin citar fuentes",
+            "sin fuente oficial",
+            "no menciona fuente",
+            "fuentes verificables",
+            "afirmación sin fundamento",
+            "sin evidencia",
+            "no aporta evidencia",
+            "carece de fuentes",
+            "sin respaldo oficial"
+        ]
+        
+        return any(indicator in explanation_lower for indicator in disinformation_indicators)
+    
+    def external_analysis_indicates_disinformation(self, external_explanation: str) -> bool:
+        """
+        Check if the external analysis indicates disinformation.
+        
+        Args:
+            external_explanation: The external analysis explanation
+            
+        Returns:
+            True if external analysis detects disinformation
+        """
+        if not external_explanation:
+            return False
+            
+        explanation_lower = external_explanation.lower()
+        
+        # Strong indicators from external analysis (Gemini is more reliable)
+        # Expanded list to include more Spanish variations and synonyms
+        disinformation_indicators = [
+            "desinformación",
+            "información falsa",
+            "noticia falsa",
+            "completamente falsa",
+            "totalmente falsa",
+            "verificar con fuentes",
+            "sin fundamento",
+            "engaño",
+            "manipulación",
+            "contenido falso",
+            "afirmación falsa",
+            "bulo",  # Spanish for hoax
+            "fake news",
+            "noticia falsa",
+            "información manipulada",
+            "contenido manipulado",
+            "falsificación",
+            "documentos falsos",
+            "pruebas falsas",
+            "evidencia falsa",
+            "afirmación no verificada",
+            "sin verificación",
+            "carece de fundamento",
+            "no tiene base",
+            "es falso",
+            "son falsos"
+        ]
+        
+        return any(indicator in explanation_lower for indicator in disinformation_indicators)
 
     def should_trigger_verification(self, content: str, analyzer_result: Dict[str, Any],
                                   trigger_config: Optional[AnalysisTrigger] = None) -> Tuple[bool, str]:
@@ -125,35 +233,47 @@ class AnalyzerHooks:
             )
 
         try:
-            # Perform verification
-            verification_context = VerificationContext(
-                original_text=content,
-                content_category=original_result.get('category', 'general'),
-                user_context=f"Analysis category: {original_result.get('category', 'unknown')}",
-                language="es",
-                priority_level="balanced"
-            )
+            # Check if this is a political event claim that needs specialized verification
+            political_event_claim = self._extract_political_event_claim(content)
+            
+            if political_event_claim:
+                if self.verbose:
+                    print(f"🎯 Detected political event claim: {political_event_claim.event_type} for {political_event_claim.person_name}")
+                
+                # Use specialized political event verifier
+                verification_report = await self._verify_political_event(political_event_claim)
+            else:
+                # Use general claim verifier
+                verification_context = VerificationContext(
+                    original_text=content,
+                    content_category=original_result.get('category', 'general'),
+                    user_context=f"Analysis category: {original_result.get('category', 'unknown')}",
+                    language="es",
+                    priority_level="balanced"
+                )
 
-            verification_report = await self.verifier.verify_content(verification_context)
+                verification_report = await self.verifier.verify_content(verification_context)
 
-            # Combine the explanation with verification results
-            explanation_with_verification = self._combine_explanation(
-                original_result.get('explanation', ''),
-                verification_report
-            )
-
-            # Extract sources and contradictions
-            sources_cited = [s.source_name for s in verification_report.evidence_sources[:5]]
-            contradictions_detected = verification_report.contradictions_found
+            # Create simplified verification data structure
+            simplified_verification = self._create_simplified_verification_data(verification_report)
+            
+            # Enhance explanation with verification results
+            original_explanation = original_result.get('explanation', '')
+            verification_addition = self.get_verification_prompt_addition(verification_report)
+            
+            # Always add verification information, even if minimal
+            if verification_addition:
+                explanation_with_verification = f"{original_explanation}\n\n{verification_addition}"
+            else:
+                # Add basic verification note if no specific claims were verified
+                verification_note = f"Verificación realizada: {len(verification_report.claims_verified)} afirmaciones analizadas."
+                if verification_report.contradictions_found:
+                    verification_note += f" Contradicciones detectadas: {len(verification_report.contradictions_found)}."
+                explanation_with_verification = f"{original_explanation}\n\n{verification_note}"
 
             return AnalysisResult(
                 original_result=original_result,
-                verification_data={
-                    'verification_report': verification_report,
-                    'sources_cited': sources_cited,
-                    'contradictions_detected': contradictions_detected,
-                    'verification_confidence': verification_report.confidence_score
-                },
+                verification_data=simplified_verification,
                 explanation_with_verification=explanation_with_verification
             )
 
@@ -173,49 +293,6 @@ class AnalyzerHooks:
                 explanation_with_verification=original_result.get('explanation', '')
             )
 
-    def _combine_explanation(self, original_explanation: str, verification_report: VerificationReport) -> str:
-        """Combine the original explanation with verification results."""
-        if not verification_report.claims_verified:
-            return original_explanation
-
-        # Build verification summary
-        verified_count = sum(1 for v in verification_report.claims_verified
-                           if v.verdict == VerificationVerdict.VERIFIED)
-        debunked_count = sum(1 for v in verification_report.claims_verified
-                           if v.verdict == VerificationVerdict.DEBUNKED)
-        questionable_count = sum(1 for v in verification_report.claims_verified
-                               if v.verdict == VerificationVerdict.QUESTIONABLE)
-
-        verification_summary = f"Verificación de {len(verification_report.claims_verified)} afirmaciones: "
-        parts = []
-        if verified_count > 0:
-            parts.append(f"{verified_count} verificadas")
-        if debunked_count > 0:
-            parts.append(f"{debunked_count} desmentidas")
-        if questionable_count > 0:
-            parts.append(f"{questionable_count} cuestionables")
-
-        if parts:
-            verification_summary += ", ".join(parts)
-        else:
-            verification_summary += "sin resultados concluyentes"
-
-        # Add confidence score
-        verification_summary += f" (confianza: {verification_report.confidence_score:.1f}%)"
-
-        # Add contradictions if any
-        if verification_report.contradictions_found:
-            verification_summary += f". Contradicciones detectadas: {len(verification_report.contradictions_found)}"
-
-        # Combine with original explanation
-        explanation_with_verification = f"{original_explanation}\n\n{verification_summary}"
-
-        # Add source information
-        if verification_report.evidence_sources:
-            source_names = [s.source_name for s in verification_report.evidence_sources[:3]]
-            explanation_with_verification += f"\nFuentes consultadas: {', '.join(source_names)}"
-
-        return explanation_with_verification
 
     def get_verification_prompt_addition(self, verification_report: VerificationReport) -> str:
         """
@@ -274,15 +351,158 @@ class AnalyzerHooks:
             "average_processing_time": 0.0
         }
 
+    def _extract_political_event_claim(self, content: str) -> Optional[Any]:
+        """
+        Extract political event claims from content.
+        
+        Args:
+            content: Text content to analyze
+            
+        Returns:
+            PoliticalEventClaim if detected, None otherwise
+        """
+        from ..verification.political_event_verifier import PoliticalEventClaim
+        
+        content_lower = content.lower()
+        
+        # Check for arrest/imprisonment claims
+        arrest_indicators = ['ingresa', 'ingreso', 'prisión', 'cárcel', 'arrestado', 'detenido']
+        has_arrest = any(indicator in content_lower for indicator in arrest_indicators)
+        
+        # Check for political figures
+        political_figures = ['ábalos', 'sánchez', 'iglesias', 'montero', 'casado', 'abascal', 'rivera']
+        person_detected = None
+        for figure in political_figures:
+            if figure in content_lower:
+                person_detected = figure
+                break
+        
+        if has_arrest and person_detected:
+            return PoliticalEventClaim(
+                person_name=person_detected,
+                event_type='arrest',
+                context=content
+            )
+        
+        return None
 
-def create_analyzer_hooks(verifier: Optional[ClaimVerifier] = None) -> AnalyzerHooks:
+    async def _verify_political_event(self, claim) -> VerificationReport:
+        """
+        Verify a political event claim using the specialized verifier.
+        
+        Args:
+            claim: PoliticalEventClaim to verify
+            
+        Returns:
+            VerificationReport with results
+        """
+        try:
+            if claim.event_type == 'arrest':
+                result = await self.political_verifier.verify_arrest_claim(
+                    claim.person_name, 
+                    claim.institution
+                )
+            else:
+                result = await self.political_verifier.verify_political_event(claim.context)
+            
+            # Convert VerificationResult to VerificationReport format
+            from ..verification.claim_verifier import VerificationReport
+            
+            # Use the VerificationResult directly as claims_verified expects List[VerificationResult]
+            verified_claims = [result]
+            
+            # Extract contradictions from the result if available
+            contradictions = []
+            if hasattr(result, 'contradictions_found'):
+                contradictions = result.contradictions_found
+            elif "desmentido" in result.explanation.lower() or "falso" in result.explanation.lower():
+                contradictions = [result.explanation]
+            
+            return VerificationReport(
+                overall_verdict=result.verdict,
+                confidence_score=result.confidence,
+                claims_verified=verified_claims,
+                evidence_sources=result.evidence_sources,
+                contradictions_found=contradictions,
+                temporal_consistency=True,
+                processing_time=0.0,
+                verification_method="political_event_verifier"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Political event verification failed: {e}")
+            # Return empty report on failure
+            return VerificationReport(
+                overall_verdict=VerificationVerdict.QUESTIONABLE,
+                confidence_score=0.0,
+                claims_verified=[],
+                evidence_sources=[],
+                contradictions_found=[],
+                temporal_consistency=True,
+                processing_time=0.0,
+                verification_method="political_event_verifier"
+            )
+
+
+    def _create_simplified_verification_data(self, verification_report: VerificationReport) -> Dict[str, Any]:
+        """
+        Create a simplified verification data structure for storage and display.
+        
+        Args:
+            verification_report: Complex verification report
+            
+        Returns:
+            Simplified dict with essential verification information
+        """
+        # Count verdicts
+        verified_count = sum(1 for v in verification_report.claims_verified 
+                           if v.verdict == VerificationVerdict.VERIFIED)
+        debunked_count = sum(1 for v in verification_report.claims_verified 
+                           if v.verdict == VerificationVerdict.DEBUNKED)
+        questionable_count = sum(1 for v in verification_report.claims_verified 
+                               if v.verdict == VerificationVerdict.QUESTIONABLE)
+        
+        # Get top evidence sources (limit to 5 for display)
+        evidence_sources = []
+        for source in verification_report.evidence_sources[:5]:
+            evidence_sources.append({
+                'name': source.source_name,
+                'type': source.source_type,
+                'url': source.url,
+                'credibility': source.credibility_score,
+                'verdict': source.verdict_contribution.value,
+                'confidence': source.confidence
+            })
+        
+        # Create simplified structure
+        simplified = {
+            'overall_verdict': verification_report.overall_verdict.value,
+            'confidence_score': verification_report.confidence_score,
+            'verification_confidence': verification_report.confidence_score,  # For backward compatibility
+            'claims_summary': {
+                'total': len(verification_report.claims_verified),
+                'verified': verified_count,
+                'debunked': debunked_count,
+                'questionable': questionable_count
+            },
+            'evidence_sources': evidence_sources,
+            'contradictions_found': verification_report.contradictions_found,
+            'temporal_consistency': verification_report.temporal_consistency,
+            'verification_method': verification_report.verification_method
+        }
+        
+        return simplified
+
+
+def create_analyzer_hooks(verifier: Optional[ClaimVerifier] = None, verbose: bool = False) -> AnalyzerHooks:
     """
     Factory function to create analyzer hooks with proper configuration.
 
     Args:
         verifier: Optional custom verifier instance
+        verbose: Enable verbose logging
 
     Returns:
         Configured analyzer hooks
     """
-    return AnalyzerHooks(verifier=verifier)
+    return AnalyzerHooks(verifier=verifier, verbose=verbose)

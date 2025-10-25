@@ -99,7 +99,7 @@ test_integration(){
   ensure_venv
   echo "Running all integration tests (retrieval, analyzer, fetch)..."
   echo "Running retrieval integration tests..."
-  "$PY" -m pytest "$ROOT_DIR/retrieval/tests/test_retrieval_integration.py" -v -n auto "$@"
+  "$PY" -m pytest "$ROOT_DIR/retrieval/tests/test_retrieval_integration.py" -v -n 0 "$@"
   echo "Running analyzer integration tests..."
   "$PY" "$ROOT_DIR/analyzer/tests/test_analyze_twitter_integration.py" --quick "$@"
   echo "Running fetch integration tests..."
@@ -109,7 +109,7 @@ test_integration(){
 test_unit(){
   ensure_venv
   echo "Running all unit test files in the project..."
-  "$PY" -m pytest "$ROOT_DIR" -v --tb=short -n auto -k "not integration"
+  "$PY" -m pytest "$ROOT_DIR" -v --tb=short -n 0 -k "not integration"
 }
 
 test_suite(){

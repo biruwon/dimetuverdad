@@ -17,6 +17,8 @@ class ClaimType(Enum):
     ATTRIBUTION = "attribution"  # Claims about who said/did what
     CAUSAL = "causal"        # Cause-effect relationships
     EXISTENTIAL = "existential"  # Claims about existence/non-existence
+    LEGAL_EVENT = "legal_event"  # Arrests, court proceedings, convictions
+    BREAKING_NEWS = "breaking_news"  # Urgent news claims
 
 
 @dataclass
@@ -75,6 +77,31 @@ class ClaimExtractor:
             r'\b(?:porque|debido\s+a|por\s+eso|ya\s+que|como\s+resultado)\b[^.]{20,100}\.',
         ]
 
+        # Legal/political event patterns (arrests, court proceedings, etc.)
+        self.legal_event_patterns = [
+            # Arrest/imprisonment claims
+            r'\b(?:arrestado|detenido|detención\s+de)\s+[A-ZÁ-ÚÑ][a-zá-úñ]+\b',
+            r'\b[A-ZÁ-ÚÑ][a-zá-úñ]+\s+(?:ingresa|entra|llega)\s+(?:en|a)\s+(?:prisión|cárcel|Soto\s+del\s+Real)\b',
+            r'\b(?:ingresa|ingreso\s+de)\s+[A-ZÁ-ÚÑ][a-zá-úñ]+\s+(?:en|a)\s+(?:prisión|cárcel)\b',
+            
+            # Judicial proceedings
+            r'\b(?:juez|jueza|fiscal|tribunal)\s+(?:ordena|dicta|envía|procesa)\s+[A-ZÁ-ÚÑ][a-zá-úñ]+\b',
+            r'\b[A-ZÁ-ÚÑ][a-zá-úñ]+\s+(?:procesado|imputado|condenado)\s+(?:por|en)\b',
+            
+            # Legal actions
+            r'\b(?:procesamiento|imputación|sentencia)\s+(?:de|contra)\s+[A-ZÁ-ÚÑ][a-zá-úñ]+\b',
+        ]
+
+        # Breaking news patterns
+        self.breaking_news_patterns = [
+            # Urgency markers + claims
+            r'\b(?:ÚLTIMA\s+HORA|URGENTE|BREAKING|BOMBAZO|EXCLUSIVA)\b[^.]*?(?:ingresa|arrestan|detienen|procesan|condenan)\b',
+            r'\b(?:ÚLTIMA\s+HORA|URGENTE|BREAKING|BOMBAZO)\b[^.]*?(?:[A-ZÁ-ÚÑ][a-zá-úñ]+)\s+(?:ingresa|arrestado|detenido|procesado)\b',
+            
+            # Confirmation claims without sources
+            r'\b(?:se\s+confirma|ya\s+está|acabamos\s+de)\s+(?:que\s+)?(?:[A-ZÁ-ÚÑ][a-zá-úñ]+)\s+(?:ingresa|arrestado|detenido)\b',
+        ]
+
     def extract_verification_targets(self, text: str, max_targets: int = 5) -> List[VerificationTarget]:
         """
         Extract verification targets from text.
@@ -87,6 +114,8 @@ class ClaimExtractor:
         temporal_targets = self._extract_temporal_claims(text)
         attribution_targets = self._extract_attribution_claims(text)
         causal_targets = self._extract_causal_claims(text)
+        legal_event_targets = self._extract_legal_event_claims(text)
+        breaking_news_targets = self._extract_breaking_news_claims(text)
         # Extract full contextual claims containing numbers/dates
         full_claims = self._extract_full_contextual_claims(text)
 
@@ -95,6 +124,8 @@ class ClaimExtractor:
         all_targets.extend(temporal_targets)
         all_targets.extend(attribution_targets)
         all_targets.extend(causal_targets)
+        all_targets.extend(legal_event_targets)
+        all_targets.extend(breaking_news_targets)
         all_targets.extend(full_claims)
 
         # Sort by priority and confidence
@@ -198,6 +229,54 @@ class ClaimExtractor:
                 target = VerificationTarget(
                     claim_text=claim_text,
                     claim_type=ClaimType.CAUSAL,
+                    context=context,
+                    confidence=confidence,
+                    priority=priority,
+                    start_pos=match.start(),
+                    end_pos=match.end()
+                )
+                targets.append(target)
+
+        return targets
+
+    def _extract_legal_event_claims(self, text: str) -> List[VerificationTarget]:
+        """Extract legal/political event claims (arrests, court proceedings, etc.)."""
+        targets = []
+
+        for pattern in self.legal_event_patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                claim_text = match.group()
+                context = self._extract_context(text, match.start(), match.end(), window=80)
+
+                confidence, priority = self._assess_legal_event_claim(claim_text, context)
+
+                target = VerificationTarget(
+                    claim_text=claim_text,
+                    claim_type=ClaimType.LEGAL_EVENT,
+                    context=context,
+                    confidence=confidence,
+                    priority=priority,
+                    start_pos=match.start(),
+                    end_pos=match.end()
+                )
+                targets.append(target)
+
+        return targets
+
+    def _extract_breaking_news_claims(self, text: str) -> List[VerificationTarget]:
+        """Extract breaking news claims that may be disinformation."""
+        targets = []
+
+        for pattern in self.breaking_news_patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                claim_text = match.group()
+                context = self._extract_context(text, match.start(), match.end(), window=100)
+
+                confidence, priority = self._assess_breaking_news_claim(claim_text, context)
+
+                target = VerificationTarget(
+                    claim_text=claim_text,
+                    claim_type=ClaimType.BREAKING_NEWS,
                     context=context,
                     confidence=confidence,
                     priority=priority,
@@ -384,6 +463,48 @@ class ClaimExtractor:
             confidence = 0.7
 
         return confidence, priority
+
+    def _assess_legal_event_claim(self, claim: str, context: str) -> Tuple[float, int]:
+        """Assess confidence and priority for legal event claims."""
+        confidence = 0.8  # High confidence - these are specific factual claims
+        priority = 9      # High priority - legal events are important to verify
+
+        # Even higher priority for high-profile political figures
+        political_figures = ['ábalos', 'sánchez', 'iglesias', 'montero', 'casado', 'abascal', 'rivera']
+        if any(figure in claim.lower() for figure in political_figures):
+            priority = 10
+            confidence = 0.95
+
+        # Higher priority for serious legal actions
+        serious_actions = ['prisión', 'cárcel', 'soto del real', 'condenado', 'procesado']
+        if any(action in claim.lower() for action in serious_actions):
+            priority = max(priority, 10)
+            confidence = max(confidence, 0.9)
+
+        # Lower confidence if claim lacks specifics
+        if not any(word in claim.lower() for word in ['por', 'porqué', 'motivos', 'acusación']):
+            confidence -= 0.1
+
+        return max(confidence, 0.0), min(priority, 10)
+
+    def _assess_breaking_news_claim(self, claim: str, context: str) -> Tuple[float, int]:
+        """Assess confidence and priority for breaking news claims."""
+        confidence = 0.85  # High confidence - breaking news format is suspicious
+        priority = 9       # High priority - urgent claims need verification
+
+        # Very high priority for political figures in breaking news
+        political_figures = ['ábalos', 'sánchez', 'iglesias', 'montero', 'casado', 'abascal', 'rivera']
+        if any(figure in claim.lower() for figure in political_figures):
+            priority = 10
+            confidence = 0.95
+
+        # Check for source attribution (reduces suspicion)
+        source_indicators = ['según', 'fuente', 'informa', 'confirma', 'el país', 'abc', 'eldiario']
+        if any(indicator in context.lower() for indicator in source_indicators):
+            confidence -= 0.2  # Less suspicious if sourced
+            priority -= 1
+
+        return max(confidence, 0.0), min(priority, 10)
 
 
 def extract_verification_targets(text: str, max_targets: int = 5) -> List[VerificationTarget]:

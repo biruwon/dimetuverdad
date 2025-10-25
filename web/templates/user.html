@@ -182,10 +182,6 @@
                 flex-direction: column;
                 align-items: flex-start !important;
             }
-            
-            .primary-badge, .secondary-badge {
-                margin-bottom: 0.25rem;
-            }
         }
 
         /* Loading States */
@@ -296,6 +292,64 @@
             border-radius: 8px;
             padding: 1rem;
             background: #f8f9fa;
+        }
+
+        /* Category Badge Styles */
+        .category-badge {
+            border-radius: 20px !important;
+            padding: 4px 8px !important;
+            font-size: 0.8em !important;
+            font-weight: 600 !important;
+            transition: transform 0.2s ease !important;
+        }
+
+        .category-badge:hover {
+            transform: scale(1.05) !important;
+        }
+
+        /* Primary and Secondary Badge Styles */
+        .primary-badge {
+            border: 2px solid rgba(255, 255, 255, 0.8) !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+        }
+
+        .secondary-badge {
+            opacity: 0.8 !important;
+        }
+
+        /* Category Color Classes - More Specific */
+        .category-hate_speech.category-badge {
+            background: linear-gradient(135deg, var(--bs-danger, #dc3545) 0%, var(--bs-danger, #dc3545) 100%) !important;
+            color: white !important;
+        }
+
+        .category-disinformation.category-badge {
+            background: linear-gradient(135deg, var(--bs-warning, #ffc107) 0%, var(--bs-warning, #ffc107) 100%) !important;
+            color: black !important;
+        }
+
+        .category-conspiracy_theory.category-badge {
+            background: linear-gradient(135deg, var(--bs-dark, #6c757d) 0%, var(--bs-dark, #6c757d) 100%) !important;
+            color: white !important;
+        }
+
+        .category-far_right_bias.category-badge {
+            background: linear-gradient(135deg, var(--bs-primary, #0d6efd) 0%, var(--bs-primary, #0d6efd) 100%) !important;
+            color: white !important;
+        }
+
+        .category-call_to_action.category-badge {
+            background: linear-gradient(135deg, var(--bs-success, #198754) 0%, var(--bs-success, #198754) 100%) !important;
+            color: white !important;
+        }
+
+        .category-general.category-badge,
+        .category-political_general.category-badge,
+        .category-nationalism.category-badge,
+        .category-anti_government.category-badge,
+        .category-historical_revisionism.category-badge {
+            background: linear-gradient(135deg, var(--bs-secondary, #6c757d) 0%, var(--bs-secondary, #6c757d) 100%) !important;
+            color: white !important;
         }
     </style>
 </head>

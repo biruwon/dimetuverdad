@@ -114,6 +114,10 @@
                     {% elif tweet.analysis_category == 'conspiracy_theory' %}🕵️ Conspiración
                     {% elif tweet.analysis_category == 'far_right_bias' %}⚡ Sesgo Extremista
                     {% elif tweet.analysis_category == 'call_to_action' %}📢 Llamada a Acción
+                    {% elif tweet.analysis_category == 'nationalism' %}🏴 Nacionalismo
+                    {% elif tweet.analysis_category == 'anti_government' %}🏛️ Anti-Gobierno
+                    {% elif tweet.analysis_category == 'historical_revisionism' %}📜 Revisionismo Histórico
+                    {% elif tweet.analysis_category == 'political_general' %}🗳️ Política General
                     {% else %}✅ General
                     {% endif %}
                 </span>
@@ -135,6 +139,75 @@
                         scrolling="no"
                         allowfullscreen>
                     </iframe>
+                </div>
+            </div>
+            {% else %}
+            <!-- Fallback display for deleted tweets -->
+            <div class="deleted-tweet-container border rounded p-3 bg-light">
+                <div class="d-flex align-items-start mb-2">
+                    <i class="fab fa-twitter text-primary me-2 mt-1"></i>
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-1">
+                            <strong>@{{ tweet.username }}</strong>
+                            {% if tweet.tweet_timestamp %}
+                            <small class="text-muted ms-2">
+                                {{ tweet.tweet_timestamp[:19].replace('T', ' ') }}
+                            </small>
+                            {% endif %}
+                        </div>
+                        <div class="tweet-text mb-2">
+                            {{ tweet.content }}
+                        </div>
+                        {% if tweet.hashtags_parsed or tweet.mentions_parsed %}
+                        <div class="tweet-metadata mb-2">
+                            {% if tweet.hashtags_parsed %}
+                            <div class="hashtags mb-1">
+                                {% for hashtag in tweet.hashtags_parsed %}
+                                <span class="badge bg-primary text-white me-1">#{{ hashtag }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            {% if tweet.mentions_parsed %}
+                            <div class="mentions">
+                                {% for mention in tweet.mentions_parsed %}
+                                <span class="badge bg-info text-white me-1">@{{ mention }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        {% if tweet.media_links %}
+                        <div class="stored-media mb-2">
+                            <small class="text-muted">
+                                <i class="fas fa-image me-1"></i>
+                                Contenido multimedia almacenado
+                            </small>
+                            <div class="media-preview mt-1">
+                                {% set media_urls = tweet.media_links.split(',') if tweet.media_links else [] %}
+                                {% for media_url in media_urls %}
+                                {% if media_url.strip() %}
+                                <div class="media-item mb-1">
+                                    {% if '.mp4' in media_url or '.mov' in media_url or 'video' in media_url %}
+                                    <video controls class="img-fluid rounded" style="max-height: 300px;">
+                                        <source src="{{ media_url.strip() }}" type="video/mp4">
+                                        Tu navegador no soporta el elemento de video.
+                                    </video>
+                                    {% else %}
+                                    <img src="{{ media_url.strip() }}" alt="Media" class="img-fluid rounded" style="max-height: 300px;">
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="deleted-notice mt-2 p-2 bg-warning bg-opacity-10 border border-warning rounded">
+                            <small class="text-warning">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                <strong>Tweet Eliminado:</strong> Este contenido fue eliminado de X/Twitter pero se conserva en nuestra base de datos para fines de análisis.
+                            </small>
+                        </div>
+                    </div>
                 </div>
             </div>
             {% endif %}
@@ -200,34 +273,87 @@
             </small>
             {% endif %}
 
-            {% if tweet.verification_data and not tweet.external_analysis_used %}
+            {% set verification_data = tweet.verification_data %}
+            {% if verification_data and verification_data is string %}
+                {% set verification_data = verification_data | fromjson %}
+            {% endif %}
+
+            {% set has_verification_content = (
+                verification_data and (
+                    verification_data.get('overall_verdict') or
+                    verification_data.get('evidence_sources') or
+                    verification_data.get('claims_summary') or
+                    verification_data.get('contradictions_found')
+                )
+            ) %}
+            {% if verification_data and (has_verification_content or tweet.analysis_category == 'disinformation') %}
             <div class="mt-3 pt-3 border-top">
                 <h6 class="mb-2">
                     <i class="fas fa-search text-info me-2"></i>
                     Verificación de Evidencia
-                    {% if tweet.verification_confidence %}
-                        <span class="badge bg-{{ 'success' if tweet.verification_confidence >= 0.8 else 'warning' if tweet.verification_confidence >= 0.6 else 'danger' }} ms-2">
-                            {{ "%.1f"|format(tweet.verification_confidence * 100) }}% Confianza
+                    {% if verification_data.get('confidence_score') %}
+                        <span class="badge bg-{{ 'success' if verification_data.confidence_score >= 0.8 else 'warning' if verification_data.confidence_score >= 0.6 else 'danger' }} ms-2">
+                            {{ "%.1f"|format(verification_data.confidence_score * 100) }}% Confianza
                         </span>
                     {% endif %}
                 </h6>
 
-                {% if tweet.verification_data.get('verification_report', {}).get('evidence_sources') %}
+                {% if verification_data.get('overall_verdict') %}
+                <div class="mb-2">
+                    <strong class="text-muted">Veredicto general:</strong>
+                    <span class="badge bg-{{ 'success' if verification_data.overall_verdict == 'verified' else 'warning' if verification_data.overall_verdict == 'questionable' else 'danger' if verification_data.overall_verdict == 'debunked' else 'secondary' }} ms-2">
+                        {% if verification_data.overall_verdict == 'verified' %}✅ Verificado
+                        {% elif verification_data.overall_verdict == 'debunked' %}❌ Desmentido
+                        {% elif verification_data.overall_verdict == 'questionable' %}⚠️ Cuestionable
+                        {% elif verification_data.overall_verdict == 'unverified' %}❓ Sin Verificar
+                        {% else %}{{ verification_data.overall_verdict }}
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+
+                {% if verification_data.get('claims_summary') %}
+                <div class="mb-2">
+                    <strong class="text-muted">Resumen de afirmaciones:</strong>
+                    <div class="mt-1">
+                        {% set summary = verification_data.claims_summary %}
+                        {% if summary.total > 0 %}
+                        <small class="text-muted">
+                            {{ summary.total }} afirmaciones analizadas
+                            {% if summary.verified > 0 %} • {{ summary.verified }} verificadas{% endif %}
+                            {% if summary.debunked > 0 %} • {{ summary.debunked }} desmentidas{% endif %}
+                            {% if summary.questionable > 0 %} • {{ summary.questionable }} cuestionables{% endif %}
+                        </small>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if verification_data.get('evidence_sources') %}
                 <div class="mb-2">
                     <strong class="text-muted">Fuentes consultadas:</strong>
                     <div class="mt-1">
-                        {% for source in tweet.verification_data.verification_report.evidence_sources %}
-                        <span class="badge bg-light text-dark me-1 mb-1">{{ source.get('source_name', 'Fuente') }}</span>
+                        {% for source in verification_data.evidence_sources %}
+                        <span class="badge bg-{{ 'success' if source.verdict == 'verified' else 'warning' if source.verdict == 'questionable' else 'danger' if source.verdict == 'debunked' else 'light' }} text-{{ 'white' if source.verdict in ['verified', 'debunked'] else 'dark' }} me-1 mb-1">
+                            {% if source.verdict == 'verified' %}✅
+                            {% elif source.verdict == 'debunked' %}❌
+                            {% elif source.verdict == 'questionable' %}⚠️
+                            {% else %}❓{% endif %}
+                            {{ source.name }}
+                            {% if source.credibility %}
+                            <small>({{ "%.0f"|format(source.credibility * 100) }}%)</small>
+                            {% endif %}
+                        </span>
                         {% endfor %}
                     </div>
                 </div>
                 {% endif %}
 
-                {% if tweet.verification_data.get('verification_report', {}).get('contradictions_found') %}
+                {% if verification_data.get('contradictions_found') %}
                 <div class="mb-2">
                     <strong class="text-danger">Contradicciones encontradas:</strong>
                     <ul class="list-unstyled mt-1">
-                        {% for contradiction in tweet.verification_data.verification_report.contradictions_found %}
+                        {% for contradiction in verification_data.contradictions_found %}
                         <li class="text-danger">
                             <i class="fas fa-exclamation-triangle me-1"></i>{{ contradiction }}
                         </li>
@@ -236,23 +362,17 @@
                 </div>
                 {% endif %}
 
-                {% if tweet.verification_data.get('verification_report', {}).get('claims_verified') %}
+                {% if not verification_data.get('temporal_consistency', True) %}
                 <div class="mb-2">
-                    <strong class="text-info">Afirmaciones verificadas:</strong>
-                    <div class="mt-1">
-                        {% for claim in tweet.verification_data.verification_report.claims_verified %}
-                        <div class="mb-2 p-2 bg-light rounded">
-                            <small class="text-muted">"{{ claim.get('claim', '') }}"</small>
-                            <br>
-                            <span class="badge bg-{{ 'success' if claim.get('verdict') == 'verified' else 'warning' if claim.get('verdict') == 'partially_verified' else 'danger' }}">
-                                {{ claim.get('verdict', 'unknown') }}
-                            </span>
-                            {% if claim.get('confidence', 0) > 0 %}
-                            <small class="text-muted ms-2">{{ "%.1f"|format(claim.confidence * 100) }}% confianza</small>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
+                    <strong class="text-warning">⚠️ Inconsistencias temporales:</strong>
+                    <small class="text-muted">Las fechas y eventos mencionados no siguen una secuencia lógica.</small>
+                </div>
+                {% endif %}
+
+                {% if not has_verification_content and tweet.analysis_category == 'disinformation' %}
+                <div class="text-muted small">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Este contenido clasificado como desinformación no pudo ser verificado con fuentes disponibles.
                 </div>
                 {% endif %}
             </div>

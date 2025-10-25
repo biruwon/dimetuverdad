@@ -63,8 +63,9 @@ class LocalLLMAnalyzer:
             category, explanation = self._parse_category_and_explanation(response)
             
             if self.verbose:
+                print(f"✅ Raw LLM response: {response[:200]}...")
                 print(f"✅ Category detected: {category}")
-                print(f"💭 Explanation: {explanation[:100]}...")
+                print(f"💭 Parsed explanation: {explanation[:100]}...")
             
             return category, explanation
             
@@ -151,6 +152,8 @@ class LocalLLMAnalyzer:
         CATEGORÍA: category_name
         EXPLICACIÓN: explanation text
         
+        Handles both plain text and markdown formatting (**CATEGORÍA:**, **EXPLICACIÓN:**)
+        
         Returns:
             Tuple of (category, explanation)
         """
@@ -163,22 +166,36 @@ class LocalLLMAnalyzer:
         for line in lines:
             line = line.strip()
             
-            # Extract category
-            if line.upper().startswith("CATEGORÍA:"):
-                category_text = line.split(":", 1)[1].strip().lower()
+            # Extract category - handle both plain text and markdown
+            if (line.upper().startswith("CATEGORÍA:") or 
+                line.upper().startswith("**CATEGORÍA:**") or
+                "**CATEGORÍA:**" in line.upper()):
                 
-                # Validate against known categories
-                all_categories_lower = [cat.lower() for cat in Categories.get_all_categories()]
-                if category_text in all_categories_lower:
-                    # Find exact case match
-                    for cat in Categories.get_all_categories():
-                        if cat.lower() == category_text:
-                            category = cat
-                            break
+                # Remove markdown formatting if present
+                line = line.replace("**", "").strip()
+                
+                if ":" in line:
+                    category_text = line.split(":", 1)[1].strip().lower()
+                    
+                    # Validate against known categories
+                    all_categories_lower = [cat.lower() for cat in Categories.get_all_categories()]
+                    if category_text in all_categories_lower:
+                        # Find exact case match
+                        for cat in Categories.get_all_categories():
+                            if cat.lower() == category_text:
+                                category = cat
+                                break
             
-            # Extract explanation
-            elif line.upper().startswith("EXPLICACIÓN:"):
-                explanation = line.split(":", 1)[1].strip()
+            # Extract explanation - handle both plain text and markdown
+            elif (line.upper().startswith("EXPLICACIÓN:") or 
+                  line.upper().startswith("**EXPLICACIÓN:**") or
+                  "**EXPLICACIÓN:**" in line.upper()):
+                
+                # Remove markdown formatting if present
+                line = line.replace("**", "").strip()
+                
+                if ":" in line:
+                    explanation = line.split(":", 1)[1].strip()
         
         # Validate explanation is not empty
         if not explanation or len(explanation.strip()) < 10:

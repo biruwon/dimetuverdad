@@ -5,11 +5,7 @@ Tests all methods, edge cases, and integration scenarios.
 """
 
 import unittest
-import os
-import sqlite3
-import json
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
-from datetime import datetime
+from unittest.mock import Mock, patch, AsyncMock
 import sys
 import asyncio
 from pathlib import Path
@@ -27,8 +23,6 @@ from analyzer.models import ContentAnalysis
 from analyzer.repository import ContentAnalysisRepository
 from analyzer.categories import Categories
 from utils.database import get_db_connection_context
-from analyzer.multimodal_analyzer import extract_media_type
-
 
 class TestContentAnalysis(unittest.TestCase):
     """Test the ContentAnalysis dataclass."""
@@ -138,44 +132,6 @@ class TestAnalyzerAnalysis(unittest.TestCase):
         """Set up test fixtures."""
         self.analyzer = Analyzer(config=AnalyzerConfig())  # Disable LLM for faster tests
 
-    def test_analyze_content_empty(self):
-        """Test analysis of empty content."""
-        async def test_async():
-            result = await self.analyzer.analyze_content(
-                tweet_id="test_123",
-                tweet_url="https://twitter.com/test/status/test_123",
-                username="test_user",
-                content=""
-            )
-            return result
-
-        result = asyncio.run(test_async())
-
-        # Empty content should be categorized as general or error if LLM fails
-        self.assertIn(result.category, [Categories.GENERAL, "ERROR"])
-        # Should still have some explanation (even if error)
-        self.assertIsNotNone(result.local_explanation)
-        self.assertTrue(len(result.local_explanation) > 0)
-
-    def test_analyze_content_short(self):
-        """Test analysis of very short content."""
-        async def test_async():
-            result = await self.analyzer.analyze_content(
-                tweet_id="test_123",
-                tweet_url="https://twitter.com/test/status/test_123",
-                username="test_user",
-                content="Hi"
-            )
-            return result
-
-        result = asyncio.run(test_async())
-
-        # Short content should be categorized as general or error if LLM fails
-        self.assertIn(result.category, [Categories.GENERAL, "ERROR"])
-        # Should still have some explanation (even if error)
-        self.assertIsNotNone(result.local_explanation)
-        self.assertTrue(len(result.local_explanation) > 0)
-
     def test_analyze_content_with_patterns(self):
         """Test analysis when patterns are detected."""
         analyzer = Analyzer(config=AnalyzerConfig())
@@ -207,38 +163,6 @@ class TestAnalyzerAnalysis(unittest.TestCase):
         self.assertEqual(result.category, Categories.HATE_SPEECH)
         self.assertEqual(result.analysis_stages, "pattern,local_llm,external")
         self.assertEqual(len(result.categories_detected), 1)
-
-    def test_analyze_content_with_metrics_tracking(self):
-        """Test that analyze_content properly tracks metrics."""
-        analyzer = Analyzer(config=AnalyzerConfig())
-
-        # Mock the flow manager's pattern analyzer
-        mock_pattern_result = Mock()
-        mock_pattern_result.categories = [Categories.HATE_SPEECH]
-        mock_pattern_result.pattern_matches = [Mock(matched_text="test", category="hate_speech", description="test")]
-        analyzer.flow_manager.pattern_analyzer.analyze = Mock(return_value=mock_pattern_result)
-
-        # Mock the local LLM to avoid needing Ollama
-        analyzer.flow_manager.local_llm.explain_only = AsyncMock(return_value="Mock explanation")
-
-        # Analyze content
-        async def test_async():
-            result = await analyzer.analyze_content(
-                tweet_id="test_123",
-                tweet_url="https://twitter.com/test/status/test_123",
-                username="test_user",
-                content="Test content with hate speech"
-            )
-            return result
-
-        result = asyncio.run(test_async())
-
-        # Check that metrics were updated
-        summary = analyzer.metrics.get_summary()
-        self.assertIsInstance(summary['total_analyses'], int)
-        self.assertGreaterEqual(summary['total_analyses'], 1)
-        self.assertGreaterEqual(summary['total_time'], 0)
-        self.assertGreater(result.analysis_time_seconds, 0)
 
 
 class TestAnalyzerUtilityMethods(unittest.TestCase):

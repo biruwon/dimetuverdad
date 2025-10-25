@@ -102,10 +102,11 @@ class Analyzer:
             run_external = self.config.enable_external_analysis or admin_override
 
             # Run dual-flow analysis
-            category, local_explanation, external_explanation, stages, pattern_data = await self.flow_manager.analyze_full(
+            category, local_explanation, external_explanation, stages, pattern_data, verification_data = await self.flow_manager.analyze_full(
                 content=content,
                 media_urls=media_urls,
-                admin_override=admin_override
+                admin_override=run_external,
+                force_disable_external=not self.config.enable_external_analysis
             )
 
             # Create initial analysis result
@@ -126,11 +127,12 @@ class Analyzer:
                 multimodal_analysis=bool(media_urls and external_explanation),
                 pattern_matches=pattern_data.get('pattern_matches', []),
                 topic_classification=pattern_data.get('topic_classification', {}),
-                analysis_json=f'{{"stages": "{stages.to_string()}", "has_media": {bool(media_urls)}}}'
+                analysis_json=f'{{"stages": "{stages.to_string()}", "has_media": {bool(media_urls)}}}',
+                verification_data=verification_data if verification_data else None
             )
 
-            # Check if evidence retrieval should be triggered
-            if self._should_trigger_evidence_retrieval(result, content):
+            # Check if evidence retrieval should be triggered (only if not already done by flow manager)
+            if self._should_trigger_evidence_retrieval(result, content) and "Verificación de" not in result.local_explanation:
                 if self.verbose:
                     print("🔍 Triggering evidence retrieval for verification...")
 
@@ -207,12 +209,7 @@ class Analyzer:
         2. Conspiracy theory content
         3. Content with numerical/statistical claims
         4. Temporal claims requiring fact-checking
-
-        Note: External multimodal analyses already include visual verification.
         """
-        # Skip verification if external multimodal analysis was performed
-        if analysis_result.external_analysis_used and analysis_result.multimodal_analysis:
-            return False
 
         # Convert ContentAnalysis to dict format expected by analyzer hooks
         analyzer_result_dict = {
@@ -261,36 +258,8 @@ class Analyzer:
             # Convert verification data to dict for JSON serialization
             verification_data_dict = None
             if enhanced_result.verification_data:
-                verification_data_dict = dict(enhanced_result.verification_data)  # Convert to regular dict
-                
-                # Handle nested VerificationReport object
-                if 'verification_report' in verification_data_dict and hasattr(verification_data_dict['verification_report'], 'overall_verdict'):
-                    report = verification_data_dict['verification_report']
-                    
-                    # Safely serialize claims_verified
-                    claims_verified = []
-                    for claim in getattr(report, 'claims_verified', []):
-                        if hasattr(claim, '__dict__'):
-                            claim_dict = dict(claim.__dict__)
-                            # Convert enum values to strings
-                            if 'verdict' in claim_dict and hasattr(claim_dict['verdict'], 'value'):
-                                claim_dict['verdict'] = claim_dict['verdict'].value
-                            elif 'verdict' in claim_dict:
-                                claim_dict['verdict'] = str(claim_dict['verdict'])
-                            claims_verified.append(claim_dict)
-                        else:
-                            claims_verified.append(str(claim))
-                    
-                    verification_data_dict['verification_report'] = {
-                        'overall_verdict': report.overall_verdict.value if hasattr(report.overall_verdict, 'value') else str(report.overall_verdict),
-                        'confidence_score': report.confidence_score,
-                        'claims_verified': claims_verified,
-                        'evidence_sources': [{'source_name': s.source_name, 'source_type': getattr(s, 'source_type', 'unknown'), 'reliability_score': getattr(s, 'reliability_score', 0.5)} for s in getattr(report, 'evidence_sources', [])],
-                        'temporal_consistency': getattr(report, 'temporal_consistency', True),
-                        'contradictions_found': getattr(report, 'contradictions_found', []),
-                        'processing_time': getattr(report, 'processing_time', 0.0),
-                        'verification_method': getattr(report, 'verification_method', 'unknown')
-                    }
+                # The analyzer_hooks now returns simplified verification data that's already JSON-serializable
+                verification_data_dict = enhanced_result.verification_data
 
             # Create enhanced ContentAnalysis with verification data (preserving dual explanations)
             enhanced_analysis = ContentAnalysis(
@@ -755,9 +724,6 @@ async def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) ->
     if not tweet_data:
         return None
 
-    # Delete existing analysis
-    analyzer.repository.delete_existing_analysis(tweet_id)
-
     # Parse media URLs from media_links string
     media_urls = []
     if tweet_data.get('media_links'):
@@ -769,7 +735,7 @@ async def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) ->
         for i, url in enumerate(media_urls):
             print(f"      {i+1}. {url[:50]}...")
 
-    # Reanalyze
+    # Reanalyze FIRST (before deleting old analysis)
     analysis_result = await analyzer.analyze_content(
         tweet_id=tweet_data['tweet_id'],
         tweet_url=f"https://twitter.com/placeholder/status/{tweet_data['tweet_id']}",
@@ -778,7 +744,10 @@ async def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) ->
         media_urls=media_urls
     )
 
-    # Save result
+    # Only delete existing analysis AFTER successful reanalysis
+    analyzer.repository.delete_existing_analysis(tweet_id)
+
+    # Save the new analysis result
     analyzer.save_analysis(analysis_result)
 
     return analysis_result
