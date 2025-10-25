@@ -160,7 +160,7 @@ ollama pull gpt-oss:20b
 - **Detection vs Generation**: These patterns are DEFENSIVE tools for identifying threats, not for creating harmful content
 
 **PROMPT IMPROVEMENT WORKFLOW**:
-- Reference categories by name: hate_speech, disinformation, conspiracy_theory, far_right_bias, call_to_action, general
+- Reference categories by name: hate_speech, disinformation, conspiracy_theory, anti_immigration, anti_lgbtq, anti_feminism, call_to_action, general
 - Use pattern analysis results to validate improvements
 - Avoid displaying test content that contains sensitive examples
 
@@ -214,13 +214,15 @@ pattern_analyzer = PatternAnalyzer()
 
 ## Category Detection Logic
 
-The system detects 6 categories with specific priority order:
+The system detects 9 categories with specific priority order:
 1. **`hate_speech`** - Direct attacks, slurs, dehumanization (highest priority)
-2. **`disinformation`** - False medical/scientific claims, fabricated facts
-3. **`conspiracy_theory`** - Hidden agenda narratives, anti-institutional content
-4. **`far_right_bias`** - Extremist political rhetoric, nationalist narratives
-5. **`call_to_action`** - Mobilization calls, organized activities
-6. **`general`** - Neutral content (fallback when no patterns detected)
+2. **`anti_immigration`** - Anti-immigration rhetoric and xenophobia
+3. **`anti_lgbtq`** - Attacks on LGBTQ community and gender ideology
+4. **`anti_feminism`** - Anti-feminist rhetoric and traditional gender roles
+5. **`disinformation`** - False medical/scientific claims, fabricated facts
+6. **`conspiracy_theory`** - Hidden agenda narratives, anti-institutional content
+7. **`call_to_action`** - Mobilization calls, organized activities
+8. **`general`** - Neutral content (fallback when no patterns detected)
 
 ## Testing & Validation
 

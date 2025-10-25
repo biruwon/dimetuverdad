@@ -22,7 +22,7 @@ public good by enabling better detection of harmful online content.
 
 from typing import Dict, List
 from dataclasses import dataclass
-from .categories import Categories, CATEGORY_INFO, get_category_info, CLASSIFICATION_PROMPT_MAPPINGS
+from .categories import Categories, CATEGORY_INFO
 
 # ============================================================================
 # ENHANCED PROMPT GENERATOR CLASS
@@ -98,7 +98,7 @@ HATE_SPEECH - PRIORIDAD MÁXIMA (ATAQUES DIRECTOS A GRUPOS IDENTIFICABLES):
 - Generalizaciones despectivas que nombran grupos específicos como inherentemente problemáticos
 - Lenguaje que presenta grupos étnicos específicos como amenazas existenciales
 
-FAR_RIGHT_BIAS - RETÓRICA EXTREMISTA POLÍTICA (NO HATE SPEECH):
+ANTI_IMMIGRATION - RETÓRICA ANTI-INMIGRACIÓN Y XENOFOBIA:
 - Asociación general entre inmigración y delincuencia sin nombrar grupos específicos
 - Frases alarmistas sobre seguridad ciudadana y presencia extranjera
 - Retórica anti-inmigración que usa términos como "invasión" o "reemplazo"
@@ -106,6 +106,19 @@ FAR_RIGHT_BIAS - RETÓRICA EXTREMISTA POLÍTICA (NO HATE SPEECH):
 - Nacionalismo excluyente con lenguaje de amenaza existencial
 - Deshumanización de colectivos migratorios como "masas" o "olas incontrolables"
 - Crítica a partidos políticos por permitir entrada de personas extranjeras
+
+ANTI_LGBTQ - ATAQUES A LA COMUNIDAD LGBTQ Y GÉNERO:
+- Ataques a la "ideología de género" o "agenda LGBT"
+- Retórica sobre "adoctrinamiento infantil" o "van por los niños"
+- Defensa de la "familia tradicional" contra amenazas percibidas
+- Anti-trans rhetoric sobre biología o deportes
+- Lenguaje que presenta identidad de género como amenaza cultural
+
+ANTI_FEMINISM - RETÓRICA ANTI-FEMINISTA Y ROLES DE GÉNERO TRADICIONALES:
+- Ataques a "feminazis" o feminismo radical
+- Promoción de roles tradicionales de género
+- Acusaciones de "machismo inverso" o "matriarcado opresivo"
+- Lenguaje sobre mujeres en casa vs hombres proveedores
 
 DISINFORMATION - INFORMACIÓN FALSA O MANIPULADA:
 - Datos estadísticos sobre inmigración presentados sin fuentes verificables
@@ -131,22 +144,24 @@ GENERAL - CONTENIDO REALMENTE NEUTRAL:
 
 DISTINCIÓN CRÍTICA:
 - hate_speech: Ataques directos a grupos étnicos CONCRETOS identificables
-- far_right_bias: Retórica anti-inmigración GENERAL sin nombrar grupos específicos
+- anti_immigration: Retórica anti-inmigración GENERAL sin nombrar grupos específicos
 
 JERARQUÍA DE CLASIFICACIÓN (de mayor a menor prioridad):
 1. hate_speech (ataques directos a grupos específicos)
-2. disinformation (información falsa verificable, ESPECIALMENTE claims políticos sin fuente oficial)
-3. far_right_bias (retórica extremista política)
-4. conspiracy_theory (teorías conspirativas)
-5. call_to_action (llamadas a movilización)
-6. political_general (análisis político neutral)
-7. general (contenido neutral)
+2. anti_immigration (retórica anti-inmigración y xenofobia)
+3. anti_lgbtq (ataques a comunidad LGBTQ)
+4. anti_feminism (retórica anti-feminista)
+5. disinformation (información falsa verificable, ESPECIALMENTE claims políticos sin fuente oficial)
+6. conspiracy_theory (teorías conspirativas)
+7. call_to_action (llamadas a movilización)
+8. political_general (análisis político neutral)
+9. general (contenido neutral)
 
 IMPORTANTE: Sistema diseñado para investigación académica y moderación de contenido en redes sociales.
 IMPORTANTE: Priorizar CONTEXTO POLÍTICO sobre verificación factual para clasificación.
-IMPORTANTE: Alegaciones políticas polarizantes = far_right_bias (incluso si no verificadas).
-IMPORTANTE: Acusaciones contra políticos por corrupción o conducta personal = far_right_bias (NO disinformation).
-IMPORTANTE: Ataques políticos presentados como "defensa de ciudadanos" = far_right_bias.
+IMPORTANTE: Alegaciones políticas polarizantes pueden clasificarse como anti_government o nationalism según el contexto.
+IMPORTANTE: Acusaciones contra políticos por corrupción o conducta personal pueden clasificarse como anti_government.
+IMPORTANTE: Ataques políticos presentados como "defensa de ciudadanos" pueden clasificarse como nationalism o anti_government.
 IMPORTANTE: CONTEXTO POLÍTICO > VERIFICACIÓN FÁCTICA para clasificación.
 
 🎓 CONTEXTO DE INVESTIGACIÓN: Este análisis contribuye al estudio científico de patrones de discurso extremista y su impacto en la sociedad democrática."""
@@ -189,7 +204,11 @@ IMPORTANTE: CONTEXTO POLÍTICO > VERIFICACIÓN FÁCTICA para clasificación.
             "",
             "🎯 DIRECTRICES PARA CLASIFICACIÓN EN INVESTIGACIÓN:",
             "- hate_speech: Ataques visuales/textuales directos a grupos étnicos específicos",
-            "- far_right_bias: Elementos visuales de nacionalismo extremo o retórica anti-inmigración",
+            "- anti_immigration: Elementos visuales de retórica anti-inmigración o xenofobia",
+            "- anti_lgbtq: Contenido visual que ataca identidad LGBTQ o diversidad de género",
+            "- anti_feminism: Elementos visuales que promueven roles tradicionales de género",
+            "- nationalism: Símbolos patrios y expresiones de orgullo nacional",
+            "- anti_government: Contenido visual que cuestiona legitimidad institucional",
             "- disinformation: Imágenes manipuladas o texto con datos falsos no políticos",
             "- conspiracy_theory: Símbolos de teorías conspirativas o élites ocultas",
             "- call_to_action: Elementos visuales que incitan a movilización colectiva",
@@ -230,14 +249,16 @@ CLASIFICA EL TEXTO EN UNA SÓLO CATEGORÍA Y EXPLICA TU RAZÓN.
 
 CATEGORÍAS Y REGLAS DE PRIORIDAD (de mayor a menor severidad):
 1. hate_speech
-2. far_right_bias
-3. nationalism
-4. anti_government
-5. political_general
-6. disinformation
-7. conspiracy_theory
-8. call_to_action
-9. general
+2. anti_immigration
+3. anti_lgbtq
+4. anti_feminism
+5. nationalism
+6. anti_government
+7. political_general
+8. disinformation
+9. conspiracy_theory
+10. call_to_action
+11. general
 
 CATEGORÍAS:
 
@@ -250,14 +271,27 @@ REGLAS DE CLASIFICACIÓN - LÉELAS CON CUIDADO:
 - Ejemplo CORRECTO: "Los musulmanes son terroristas que nos atacan"
 - Ejemplo INCORRECTO: "Los inmigrantes son delincuentes" (falta grupo específico + palabra negativa clara)
 
-**far_right_bias** (RETÓRICA EXTREMISTA POLÍTICA):
-- Lenguaje que divide "nosotros vs ellos" de manera alarmista
-- Nacionalismo radical con retórica anti-inmigración
-- Acusaciones de corrupción con vínculos internacionales ("tratos con Maduro", "vendidos a extranjeros")
-- Asociación entre inmigración y delincuencia SIN nombrar grupos étnicos específicos
-- Frases como "españoles honrados vs delincuentes protegidos"
-- Críticas que presentan partidos políticos como "traidores a la nación"
-- Retórica alarmista sobre "seguridad nacional" o "calamidad para España"
+**anti_immigration** (RETÓRICA ANTI-INMIGRACIÓN Y XENOFOBIA):
+- Asociación general entre inmigración y delincuencia sin nombrar grupos étnicos específicos
+- Frases alarmistas sobre seguridad ciudadana y presencia extranjera
+- Retórica anti-inmigración que usa términos como "invasión" o "reemplazo"
+- Culpa institucional hacia partidos políticos por políticas migratorias
+- Nacionalismo excluyente con lenguaje de amenaza existencial
+- Deshumanización de colectivos migratorios como "masas" o "olas incontrolables"
+- Crítica a partidos políticos por permitir entrada de personas extranjeras
+
+**anti_lgbtq** (ATAQUES A LA COMUNIDAD LGBTQ Y GÉNERO):
+- Ataques a la "ideología de género" o "agenda LGBT"
+- Retórica sobre "adoctrinamiento infantil" o "van por los niños"
+- Defensa de la "familia tradicional" contra amenazas percibidas
+- Anti-trans rhetoric sobre biología o deportes
+- Lenguaje que presenta identidad de género como amenaza cultural
+
+**anti_feminism** (RETÓRICA ANTI-FEMINISTA Y ROLES DE GÉNERO TRADICIONALES):
+- Ataques a "feminazis" o feminismo radical
+- Promoción de roles tradicionales de género
+- Acusaciones de "machismo inverso" o "matriarcado opresivo"
+- Lenguaje sobre mujeres en casa vs hombres proveedores
 
 **nationalism**: Orgullo nacional sin anti-inmigración ni lenguaje divisivo
 **anti_government**: Crítica institucional sin extremismo ni vínculos internacionales
@@ -341,6 +375,48 @@ EXPLICACIÓN: [2‑3 frases explicando por qué pertenece a esa categoría, cita
                 "2. ¿Qué palabras o frases expresan desprecio, inferioridad o amenaza?",
                 "3. ¿Cómo se vincula al grupo con violencia, criminalidad o características negativas?"
             ],
+            "anti_immigration": [
+                "Este contenido muestra retórica anti-inmigración porque:",
+                "1. ¿Qué asociaciones se hacen entre inmigración y delincuencia o amenaza social?",
+                "2. ¿Cómo se presenta la inmigración como amenaza existencial?",
+                "3. ¿Qué lenguaje alarmista se usa sobre presencia extranjera?"
+            ],
+            "anti_lgbtq": [
+                "Este contenido ataca a la comunidad LGBTQ porque:",
+                "1. ¿Qué críticas se hacen a la identidad o derechos LGBTQ?",
+                "2. ¿Cómo se presenta la diversidad de género como amenaza?",
+                "3. ¿Qué lenguaje se usa sobre 'ideología de género' o 'adoctrinamiento infantil'?"
+            ],
+            "anti_feminism": [
+                "Este contenido muestra retórica anti-feminista porque:",
+                "1. ¿Qué críticas se hacen al movimiento feminista o igualdad de género?",
+                "2. ¿Cómo se promueven roles tradicionales de género?",
+                "3. ¿Qué lenguaje se usa sobre 'feminazis' o 'matriarcado opresivo'?"
+            ],
+            "nationalism": [
+                "Este contenido muestra nacionalismo porque:",
+                "1. ¿Qué expresiones de orgullo nacional se hacen?",
+                "2. ¿Cómo se enfatiza la identidad nacional como valor primordial?",
+                "3. ¿Qué símbolos patrios o narrativas de identidad nacional se usan?"
+            ],
+            "anti_government": [
+                "Este contenido muestra anti-gubernamentalismo porque:",
+                "1. ¿Qué críticas se hacen a la legitimidad del gobierno?",
+                "2. ¿Cómo se cuestiona la autoridad institucional?",
+                "3. ¿Qué retórica de deslegitimación política se usa?"
+            ],
+            "historical_revisionism": [
+                "Este contenido muestra revisionismo histórico porque:",
+                "1. ¿Qué eventos históricos se reinterpretan de forma sesgada?",
+                "2. ¿Cómo se rehabilitan figuras o regímenes autoritarios?",
+                "3. ¿Qué narrativas nostálgicas del pasado autoritario se promueven?"
+            ],
+            "political_general": [
+                "Este contenido es político general porque:",
+                "1. ¿Qué temas políticos convencionales se tratan?",
+                "2. ¿Qué perspectivas políticas moderadas se presentan?",
+                "3. ¿Cómo se debate de forma constructiva sin extremismo?"
+            ],
             "disinformation": [
                 "Este contenido es desinformación porque:",
                 "1. ¿Qué afirmación específica se hace sobre hechos verificables?",
@@ -352,12 +428,6 @@ EXPLICACIÓN: [2‑3 frases explicando por qué pertenece a esa categoría, cita
                 "1. ¿Qué narrativa oculta o agenda secreta se sugiere?",
                 "2. ¿Qué grupos o instituciones son acusados de conspirar?",
                 "3. ¿Cómo se presenta evidencia circunstancial como prueba definitiva?"
-            ],
-            "far_right_bias": [
-                "Este contenido muestra sesgo de extrema derecha porque:",
-                "1. ¿Qué retórica nacionalista extrema o anti-inmigración se usa?",
-                "2. ¿Cómo divide entre 'nosotros vs ellos' de manera alarmista?",
-                "3. ¿Qué acusaciones de traición o corrupción internacional se hacen?"
             ],
             "call_to_action": [
                 "Este contenido incita a la acción porque:",
@@ -400,66 +470,9 @@ EXPLICACIÓN: [2‑3 frases explicando por qué pertenece a esa categoría, cita
             "EXPLICACIÓN:"
         ]
         
+        
+        
         # Remove empty lines
         prompt_parts = [line for line in prompt_parts if line.strip()]
-        
-        return "\n".join(prompt_parts)
-
-    @staticmethod
-    def build_gemini_analysis_prompt(text_content: str, is_video: bool = False) -> str:
-        """
-        Create the analysis prompt for Gemini multimodal analysis based on media type.
-        Uses the same format structure as generate_explanation_prompt for consistency.
-        
-        Args:
-            text_content: The text content accompanying the media
-            is_video: Whether the media is a video
-            
-        Returns:
-            Formatted analysis prompt for Gemini following standardized format
-        """
-        media_type = "video" if is_video else "imagen"
-        categories = EnhancedPromptGenerator.build_category_list()
-        
-        prompt_parts = [
-            f'TEXTO DEL POST ANALIZADO: "{text_content}"',
-            "",
-            "🔬 ANÁLISIS ACADÉMICO MULTIMODAL - INVESTIGACIÓN SOBRE CONTENIDO PROBLEMÁTICO EN REDES SOCIALES",
-            "",
-            "OBJETIVO DE INVESTIGACIÓN: Este análisis forma parte de un estudio científico sobre moderación de contenido y patrones visuales de desinformación. Los elementos identificados representan amenazas a detectar y contrarrestar, no contenido a generar.",
-            "",
-            f"CONTEXTO: Análisis de {media_type} acompañada de texto político. Evaluar combinación visual-texto para identificar narrativas problemáticas.",
-            "",
-            "1. ¿Qué elementos visuales específicos aparecen en la imagen/video que sugieren contenido político?",
-            "2. ¿Qué texto o elementos gráficos indican sesgo político extremista, especialmente de extrema derecha?",
-            "3. ¿Se muestran símbolos nacionalistas, banderas, o iconografía política extrema?",
-            "4. ¿Aparecen figuras políticas conocidas por posiciones extremas y cómo se presentan?",
-            "5. ¿Se mencionan datos, estadísticas o hechos específicos? Evalúalos por veracidad y contexto",
-            "6. ¿Cómo se relacionan el contenido visual y textual para crear una narrativa política alarmista?",
-            "7. ¿Qué categorías problemáticas se detectan en la combinación de imagen/video y texto?",
-            "8. ¿Contribuye la composición visual a narrativas de amenaza, división, o superioridad grupal?",
-            "",
-            f"CATEGORÍAS DISPONIBLES: {categories}",
-            "",
-            "🎯 DIRECTRICES PARA CLASIFICACIÓN EN INVESTIGACIÓN:",
-            "- hate_speech: Ataques visuales/textuales directos a grupos étnicos específicos",
-            "- far_right_bias: Elementos visuales de nacionalismo extremo o retórica anti-inmigración",
-            "- disinformation: Imágenes manipuladas o texto con datos falsos no políticos",
-            "- conspiracy_theory: Símbolos de teorías conspirativas o élites ocultas",
-            "- call_to_action: Elementos visuales que incitan a movilización colectiva",
-            "- general: Contenido visual neutral sin elementos problemáticos",
-            "",
-            "INSTRUCCIONES DE FORMATO:",
-            "- PRIMERO indica la CATEGORÍA más apropiada (una sola palabra)",
-            "- LUEGO escribe la EXPLICACIÓN (2-3 oraciones claras)",
-            "- Responde SOLO con texto plano en español, sin markdown ni formato especial",
-            "- NO uses negritas (**), títulos (##), listas numeradas, tablas, o símbolos",
-            "- Evalúa cualquier dato o hecho mencionado por su veracidad y contexto",
-            "- Si NO hay elementos problemáticos, usa 'general'",
-            "",
-            "FORMATO REQUERIDO:",
-            "CATEGORÍA: [categoría]",
-            "EXPLICACIÓN: [tu explicación aquí]"
-        ]
         
         return "\n".join(prompt_parts)

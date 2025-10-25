@@ -247,7 +247,7 @@ class TestAnalyzeLocal:
     async def test_local_with_multiple_pattern_categories(self, flow_manager, mock_pattern_analyzer, mock_local_llm):
         """Test local flow uses first non-general category from patterns."""
         mock_pattern_analyzer.analyze_content.return_value = AnalysisResult(
-            categories=[Categories.DISINFORMATION, Categories.FAR_RIGHT_BIAS],
+            categories=[Categories.DISINFORMATION, Categories.ANTI_GOVERNMENT],
             pattern_matches=[PatternMatch(
                 category=Categories.DISINFORMATION,
                 matched_text="fake news",
@@ -451,11 +451,13 @@ class TestAnalyzeFull:
             Categories.HATE_SPEECH,
             Categories.DISINFORMATION,
             Categories.CONSPIRACY_THEORY,
-            Categories.FAR_RIGHT_BIAS,
-            Categories.CALL_TO_ACTION,
+            Categories.ANTI_IMMIGRATION,
+            Categories.ANTI_LGBTQ,
+            Categories.ANTI_FEMINISM,
             Categories.NATIONALISM,
             Categories.ANTI_GOVERNMENT,
-            Categories.HISTORICAL_REVISIONISM
+            Categories.HISTORICAL_REVISIONISM,
+            Categories.CALL_TO_ACTION
         ]
         
         for category in problematic_categories:

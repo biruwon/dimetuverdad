@@ -181,32 +181,64 @@ class PatternAnalyzer:
                 'description': 'Conspiracy theories and hidden agenda narratives'
             },
             
-            Categories.FAR_RIGHT_BIAS: {
+            Categories.ANTI_IMMIGRATION: {
                 'patterns': [
-                    # Anti-left rhetoric
-                    r'\b(?:socialistas?|comunistas?|marxistas?|rojos?)\s+(?:han\s+)?(?:destruido|destruyen|arruinado|arruinan)\s+(?:España|el\s+país)',
-                    r'\b(?:régimen|dictadura)\s+(?:de\s+)?(?:sánchez|socialista|rojo)\b',
-                    r'\b(?:agenda|ideología)\s+(?:marxista|comunista|progre)\s+(?:está\s+)?(?:destruyendo|infectando)',
-                    # Political extremism
-                    r'\b(?:traidores?|vendidos?)\s+(?:al\s+)?(?:globalismo|comunismo|soros)\b',
-                    r'\b(?:han\s+)?convertido\s+(?:España|el\s+país)\s+en\s+(?:venezuela|cuba|la\s+urss)\b',
-                    # Anti-woke and cultural war patterns
-                    r'\b(?:agenda\s+woke|ideología\s+woke)\b.*\b(?:destruyendo|destruye)\b',
-                    r'\b(?:woke)\b.*\b(?:valores\s+cristianos|tradiciones|familia)\b',
-                    r'\b(?:feminazis?|progres?|rojos?)\b.*\b(?:destruir|acabar|eliminar)\b',
-                    # Political corruption allegations - simplified patterns
-                    r'\bpersigue.*españoles.*honrados.*hermano\b',
-                    r'\bhermano.*escondido.*palacio\b',
-                    r'\bescondido.*moncloa.*evadir\b',
-                    r'\bevadir.*impuestos.*hermano\b',
-                    r'\bcorrupción.*políticos.*gobierno\b',
-                    r'\bfraude.*político.*sánchez\b',
-                    # Additional patterns from former secondary
-                    r'\b(?:ideolog[íi]a|doctrina)\s+(?:racial|étnica)\b',
-                    r'\b(?:movimiento|organización)\s+(?:nacionalist[ao]|patriót[iao])\b',
+                    # Immigration invasion narratives
+                    r'\b(?:invasión|nos\s+están\s+inundando|nos\s+están\s+invadiendo)\b',
+                    r'\b(?:nos\s+están\s+borrando|nos\s+quieren\s+borrar|sustitución\s+cultural)\b',
+                    r'\b(?:gran\s+sustitución|teoría\s+de\s+la\s+sustitución)\b',
+                    r'\b(?:inmigrantes?\s+ilegales?|ilegales\s+inmigrantes?)\b',
+                    r'\b(?:control\s+de\s+fronteras?|fronteras\s+abiertas?|fronteras\s+protegidas?)\b',
+                    # Economic burden claims
+                    r'\b(?:nos\s+quitan\s+el\s+trabajo|nos\s+quitan\s+nuestros?\s+empleos?)\b',
+                    r'\b(?:carga\s+económica|nos\s+cuestan\s+mucho|nos\s+arruinan)\b',
+                    r'\b(?:vienen\s+a\s+vivir\s+de\s+nuestras?\s+prestaciones?)\b',
+                    # Cultural incompatibility
+                    r'\b(?:no\s+se\s+integran|no\s+quieren\s+integrarse)\b',
+                    r'\b(?:imponen\s+sus\s+costumbres|imponen\s+su\s+religión)\b',
+                    r'\b(?:compatibilidad\s+cultural|incompatible\s+culturalmente)\b',
                 ],
-                'keywords': ['extrema_derecha', 'nacionalismo', 'patriotismo'],
-                'description': 'Far-right political bias and extremist rhetoric'
+                'keywords': ['inmigración', 'invasión', 'fronteras', 'sustitución', 'ilegales'],
+                'description': 'Anti-immigration rhetoric and xenophobia'
+            },
+            
+            Categories.ANTI_LGBTQ: {
+                'patterns': [
+                    # Gender ideology attacks
+                    r'\b(?:ideología\s+de\s+género|doctrina\s+de\s+género)\b',
+                    r'\b(?:agenda\s+lgbt|LGBT\s+nos\s+quiere|quieren\s+adoctrinar)\b',
+                    r'\b(?:quieren\s+convertir\s+a\s+nuestros?\s+hijos?|adoctrinamiento\s+infantil)\b',
+                    r'\b(?:van\s+a\s+por\s+los\s+niños?|van\s+a\s+por\s+nuestros?\s+hijos?)\b',
+                    # Traditional family defense
+                    r'\b(?:defensa\s+de\s+la\s+familia\s+tradicional)\b',
+                    r'\b(?:familia\s+tradicional\s+en\s+peligro|amenaza\s+a\s+la\s+familia)\b',
+                    r'\b(?:valores\s+cristianos?\s+atacados?|tradiciones\s+familiares)\b',
+                    # Anti-trans rhetoric
+                    r'\b(?:hombres\s+con\s+vestidos?|mujeres\s+con\s+pantalones?)\b',
+                    r'\b(?:biología\s+binaria|hay\s+solo\s+dos\s+géneros)\b',
+                    r'\b(?:deporte\s+femenino\s+contaminado|deporte\s+femenino\s+invadido)\b',
+                ],
+                'keywords': ['lgbt', 'género', 'trans', 'familia', 'tradicional', 'niños'],
+                'description': 'Anti-LGBTQ rhetoric and gender ideology attacks'
+            },
+            
+            Categories.ANTI_FEMINISM: {
+                'patterns': [
+                    # Feminazi rhetoric
+                    r'\b(?:feminazis?|feministas?\s+radicales?|feministas?\s+extremas?)\b',
+                    r'\b(?:feminismo\s+es\s+odio|el\s+feminismo\s+destruye)\b',
+                    r'\b(?:feminismo\s+radical|ideología\s+feminista)\b',
+                    # Traditional gender roles
+                    r'\b(?:mujeres\s+en\s+casa|mujeres\s+para\s+la\s+cocina)\b',
+                    r'\b(?:hombres\s+proveedores?|mujeres\s+amas\s+de\s+casa)\b',
+                    r'\b(?:roles\s+tradicionales?\s+de\s+género)\b',
+                    # False accusations
+                    r'\b(?:falsas\s+acusaciones?\s+de\s+violación|violación\s+falsa)\b',
+                    r'\b(?:caza\s+de\s+brujas\s+feminista|acoso\s+a\s+hombres)\b',
+                    r'\b(?:machismo\s+inverso|matriarcado\s+opresivo)\b',
+                ],
+                'keywords': ['feminismo', 'feminazi', 'género', 'machismo', 'tradicional'],
+                'description': 'Anti-feminism and traditional gender role promotion'
             },
             
             Categories.CALL_TO_ACTION: {
@@ -259,6 +291,9 @@ class PatternAnalyzer:
                     r'\b(?:régimen|dictadura|tiranía)\s+(?:de\s+)?(?:sánchez|socialista)\b',
                     r'\b(?:gobierno|administración)\s+(?:corrupt[oa]|ilegítim[oa]|dictatorial)\b',
                     r'\b(?:golpe\s+de\s+estado|derrocar|derribar)\s+(?:al\s+)?gobierno\b',
+                    # Anti-left rhetoric (now part of anti_government category)
+                    r'\b(?:socialistas?|comunistas?|marxistas?|rojos?)\s+(?:han\s+)?(?:destruido|destruyen|arruinado|arruinan)\s+(?:españa|el\s+país)',
+                    r'\b(?:agenda|ideología)\s+(?:marxista|comunista|progre)\s+(?:está\s+)?(?:destruyendo|infectando)',
                     # Anti-state rhetoric
                     r'\b(?:estado\s+profundo|deep\s+state)\b',
                     r'\b(?:traición|traidor|vendepat(?:ria|rias))\b',
@@ -272,7 +307,7 @@ class PatternAnalyzer:
                     r'\b(?:no\s+representan?\s+al\s+pueblo|pueblo\s+real)\b',
                     r'\b(?:deslegitimación|ilegítim[ao]|ilegítim[ao])\b',
                 ],
-                'keywords': ['régimen', 'dictadura', 'gobierno', 'traición', 'sistema', 'podrido'],
+                'keywords': ['régimen', 'dictadura', 'gobierno', 'traición', 'sistema', 'podrido', 'socialistas', 'rojos'],
                 'description': 'Anti-government rhetoric and delegitimization'
             },
             

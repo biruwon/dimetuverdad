@@ -51,7 +51,9 @@
         .category-hate_speech { background-color: #dc3545; }
         .category-disinformation { background-color: #fd7e14; }
         .category-conspiracy_theory { background-color: #6f42c1; }
-        .category-far_right_bias { background-color: #e83e8c; }
+        .category-anti_immigration { background-color: #0d6efd; }
+        .category-anti_lgbtq { background-color: #6610f2; }
+        .category-anti_feminism { background-color: #d63384; }
         .category-call_to_action { background-color: #20c997; }
         .category-nationalism { background-color: #795548; }
         .category-anti_government { background-color: #607d8b; }
@@ -449,8 +451,16 @@
                                 <strong>Teoría Conspirativa:</strong> Conspiraciones y agendas ocultas
                             </div>
                             <div class="col-md-4 mb-2">
-                                <span class="badge category-far_right_bias category-badge me-2">⚡</span>
-                                <strong>Sesgo Extremista:</strong> Marcos interpretativos de extrema derecha
+                                <span class="badge category-anti_immigration category-badge me-2">🌍</span>
+                                <strong>Anti-Inmigración:</strong> Retórica xenófoba y anti-inmigración
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <span class="badge category-anti_lgbtq category-badge me-2">🏳️‍🌈</span>
+                                <strong>Anti-LGBTQ:</strong> Ataques a la comunidad LGBTQ
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <span class="badge category-anti_feminism category-badge me-2">👩</span>
+                                <strong>Anti-Feminismo:</strong> Retórica anti-feminista y tradicionalista
                             </div>
                             <div class="col-md-4 mb-2">
                                 <span class="badge category-call_to_action category-badge me-2">📢</span>
@@ -548,7 +558,9 @@
                             {% if item.category == 'hate_speech' %}'#dc3545'{% endif %}
                             {% if item.category == 'disinformation' %}'#fd7e14'{% endif %}
                             {% if item.category == 'conspiracy_theory' %}'#6f42c1'{% endif %}
-                            {% if item.category == 'far_right_bias' %}'#d63384'{% endif %}
+                            {% if item.category == 'anti_immigration' %}'#0d6efd'{% endif %}
+                            {% if item.category == 'anti_lgbtq' %}'#6610f2'{% endif %}
+                            {% if item.category == 'anti_feminism' %}'#d63384'{% endif %}
                             {% if item.category == 'call_to_action' %}'#198754'{% endif %}
                             {% if item.category == 'nationalism' %}'#795548'{% endif %}
                             {% if item.category == 'anti_government' %}'#607d8b'{% endif %}

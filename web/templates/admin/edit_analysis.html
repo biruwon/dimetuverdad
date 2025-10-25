@@ -79,8 +79,10 @@
             color: white !important;
         }
 
-        .category-far_right_bias.category-badge {
-            background: linear-gradient(135deg, var(--bs-primary, #0d6efd) 0%, var(--bs-primary, #0d6efd) 100%) !important;
+        .category-anti_immigration.category-badge,
+        .category-anti_lgbtq.category-badge,
+        .category-anti_feminism.category-badge {
+            background: linear-gradient(135deg, var(--bs-danger, #dc3545) 0%, var(--bs-danger, #dc3545) 100%) !important;
             color: white !important;
         }
 
@@ -231,7 +233,12 @@
                                             {% elif cat == 'hate_speech' %}🚫 Discurso de Odio
                                             {% elif cat == 'disinformation' %}❌ Desinformación
                                             {% elif cat == 'conspiracy_theory' %}🕵️ Teoría Conspiratoria
-                                            {% elif cat == 'far_right_bias' %}⚡ Sesgo Extrema Derecha
+                                            {% elif cat == 'anti_immigration' %}🚫 Anti-Inmigración
+                                            {% elif cat == 'anti_lgbtq' %}🚫 Anti-LGBTQ
+                                            {% elif cat == 'anti_feminism' %}🚫 Anti-Feminismo
+                                            {% elif cat == 'nationalism' %}⚡ Nacionalismo
+                                            {% elif cat == 'anti_government' %}⚡ Anti-Gobierno
+                                            {% elif cat == 'historical_revisionism' %}⚡ Revisión Histórica
                                             {% elif cat == 'call_to_action' %}📢 Llamada a la Acción
                                             {% elif cat == 'political_general' %}🗳️ Política General
                                             {% else %}{{ cat }}

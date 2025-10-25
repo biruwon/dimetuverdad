@@ -90,10 +90,16 @@ class DatabaseConstants:
 class GeminiKeywords:
     """Keywords for Gemini analysis category extraction."""
     HATE_SPEECH = ['hate_speech', 'odio', 'racismo', 'discriminación']
+    ANTI_IMMIGRATION = ['anti_immigration', 'anti-inmigración', 'xenofobia', 'invasión']
+    ANTI_LGBTQ = ['anti_lgbtq', 'homofobia', 'transfobia', 'ideología de género']
+    ANTI_FEMINISM = ['anti_feminism', 'misoginia', 'feminazi', 'anti-feminista']
     DISINFORMATION = ['disinformation', 'desinformación', 'fake news', 'mentira']
     CONSPIRACY_THEORY = ['conspiracy', 'conspiración', 'teoría conspirativa']
-    FAR_RIGHT_BIAS = ['far_right', 'extrema derecha', 'ultraderecha']
     CALL_TO_ACTION = ['call_to_action', 'llamado a la acción', 'llamados a la acción']
+    NATIONALISM = ['nationalism', 'nacionalismo', 'patriotismo extremo']
+    ANTI_GOVERNMENT = ['anti_government', 'anti-gobierno', 'anti-establishment']
+    HISTORICAL_REVISIONISM = ['historical_revisionism', 'revisionismo histórico', 'negacionismo']
+    POLITICAL_GENERAL = ['political_general', 'política general', 'debate político']
 
 
 class MediaExtensions:

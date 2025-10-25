@@ -212,7 +212,13 @@
                                         'danger' if category.category == 'hate_speech' else
                                         'warning' if category.category == 'disinformation' else
                                         'dark' if category.category == 'conspiracy_theory' else
-                                        'primary' if category.category == 'far_right_bias' else
+                                        'danger' if category.category == 'anti_immigration' else
+                                        'danger' if category.category == 'anti_lgbtq' else
+                                        'danger' if category.category == 'anti_feminism' else
+                                        'primary' if category.category == 'nationalism' else
+                                        'primary' if category.category == 'anti_government' else
+                                        'dark' if category.category == 'historical_revisionism' else
+                                        'info' if category.category == 'political_general' else
                                         'success' if category.category == 'call_to_action' else
                                         'secondary' if category.category == 'general' else
                                         'info'
@@ -266,7 +272,13 @@
                                                 'danger' if analysis.category == 'hate_speech' else
                                                 'warning' if analysis.category == 'disinformation' else
                                                 'dark' if analysis.category == 'conspiracy_theory' else
-                                                'primary' if analysis.category == 'far_right_bias' else
+                                                'danger' if analysis.category == 'anti_immigration' else
+                                                'danger' if analysis.category == 'anti_lgbtq' else
+                                                'danger' if analysis.category == 'anti_feminism' else
+                                                'primary' if analysis.category == 'nationalism' else
+                                                'primary' if analysis.category == 'anti_government' else
+                                                'dark' if analysis.category == 'historical_revisionism' else
+                                                'info' if analysis.category == 'political_general' else
                                                 'success' if analysis.category == 'call_to_action' else
                                                 'secondary' if analysis.category == 'general' else
                                                 'info'

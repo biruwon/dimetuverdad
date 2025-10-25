@@ -12,15 +12,26 @@ from typing import List, Dict, Optional
 
 class Categories:
     """Content analysis categories with consistent naming across all components."""
+    # Identity-based hate & discrimination
     HATE_SPEECH = "hate_speech"
-    DISINFORMATION = "disinformation" 
+    ANTI_IMMIGRATION = "anti_immigration"  # NEW - "invasion", replacement theory
+    ANTI_LGBTQ = "anti_lgbtq"  # NEW - "gender ideology", anti-trans
+    ANTI_FEMINISM = "anti_feminism"  # NEW - "feminazis", traditional gender roles
+    
+    # Information warfare
+    DISINFORMATION = "disinformation"
     CONSPIRACY_THEORY = "conspiracy_theory"
-    FAR_RIGHT_BIAS = "far_right_bias"
+    
+    # Political mobilization
     CALL_TO_ACTION = "call_to_action"
+    
+    # Political categories
     NATIONALISM = "nationalism"
     ANTI_GOVERNMENT = "anti_government"
     HISTORICAL_REVISIONISM = "historical_revisionism"
     POLITICAL_GENERAL = "political_general"
+    
+    # Fallback
     GENERAL = "general"
     
     @classmethod
@@ -28,9 +39,11 @@ class Categories:
         """Get all main content categories (excluding special internal categories)."""
         return [
             cls.HATE_SPEECH,
+            cls.ANTI_IMMIGRATION,
+            cls.ANTI_LGBTQ,
+            cls.ANTI_FEMINISM,
             cls.DISINFORMATION,
             cls.CONSPIRACY_THEORY,
-            cls.FAR_RIGHT_BIAS,
             cls.CALL_TO_ACTION,
             cls.NATIONALISM,
             cls.ANTI_GOVERNMENT,
@@ -71,17 +84,56 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente discurso de odio y discriminación."
     ),
     
+    Categories.ANTI_IMMIGRATION: CategoryInfo(
+        name=Categories.ANTI_IMMIGRATION,
+        display_name="Anti-Inmigración",
+        description="Comunicación que presenta la inmigración como amenaza existencial a la identidad nacional, economía o cultura. Características: narrativas de 'invasión', teoría de la 'gran sustitución', retórica de incompatibilidad cultural, obsesión por el control fronterizo.",
+        focus_area="análisis de retórica anti-inmigración",
+        analysis_questions=[
+            "¿Se presenta la inmigración como amenaza existencial?",
+            "¿Hay narrativas de invasión o sustitución cultural?",
+            "¿Se cuestiona la compatibilidad cultural de inmigrantes?"
+        ],
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-inmigración y narrativas xenófobas."
+    ),
+    
+    Categories.ANTI_LGBTQ: CategoryInfo(
+        name=Categories.ANTI_LGBTQ,
+        display_name="Anti-LGBTQ",
+        description="Comunicación que ataca la identidad y derechos LGBTQ presentándolos como amenaza a valores tradicionales. Características: retórica de 'ideología de género', acusaciones de pedofilia, defensa de roles de género tradicionales, narrativas de 'amenaza a los niños'.",
+        focus_area="análisis de retórica anti-LGBTQ",
+        analysis_questions=[
+            "¿Se ataca la identidad o derechos LGBTQ?",
+            "¿Hay retórica de ideología de género?",
+            "¿Se presentan acusaciones infundadas contra la comunidad LGBTQ?"
+        ],
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-LGBTQ y retórica homofóbica/transfóbica."
+    ),
+    
+    Categories.ANTI_FEMINISM: CategoryInfo(
+        name=Categories.ANTI_FEMINISM,
+        display_name="Anti-Feminismo",
+        description="Comunicación que ataca el feminismo y la igualdad de género presentándolos como amenaza a la familia tradicional. Características: retórica de 'feminazis', oposición a leyes de igualdad, promoción de roles de género tradicionales, narrativas de 'falsas acusaciones de violación'.",
+        focus_area="análisis de retórica anti-feminista",
+        analysis_questions=[
+            "¿Se ataca el movimiento feminista o la igualdad de género?",
+            "¿Hay retórica de feminazis o anti-igualdad?",
+            "¿Se promueven roles de género tradicionales como superiores?"
+        ],
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-feminista y retórica misógina."
+    ),
+    
     Categories.DISINFORMATION: CategoryInfo(
         name=Categories.DISINFORMATION,
-        display_name="Desinformación", 
-        description="Comunicación que presenta afirmaciones fácticas sin evidencia documentada. Características: datos sin fuente verificable, interpretaciones especulativas presentadas como hechos, críticas sistemáticas a instituciones informativas.",
-        focus_area="detección de desinformación",
+        display_name="Desinformación",
+        description="Comunicación que difunde información falsa o manipulada sobre hechos verificables. Características: afirmaciones sin fuentes creíbles, manipulación de datos estadísticos, presentación de opiniones como hechos, descontextualización intencional.",
+        focus_area="detección de información falsa",
         analysis_questions=[
-            "¿Hay afirmaciones que parecen falsas o sin evidencia?",
-            "¿Se presentan datos sin fuentes verificables?",
-            "¿Qué elementos requieren verificación factual?"
+            "¿Se presentan afirmaciones sin fuentes verificables?",
+            "¿Hay manipulación de datos o estadísticas?",
+            "¿Se descontextualizan hechos para crear narrativas falsas?"
         ],
-        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza la veracidad y detecta posible desinformación."
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido con información falsa o manipulada."
     ),
     
     Categories.CONSPIRACY_THEORY: CategoryInfo(
@@ -95,19 +147,6 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Se fomenta desconfianza infundada en instituciones?"
         ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza teorías conspiratorias y narrativas no fundamentadas."
-    ),
-    
-    Categories.FAR_RIGHT_BIAS: CategoryInfo(
-        name=Categories.FAR_RIGHT_BIAS,
-        display_name="Sesgo de Extrema Derecha",
-        description="Comunicación con marcos interpretativos de extrema derecha que presenta transformaciones sociales como amenazas a valores tradicionales. Características: lenguaje de pérdida cultural, narrativas de amenaza identitaria, marcos de preservación de tradiciones.",
-        focus_area="análisis de sesgo político de extrema derecha",
-        analysis_questions=[
-            "¿Qué orientación política de extrema derecha refleja el mensaje?",
-            "¿Hay elementos de propaganda o narrativas extremistas?",
-            "¿Se presentan marcos interpretativos sesgados?"
-        ],
-        system_prompt=f"{BASE_SYSTEM_CONTEXT} Evalúa el sesgo político y la retórica de extrema derecha."
     ),
     
     Categories.CALL_TO_ACTION: CategoryInfo(
@@ -225,39 +264,3 @@ def get_category_system_prompt(category: str) -> str:
 def validate_category(category: str) -> bool:
     """Check if a category is valid."""
     return category in CATEGORY_INFO
-
-# ============================================================================
-# CLASSIFICATION PROMPTS MAPPING
-# ============================================================================
-
-# Mapping for classification prompts (used in enhanced_prompts.py)
-CLASSIFICATION_PROMPT_MAPPINGS = {
-    "PASO 1 - Detectar contenido político específico:": [
-        f"- 'ROJOS', 'comunistas', criticas a Vox/partidos → {Categories.FAR_RIGHT_BIAS}",
-        f"- 'agenda WOKE', 'progres', 'feminazis' → {Categories.FAR_RIGHT_BIAS}",
-        f"- 'invasión', 'nos están borrando' + inmigración → {Categories.FAR_RIGHT_BIAS}",
-        f"- 'RETIRAD', 'MOVILIZAOS', 'ORGANIZARSE' → {Categories.CALL_TO_ACTION}",
-        f"- 'BOICOT', organizarse contra empresas → {Categories.CALL_TO_ACTION}",
-        f"- Narrativas de sustitución cultural → {Categories.FAR_RIGHT_BIAS}",
-        f"- 'élites', 'agenda globalista' → {Categories.CONSPIRACY_THEORY}",
-    ],
-    "PASO 2 - Si contiene insultos/slurs directos:": [
-        f"- 'moros', 'sudacas', 'feminazis', 'maricas' → {Categories.HATE_SPEECH}",
-        f"- 'genéticamente ladrones', 'parásitos' → {Categories.HATE_SPEECH}",
-        f"- 'pedofilia LGBTI' → {Categories.HATE_SPEECH}",
-    ],
-    "PASO 3 - Si no hay frases exactas, buscar patrones conceptuales:": [
-        f"- Referencias vagas a estudios/informes sin especificar → {Categories.DISINFORMATION}",
-        f"- Preguntar sobre 'coincidencias' o beneficios sistemáticos → {Categories.CONSPIRACY_THEORY}",
-        f"- Críticas a instituciones educativas por sesgo ideológico → {Categories.FAR_RIGHT_BIAS}",
-        f"- Incompatibilidad cultural entre grupos → {Categories.HATE_SPEECH}",
-        f"- Llamadas a acción defensiva o electoral → {Categories.CALL_TO_ACTION}",
-        f"- Generalizaciones negativas sobre grupos ('esa gente', 'ya sabéis cómo son') → {Categories.HATE_SPEECH}",
-        f"- Estereotipos de género tradicionales ('las mujeres no saben ser madres') → {Categories.HATE_SPEECH}",
-        f"- Comentarios despectivos sobre comportamientos de grupos → {Categories.HATE_SPEECH}",
-    ],
-    "PASO 4 - Solo si NO hay NINGÚN patrón problemático:": [
-        f"- Contenido sobre clima, familia, comida, deportes personales → {Categories.GENERAL}",
-    ]
-}
-

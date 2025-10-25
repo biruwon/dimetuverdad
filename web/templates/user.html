@@ -70,7 +70,13 @@
         .tweet-card.analysis-hate_speech { border-left-color: #dc3545; }
         .tweet-card.analysis-disinformation { border-left-color: #fd7e14; }
         .tweet-card.analysis-conspiracy_theory { border-left-color: #6f42c1; }
-        .tweet-card.analysis-far_right_bias { border-left-color: #e83e8c; }
+        .tweet-card.analysis-anti_immigration { border-left-color: #dc3545; }
+        .tweet-card.analysis-anti_lgbtq { border-left-color: #dc3545; }
+        .tweet-card.analysis-anti_feminism { border-left-color: #dc3545; }
+        .tweet-card.analysis-nationalism { border-left-color: #007bff; }
+        .tweet-card.analysis-anti_government { border-left-color: #007bff; }
+        .tweet-card.analysis-historical_revisionism { border-left-color: #343a40; }
+        .tweet-card.analysis-political_general { border-left-color: #17a2b8; }
         .tweet-card.analysis-call_to_action { border-left-color: #20c997; }
         .tweet-card.analysis-nationalism { border-left-color: #795548; }
         .tweet-card.analysis-anti_government { border-left-color: #607d8b; }
@@ -103,7 +109,13 @@
         .category-hate_speech { background-color: #dc3545; }
         .category-disinformation { background-color: #fd7e14; }
         .category-conspiracy_theory { background-color: #6f42c1; }
-        .category-far_right_bias { background-color: #e83e8c; }
+        .category-anti_immigration { background-color: #dc3545; }
+        .category-anti_lgbtq { background-color: #dc3545; }
+        .category-anti_feminism { background-color: #dc3545; }
+        .category-nationalism { background-color: #007bff; }
+        .category-anti_government { background-color: #007bff; }
+        .category-historical_revisionism { background-color: #343a40; }
+        .category-political_general { background-color: #17a2b8; }
         .category-call_to_action { background-color: #20c997; }
         .category-nationalism { background-color: #795548; }
         .category-anti_government { background-color: #607d8b; }
@@ -333,8 +345,10 @@
             color: white !important;
         }
 
-        .category-far_right_bias.category-badge {
-            background: linear-gradient(135deg, var(--bs-primary, #0d6efd) 0%, var(--bs-primary, #0d6efd) 100%) !important;
+        .category-anti_immigration.category-badge,
+        .category-anti_lgbtq.category-badge,
+        .category-anti_feminism.category-badge {
+            background: linear-gradient(135deg, var(--bs-danger, #dc3545) 0%, var(--bs-danger, #dc3545) 100%) !important;
             color: white !important;
         }
 
@@ -558,8 +572,23 @@
                                         <a href="?category=conspiracy_theory" class="btn btn-sm {% if current_category == 'conspiracy_theory' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
                                             🕵️ Consp
                                         </a>
-                                        <a href="?category=far_right_bias" class="btn btn-sm {% if current_category == 'far_right_bias' %}btn-info{% else %}btn-outline-info{% endif %}">
-                                            ⚡ Extrema
+                                        <a href="?category=anti_immigration" class="btn btn-sm {% if current_category == 'anti_immigration' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                                            🚫 Anti-Imm
+                                        </a>
+                                        <a href="?category=anti_lgbtq" class="btn btn-sm {% if current_category == 'anti_lgbtq' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                                            🏳️‍🌈 Anti-LGBTQ
+                                        </a>
+                                        <a href="?category=anti_feminism" class="btn btn-sm {% if current_category == 'anti_feminism' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                                            👩 Anti-Fem
+                                        </a>
+                                        <a href="?category=nationalism" class="btn btn-sm {% if current_category == 'nationalism' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                                            🇪🇸 Nacional
+                                        </a>
+                                        <a href="?category=anti_government" class="btn btn-sm {% if current_category == 'anti_government' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                                            🏛️ Anti-Gov
+                                        </a>
+                                        <a href="?category=historical_revisionism" class="btn btn-sm {% if current_category == 'historical_revisionism' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                                            📜 Revision
                                         </a>
                                         <a href="?category=call_to_action" class="btn btn-sm {% if current_category == 'call_to_action' %}btn-success{% else %}btn-outline-success{% endif %}">
                                             📢 Acción
@@ -704,7 +733,12 @@
                                 <option value="hate_speech">🚫 Discurso de Odio</option>
                                 <option value="disinformation">❌ Desinformación</option>
                                 <option value="conspiracy_theory">🕵️ Teoría de Conspiración</option>
-                                <option value="far_right_bias">⚡ Sesgo de Extrema Derecha</option>
+                                <option value="anti_immigration">🚫 Anti-Inmigración</option>
+                                <option value="anti_lgbtq">🏳️‍🌈 Anti-LGBTQ</option>
+                                <option value="anti_feminism">👩 Anti-Feminismo</option>
+                                <option value="nationalism">🇪🇸 Nacionalismo</option>
+                                <option value="anti_government">🏛️ Anti-Gubernamental</option>
+                                <option value="historical_revisionism">📜 Revisionismo Histórico</option>
                                 <option value="call_to_action">📢 Llamada a Acción</option>
                                 <option value="political_general">🗳️ Política General</option>
                             </select>

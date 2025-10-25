@@ -65,12 +65,14 @@ Category Detection: 13 categories including:
   • hate_speech (highest priority)
   • disinformation
   • conspiracy_theory
-  • far_right_bias
-  • call_to_action
+  • anti_immigration
+  • anti_lgbtq
+  • anti_feminism
   • nationalism
   • anti_government
   • historical_revisionism
   • political_general
+  • call_to_action
   • general (fallback)
   ↓
 Output: AnalysisResult with categories, pattern matches, political context
@@ -80,9 +82,14 @@ Output: AnalysisResult with categories, pattern matches, political context
 - **Hate Speech**: Xenophobic language, dehumanization, violence threats, anti-immigrant scapegoating
 - **Disinformation**: False medical/scientific claims, fabricated facts, conspiracy claims
 - **Conspiracy Theory**: Hidden agenda narratives, anti-institutional content, cabal theories
-- **Far-Right Bias**: Extremist political rhetoric, nationalist narratives, anti-establishment messaging
+- **Anti-Immigration**: Xenophobic rhetoric, anti-immigrant narratives, invasion metaphors
+- **Anti-LGBTQ**: Attacks on LGBTQ community, gender ideology criticism, traditional values defense
+- **Anti-Feminism**: Anti-feminist rhetoric, traditional gender roles, patriarchy defense
+- **Nationalism**: National pride, cultural preservation, patriotic narratives
+- **Anti-Government**: Government criticism, institutional distrust, anti-establishment views
+- **Historical Revisionism**: Historical reinterpretation, authoritarian regime glorification
+- **Political General**: General political discourse, neutral political commentary
 - **Call to Action**: Mobilization calls, protest organization, organized activities
-- **Additional Categories**: Nationalism, Anti-Government, Historical Revisionism, Political General
 
 ### Stage 2: Content Categorization
 **Method:** `_categorize_content()`
@@ -101,12 +108,17 @@ NO → LLM Fallback Available?
 
 **Category Priority (when multiple patterns detected):**
 1. `hate_speech` (highest priority)
-2. `disinformation`
-3. `conspiracy_theory`
-4. `far_right_bias`
-5. `call_to_action`
-6. Other categories
-7. `general` (lowest priority)
+2. `anti_immigration`
+3. `anti_lgbtq`
+4. `anti_feminism`
+5. `disinformation`
+6. `conspiracy_theory`
+7. `call_to_action`
+8. `nationalism`
+9. `anti_government`
+10. `historical_revisionism`
+11. `political_general`
+12. `general` (lowest priority)
 
 ### Stage 3: LLM Explanation Generation
 **Component:** `EnhancedLLMPipeline`
@@ -323,50 +335,59 @@ def get_tweets_for_analysis(self, username=None, max_tweets=None, force_reanalyz
    - Violence threats, eliminationist language
    - **Highest Priority**: Overrides all other categories
 
-2. **`disinformation`** ❌
+2. **`anti_immigration`** 🚫
+   - Xenophobic rhetoric, anti-immigrant narratives
+   - Invasion metaphors, border security alarmism
+   - Cultural replacement fears, demographic concerns
+
+3. **`anti_lgbtq`** 🏳️‍🌈
+   - Attacks on LGBTQ community and rights
+   - Gender ideology criticism, traditional values defense
+   - Anti-trans rhetoric, conversion therapy promotion
+
+4. **`anti_feminism`** 👩
+   - Anti-feminist rhetoric, traditional gender roles
+   - Patriarchy defense, masculinity crisis narratives
+   - Criticism of equality movements
+
+5. **`disinformation`** ❌
    - False medical/scientific claims
    - Fabricated statistics
    - Misleading information
    - Conspiracy claims presented as fact
 
-3. **`conspiracy_theory`** 🕵️
+6. **`conspiracy_theory`** 🕵️
    - Hidden agenda narratives
    - Anti-institutional claims
    - "Deep state" / cabal theories
    - Secretive elite control narratives
 
-4. **`far_right_bias`** ⚡
-   - Extremist political rhetoric
-   - Nationalist narratives
-   - Anti-establishment messaging
-   - Ultra-conservative positions
-
-5. **`call_to_action`** 📢
+7. **`call_to_action`** 📢
    - Mobilization calls
    - Protest organization
    - Collective action requests
    - Event promotion
 
-6. **`nationalism`** 🏴
+8. **`nationalism`** 🇪�
    - National identity emphasis
    - Patriotic rhetoric
    - Cultural preservation themes
 
-7. **`anti_government`** 🏛️
+9. **`anti_government`** 🏛️
    - Government criticism
    - Anti-establishment views
    - Institutional distrust
 
-8. **`historical_revisionism`** 📜
-   - Reinterpretation of historical events
-   - Minimization of atrocities
-   - Glorification of authoritarian regimes
+10. **`historical_revisionism`** 📜
+    - Reinterpretation of historical events
+    - Minimization of atrocities
+    - Glorification of authoritarian regimes
 
-9. **`political_general`** 🗳️
-   - General political discourse
-   - Neutral political commentary
+11. **`political_general`** 🗳️
+    - General political discourse
+    - Neutral political commentary
 
-10. **`general`** ✅
+12. **`general`** ✅
     - Neutral content
     - No problematic patterns detected
     - **Fallback Category**: Default when no patterns match

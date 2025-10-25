@@ -610,12 +610,10 @@ async def _execute_analysis_tasks(tweets, analyzer_instance, analysis_sema, llm_
                 Categories.HATE_SPEECH: '🚫',
                 Categories.DISINFORMATION: '❌',
                 Categories.CONSPIRACY_THEORY: '🕵️',
-                Categories.FAR_RIGHT_BIAS: '⚡',
+                Categories.ANTI_IMMIGRATION: '🌍',
+                Categories.ANTI_LGBTQ: '🏳️‍🌈',
+                Categories.ANTI_FEMINISM: '👩',
                 Categories.CALL_TO_ACTION: '📢',
-                Categories.NATIONALISM: '🏴',
-                Categories.ANTI_GOVERNMENT: '🏛️',
-                Categories.HISTORICAL_REVISIONISM: '📜',
-                Categories.POLITICAL_GENERAL: '🗳️',
                 Categories.GENERAL: '✅'
             }.get(category, '❓')
             print(f"    {category_emoji} {category}")
@@ -685,7 +683,9 @@ def _print_analysis_summary(results, category_counts, tracker):
             Categories.HATE_SPEECH: '🚫',
             Categories.DISINFORMATION: '❌',
             Categories.CONSPIRACY_THEORY: '🕵️',
-            Categories.FAR_RIGHT_BIAS: '⚡',
+            Categories.ANTI_IMMIGRATION: '🌍',
+            Categories.ANTI_LGBTQ: '🏳️‍🌈',
+            Categories.ANTI_FEMINISM: '👩',
             Categories.CALL_TO_ACTION: '📢',
             Categories.GENERAL: '✅',
             'ERROR': '💥'

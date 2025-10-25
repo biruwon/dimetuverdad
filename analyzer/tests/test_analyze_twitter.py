@@ -53,14 +53,14 @@ class TestContentAnalysis(unittest.TestCase):
             post_content="Test content",
             analysis_timestamp="2024-01-01T12:00:00",
             category=Categories.HATE_SPEECH,
-            categories_detected=[Categories.HATE_SPEECH, Categories.FAR_RIGHT_BIAS],
+            categories_detected=[Categories.HATE_SPEECH, Categories.ANTI_IMMIGRATION],
             pattern_matches=[{"matched_text": "test", "category": "hate_speech"}]
         )
 
         self.assertEqual(analysis.category, Categories.HATE_SPEECH)
         self.assertEqual(len(analysis.categories_detected), 2)
         self.assertTrue(analysis.has_multiple_categories)
-        self.assertEqual(analysis.get_secondary_categories(), [Categories.FAR_RIGHT_BIAS])
+        self.assertEqual(analysis.get_secondary_categories(), [Categories.ANTI_IMMIGRATION])
 
     def test_content_analysis_with_metrics(self):
         """Test ContentAnalysis with performance metrics."""

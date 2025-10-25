@@ -223,7 +223,73 @@ class TestFarRightDetection(unittest.TestCase):
         for text in test_cases:
             with self.subTest(text=text):
                 result = self.analyzer.analyze_content(text)
-                self.assertEqual(result.primary_category, Categories.FAR_RIGHT_BIAS)
+                self.assertEqual(result.primary_category, Categories.ANTI_GOVERNMENT)
+
+
+class TestAntiImmigrationDetection(unittest.TestCase):
+    """Test cases for anti-immigration pattern detection."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.analyzer = PatternAnalyzer()
+    
+    def test_anti_immigration_invasion_rhetoric(self):
+        """Test detection of immigration invasion narratives."""
+        test_cases = [
+            "Nos están inundando de inmigrantes",
+            "La invasión migratoria nos está borrando",
+            "Gran sustitución cultural en marcha",
+            "Nos están invadiendo"
+        ]
+        
+        for text in test_cases:
+            with self.subTest(text=text):
+                result = self.analyzer.analyze_content(text)
+                self.assertEqual(result.primary_category, Categories.ANTI_IMMIGRATION)
+
+
+class TestAntiLGBTQDetection(unittest.TestCase):
+    """Test cases for anti-LGBTQ pattern detection."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.analyzer = PatternAnalyzer()
+    
+    def test_anti_lgbtq_gender_ideology(self):
+        """Test detection of anti-LGBTQ gender ideology attacks."""
+        test_cases = [
+            "La ideología de género nos quiere adoctrinar",
+            "Quieren convertir a nuestros hijos con la agenda LGBT",
+            "Defensa de la familia tradicional contra el lobby gay",
+            "Los hombres con vestidos destruyen el deporte femenino"
+        ]
+        
+        for text in test_cases:
+            with self.subTest(text=text):
+                result = self.analyzer.analyze_content(text)
+                self.assertEqual(result.primary_category, Categories.ANTI_LGBTQ)
+
+
+class TestAntiFeminismDetection(unittest.TestCase):
+    """Test cases for anti-feminism pattern detection."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.analyzer = PatternAnalyzer()
+    
+    def test_anti_feminism_traditional_roles(self):
+        """Test detection of anti-feminism and traditional gender roles."""
+        test_cases = [
+            "Las feministas radicales están destruyendo la sociedad",
+            "Las mujeres en casa cocinando",
+            "El feminismo radical es odio puro",
+            "Falsas acusaciones de violación feministas"
+        ]
+        
+        for text in test_cases:
+            with self.subTest(text=text):
+                result = self.analyzer.analyze_content(text)
+                self.assertEqual(result.primary_category, Categories.ANTI_FEMINISM)
 
 
 class TestCallToActionDetection(unittest.TestCase):

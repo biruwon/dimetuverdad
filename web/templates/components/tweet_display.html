@@ -88,11 +88,13 @@
                     {% if category == 'hate_speech' %}🚫 Discurso de Odio
                     {% elif category == 'disinformation' %}❌ Desinformación
                     {% elif category == 'conspiracy_theory' %}🕵️ Conspiración
-                    {% elif category == 'far_right_bias' %}⚡ Sesgo Extremista
-                    {% elif category == 'call_to_action' %}📢 Llamada a Acción
-                    {% elif category == 'nationalism' %}🏴 Nacionalismo
+                    {% elif category == 'anti_immigration' %}🚫 Anti-Inmigración
+                    {% elif category == 'anti_lgbtq' %}🏳️‍🌈 Anti-LGBTQ
+                    {% elif category == 'anti_feminism' %}� Anti-Feminismo
+                    {% elif category == 'nationalism' %}�🇸 Nacionalismo
                     {% elif category == 'anti_government' %}🏛️ Anti-Gobierno
                     {% elif category == 'historical_revisionism' %}📜 Revisionismo Histórico
+                    {% elif category == 'call_to_action' %}📢 Llamada a Acción
                     {% elif category == 'political_general' %}🗳️ Política General
                     {% else %}✅ General
                     {% endif %}
@@ -112,9 +114,10 @@
                     {% if tweet.analysis_category == 'hate_speech' %}🚫 Discurso de Odio
                     {% elif tweet.analysis_category == 'disinformation' %}❌ Desinformación
                     {% elif tweet.analysis_category == 'conspiracy_theory' %}🕵️ Conspiración
-                    {% elif tweet.analysis_category == 'far_right_bias' %}⚡ Sesgo Extremista
-                    {% elif tweet.analysis_category == 'call_to_action' %}📢 Llamada a Acción
-                    {% elif tweet.analysis_category == 'nationalism' %}🏴 Nacionalismo
+                    {% elif tweet.analysis_category == 'anti_immigration' %}🚫 Anti-Inmigración
+                    {% elif tweet.analysis_category == 'anti_lgbtq' %}🏳️‍🌈 Anti-LGBTQ
+                    {% elif tweet.analysis_category == 'anti_feminism' %}👩 Anti-Feminismo
+                    {% elif tweet.analysis_category == 'nationalism' %}🇪� Nacionalismo
                     {% elif tweet.analysis_category == 'anti_government' %}🏛️ Anti-Gobierno
                     {% elif tweet.analysis_category == 'historical_revisionism' %}📜 Revisionismo Histórico
                     {% elif tweet.analysis_category == 'political_general' %}🗳️ Política General

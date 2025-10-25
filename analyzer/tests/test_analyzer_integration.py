@@ -103,15 +103,15 @@ class TestTriggerConditions(unittest.TestCase):
         result = self.analyzer._should_trigger_evidence_retrieval(analysis, "Test content")
         self.assertTrue(result)
 
-    def test_should_trigger_evidence_retrieval_far_right_bias(self):
-        """Test trigger conditions for far right bias category."""
+    def test_should_trigger_evidence_retrieval_anti_government(self):
+        """Test trigger conditions for anti-government category."""
         analysis = ContentAnalysis(
             post_id="test_123",
             post_url="https://twitter.com/test/status/test_123",
             author_username="test_user",
             post_content="Test content",
             analysis_timestamp="2024-01-01T12:00:00",
-            category=Categories.FAR_RIGHT_BIAS
+            category=Categories.ANTI_GOVERNMENT
         )
 
         result = self.analyzer._should_trigger_evidence_retrieval(analysis, "Test content")

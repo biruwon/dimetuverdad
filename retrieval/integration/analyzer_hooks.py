@@ -46,7 +46,7 @@ class AnalyzerHooks:
 
         # Default trigger configuration
         self.default_trigger = AnalysisTrigger(
-            content_categories=['disinformation', 'conspiracy_theory', 'far_right_bias', 'political_general', 'call_to_action'],
+            content_categories=['disinformation', 'conspiracy_theory', 'anti_immigration', 'anti_government', 'political_general', 'call_to_action'],
             confidence_threshold=0.4,  # Lower threshold to catch more cases
             keywords=[
                 # EXISTING - Keep all existing keywords

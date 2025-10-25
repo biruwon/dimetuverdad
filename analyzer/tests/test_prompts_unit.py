@@ -37,7 +37,9 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIn("HATE_SPEECH", result)
         self.assertIn("DISINFORMATION", result)
         self.assertIn("CONSPIRACY_THEORY", result)
-        self.assertIn("FAR_RIGHT_BIAS", result)
+        self.assertIn("ANTI_IMMIGRATION", result)
+        self.assertIn("ANTI_LGBTQ", result)
+        self.assertIn("ANTI_FEMINISM", result)
         self.assertIn("**call_to_action**", result)
         self.assertIn("GENERAL", result)
 
@@ -60,7 +62,9 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIn("HATE_SPEECH - PRIORIDAD MÁXIMA", result)
         self.assertIn("DISINFORMATION - INFORMACIÓN FALSA", result)
         self.assertIn("CONSPIRACY_THEORY - TEORÍAS SIN EVIDENCIA", result)
-        self.assertIn("FAR_RIGHT_BIAS - RETÓRICA EXTREMISTA", result)
+        self.assertIn("ANTI_IMMIGRATION - RETÓRICA ANTI-INMIGRACIÓN", result)
+        self.assertIn("ANTI_LGBTQ - ATAQUES A LA COMUNIDAD LGBTQ", result)
+        self.assertIn("ANTI_FEMINISM - RETÓRICA ANTI-FEMINISTA", result)
         self.assertIn("**call_to_action** (MOVILIZACIÓN", result)
         self.assertIn("GENERAL - CONTENIDO REALMENTE NEUTRAL", result)
 
@@ -175,7 +179,7 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         self.assertIn("**hate_speech**", result)
         self.assertIn("**disinformation**", result)
         self.assertIn("conspiracy_theory", result)
-        self.assertIn("**far_right_bias**", result)
+        self.assertIn("**anti_government**", result)
         self.assertIn("call_to_action", result)
         self.assertIn("general", result)
 

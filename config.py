@@ -103,10 +103,15 @@ PORT = int(os.environ.get('FLASK_PORT', '5000'))
 ANALYSIS_CATEGORIES = [
     'general',
     'hate_speech',
+    'anti_immigration',
+    'anti_lgbtq',
+    'anti_feminism',
     'disinformation',
     'conspiracy_theory',
-    'far_right_bias',
     'call_to_action',
+    'nationalism',
+    'anti_government',
+    'historical_revisionism',
     'political_general'
 ]
 

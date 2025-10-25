@@ -95,7 +95,7 @@ class TestContentAnalysis(unittest.TestCase):
             post_content="Test content",
             analysis_timestamp="2024-01-01T00:00:00Z",
             category="hate_speech",
-            categories_detected=["hate_speech", "far_right_bias"]
+            categories_detected=["hate_speech", "anti_immigration"]
         )
 
         self.assertTrue(analysis.has_multiple_categories)
@@ -124,11 +124,11 @@ class TestContentAnalysis(unittest.TestCase):
             post_content="Test content",
             analysis_timestamp="2024-01-01T00:00:00Z",
             category="hate_speech",
-            categories_detected=["hate_speech", "far_right_bias", "call_to_action"]
+            categories_detected=["hate_speech", "anti_immigration", "call_to_action"]
         )
 
         secondary = analysis.get_secondary_categories()
-        self.assertEqual(set(secondary), {"far_right_bias", "call_to_action"})
+        self.assertEqual(set(secondary), {"anti_immigration", "call_to_action"})
         self.assertNotIn("hate_speech", secondary)
 
     def test_get_secondary_categories_primary_not_in_list(self):
@@ -140,11 +140,11 @@ class TestContentAnalysis(unittest.TestCase):
             post_content="Test content",
             analysis_timestamp="2024-01-01T00:00:00Z",
             category="hate_speech",
-            categories_detected=["far_right_bias", "call_to_action"]
+            categories_detected=["anti_immigration", "call_to_action"]
         )
 
         secondary = analysis.get_secondary_categories()
-        self.assertEqual(set(secondary), {"far_right_bias", "call_to_action"})
+        self.assertEqual(set(secondary), {"anti_immigration", "call_to_action"})
 
     def test_init_with_all_fields(self):
         """Test ContentAnalysis initialization with all fields provided."""
@@ -155,7 +155,7 @@ class TestContentAnalysis(unittest.TestCase):
             post_content="Test content",
             analysis_timestamp="2024-01-01T00:00:00Z",
             category="hate_speech",
-            categories_detected=["hate_speech", "far_right_bias"],
+            categories_detected=["hate_speech", "anti_immigration"],
             local_explanation="This content shows hate speech",
             analysis_stages="pattern->local_llm",
             media_urls=["https://example.com/image.jpg"],
@@ -172,7 +172,7 @@ class TestContentAnalysis(unittest.TestCase):
 
         self.assertEqual(analysis.post_id, "123")
         self.assertEqual(analysis.category, "hate_speech")
-        self.assertEqual(analysis.categories_detected, ["hate_speech", "far_right_bias"])
+        self.assertEqual(analysis.categories_detected, ["hate_speech", "anti_immigration"])
         self.assertEqual(analysis.local_explanation, "This content shows hate speech")
         self.assertEqual(analysis.analysis_stages, "pattern->local_llm")  # Test actual value passed in
         self.assertEqual(analysis.media_urls, ["https://example.com/image.jpg"])

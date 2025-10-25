@@ -22,9 +22,11 @@ class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
         
         # Should contain all major categories
         self.assertIn("hate_speech", result)
+        self.assertIn("anti_immigration", result)
+        self.assertIn("anti_lgbtq", result)
+        self.assertIn("anti_feminism", result)
         self.assertIn("disinformation", result)
         self.assertIn("conspiracy_theory", result)
-        self.assertIn("far_right_bias", result)
         self.assertIn("call_to_action", result)
         self.assertIn("general", result)
 
@@ -42,9 +44,11 @@ class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
         
         # Should mention detection categories
         self.assertIn("HATE_SPEECH", result)
+        self.assertIn("ANTI_IMMIGRATION", result)
+        self.assertIn("ANTI_LGBTQ", result)
+        self.assertIn("ANTI_FEMINISM", result)
         self.assertIn("DISINFORMATION", result)
         self.assertIn("CONSPIRACY_THEORY", result)
-        self.assertIn("FAR_RIGHT_BIAS", result)
         self.assertIn("**call_to_action**", result)
         self.assertIn("GENERAL", result)
         
@@ -120,9 +124,11 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         
         # Should list all major categories
         self.assertIn("hate_speech", result)
+        self.assertIn("anti_immigration", result)
+        self.assertIn("anti_lgbtq", result)
+        self.assertIn("anti_feminism", result)
         self.assertIn("disinformation", result)
         self.assertIn("conspiracy_theory", result)
-        self.assertIn("far_right_bias", result)
         self.assertIn("call_to_action", result)
         self.assertIn("general", result)
         
@@ -167,16 +173,82 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         self.assertIn("teoría conspirativa", result.lower())
         self.assertIn("agenda secreta", result.lower())
 
-    def test_generate_explanation_prompt_far_right(self):
-        """Test explanation prompt for far-right bias category."""
+    def test_generate_explanation_prompt_anti_government(self):
+        """Test explanation prompt for anti-government category."""
         result = self.generator.generate_explanation_prompt(
             "Los rojos quieren destruir España",
-            Categories.FAR_RIGHT_BIAS
+            Categories.ANTI_GOVERNMENT
         )
         
-        # Should have the category-specific explanation structure for far-right bias
-        self.assertIn("extrema derecha", result.lower())
-        self.assertIn("retórica nacionalista", result.lower())
+        # Should have the category-specific explanation structure for anti-government
+        self.assertIn("anti-gubernamental", result.lower())
+        self.assertIn("legitimidad del gobierno", result.lower())
+
+    def test_generate_explanation_prompt_anti_immigration(self):
+        """Test explanation prompt for anti-immigration category."""
+        result = self.generator.generate_explanation_prompt(
+            "Los inmigrantes están invadiendo nuestro país",
+            Categories.ANTI_IMMIGRATION
+        )
+        
+        # Should have the category-specific explanation structure for anti-immigration
+        self.assertIn("retórica anti-inmigración", result.lower())
+        self.assertIn("amenaza existencial", result.lower())
+
+    def test_generate_explanation_prompt_anti_lgbtq(self):
+        """Test explanation prompt for anti-LGBTQ category."""
+        result = self.generator.generate_explanation_prompt(
+            "La ideología de género adoctrina a los niños",
+            Categories.ANTI_LGBTQ
+        )
+        
+        # Should have the category-specific explanation structure for anti-LGBTQ
+        self.assertIn("comunidad lgbtq", result.lower())
+        self.assertIn("diversidad de género", result.lower())
+
+    def test_generate_explanation_prompt_anti_feminism(self):
+        """Test explanation prompt for anti-feminism category."""
+        result = self.generator.generate_explanation_prompt(
+            "Las feminazis quieren destruir la familia tradicional",
+            Categories.ANTI_FEMINISM
+        )
+        
+        # Should have the category-specific explanation structure for anti-feminism
+        self.assertIn("feminista", result.lower())
+        self.assertIn("igualdad de género", result.lower())
+
+    def test_generate_explanation_prompt_nationalism(self):
+        """Test explanation prompt for nationalism category."""
+        result = self.generator.generate_explanation_prompt(
+            "España es superior a otros países",
+            Categories.NATIONALISM
+        )
+        
+        # Should have the category-specific explanation structure for nationalism
+        self.assertIn("nacionalismo", result.lower())
+        self.assertIn("orgullo nacional", result.lower())
+
+    def test_generate_explanation_prompt_historical_revisionism(self):
+        """Test explanation prompt for historical revisionism category."""
+        result = self.generator.generate_explanation_prompt(
+            "Franco salvó España de los comunistas",
+            Categories.HISTORICAL_REVISIONISM
+        )
+        
+        # Should have the category-specific explanation structure for historical revisionism
+        self.assertIn("revisionismo histórico", result.lower())
+        self.assertIn("regímenes autoritarios", result.lower())
+
+    def test_generate_explanation_prompt_political_general(self):
+        """Test explanation prompt for political general category."""
+        result = self.generator.generate_explanation_prompt(
+            "El gobierno debería bajar los impuestos",
+            Categories.POLITICAL_GENERAL
+        )
+        
+        # Should have the category-specific explanation structure for political general
+        self.assertIn("político general", result.lower())
+        self.assertIn("perspectivas políticas moderadas", result.lower())
 
     def test_generate_explanation_prompt_call_to_action(self):
         """Test explanation prompt for call to action category."""
@@ -225,7 +297,7 @@ class TestPromptContext(unittest.TestCase):
     def test_prompt_context_creation(self):
         """Test creating PromptContext instance."""
         context = PromptContext(
-            detected_categories=["hate_speech", "far_right_bias"],
+            detected_categories=["hate_speech", "anti_government"],
             political_topic="inmigración",
             uncertainty_areas=["Nivel de amenaza", "Intención"]
         )
@@ -315,15 +387,15 @@ class TestCrossCategoryPromptGeneration(unittest.TestCase):
         self.assertIn("lenguaje de odio", explanation_prompt.lower())
         self.assertIn("grupos específicos", explanation_prompt.lower())
         
-    def test_far_right_political_rhetoric(self):
-        """Test prompt generation for far-right political rhetoric."""
+    def test_anti_government_political_rhetoric(self):
+        """Test prompt generation for anti-government political rhetoric."""
         content = "El régimen socialista ha destruido España"
         
-        explanation_prompt = self.generator.generate_explanation_prompt(content, "far_right_bias")
+        explanation_prompt = self.generator.generate_explanation_prompt(content, "anti_government")
         
-        # Should have the category-specific explanation structure for far-right bias
-        self.assertIn("extrema derecha", explanation_prompt.lower())
-        self.assertIn("retórica nacionalista", explanation_prompt.lower())
+        # Should have the category-specific explanation structure for anti-government
+        self.assertIn("anti-gubernamental", explanation_prompt.lower())
+        self.assertIn("legitimidad del gobierno", explanation_prompt.lower())
 
 
 if __name__ == '__main__':

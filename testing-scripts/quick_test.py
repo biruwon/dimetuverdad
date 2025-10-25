@@ -31,14 +31,16 @@ Modes:
   Default: Fast pattern-based analysis only (~1-2 seconds)
   --llm:   Full analysis with LLM when needed (~30+ seconds)
 
-Categories:
+📊 Categories:
   🚫 hate_speech: Direct hate speech, slurs, dehumanization
+  🚫 anti_immigration: Anti-immigration rhetoric, xenophobia
+  🚫 anti_lgbtq: Anti-LGBTQ attacks, gender ideology criticism
+  🚫 anti_feminism: Anti-feminist rhetoric, traditional gender roles
   ❌ disinformation: False claims, misleading information
   🕵️ conspiracy_theory: Conspiracy theories, hidden agendas
-  ⚡ far_right_bias: Far-right political bias, extremist views
   📢 call_to_action: Mobilization calls, organized actions
   🏴 nationalism: Nationalist rhetoric, cultural superiority
-  🏛️ anti_government: Anti-institutional, anti-system discourse  
+  🏛️ anti_government: Anti-institutional, anti-system discourse
   📜 historical_revisionism: Historical revisionism, denial
   🗳️ political_general: General political discourse
   ✅ general: Neutral, non-problematic content
@@ -182,9 +184,11 @@ def analyze_single_text(analyzer, text, json_output=False):
             # Add emoji indicators
             category_emojis = {
                 Categories.HATE_SPEECH: '🚫',
+                Categories.ANTI_IMMIGRATION: '🚫',
+                Categories.ANTI_LGBTQ: '🚫',
+                Categories.ANTI_FEMINISM: '🚫',
                 Categories.DISINFORMATION: '❌', 
                 Categories.CONSPIRACY_THEORY: '🕵️',
-                Categories.FAR_RIGHT_BIAS: '⚡',
                 Categories.CALL_TO_ACTION: '📢',
                 Categories.NATIONALISM: '🏴',
                 Categories.ANTI_GOVERNMENT: '🏛️',
@@ -219,9 +223,11 @@ def print_help():
   
 📊 Categories:
   🚫 hate_speech      - Direct hate speech, slurs
+  🚫 anti_immigration - Anti-immigration rhetoric, xenophobia
+  🚫 anti_lgbtq       - Anti-LGBTQ attacks, gender ideology
+  🚫 anti_feminism    - Anti-feminist rhetoric, traditional roles
   ❌ disinformation   - False claims, misleading info
   🕵️ conspiracy_theory - Conspiracy theories, hidden agendas  
-  ⚡ far_right_bias   - Far-right political bias
   📢 call_to_action   - Mobilization calls, actions
   🏴 nationalism      - Nationalist rhetoric, superiority
   🏛️ anti_government   - Anti-institutional discourse

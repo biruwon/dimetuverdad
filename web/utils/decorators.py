@@ -16,8 +16,10 @@ rate_limit_store = {}
 
 # Analysis categories for validation
 ANALYSIS_CATEGORIES = [
-    'hate_speech', 'disinformation', 'conspiracy_theory',
-    'far_right_bias', 'call_to_action', 'general'
+    'hate_speech', 'anti_immigration', 'anti_lgbtq', 'anti_feminism',
+    'disinformation', 'conspiracy_theory', 'call_to_action',
+    'nationalism', 'anti_government', 'historical_revisionism',
+    'political_general', 'general'
 ]
 
 

@@ -160,7 +160,7 @@ class TestPromptBuilding:
     def test_explanation_prompt_delegates(self, analyzer):
         """Test explanation prompt uses EnhancedPromptGenerator."""
         content = "Test content"
-        category = Categories.FAR_RIGHT_BIAS
+        category = Categories.ANTI_IMMIGRATION
         
         # Should delegate to prompt generator
         prompt = analyzer._build_explanation_prompt(content, category)
