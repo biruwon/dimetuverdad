@@ -4,6 +4,10 @@
 
 **MANDATORY**: EVERY code change MUST be tested IMMEDIATELY. No exceptions. See "MANDATORY Testing Workflow" section below for enforcement details.
 
+## ⚠️ CRITICAL DATABASE SAFETY REQUIREMENT ⚠️
+
+**MANDATORY**: NEVER execute destructive database commands without explicit user confirmation. Commands like `scripts/init_database.py --force`, `./run_in_venv.sh init-db --force`, or any database recreation/destruction operations WILL RESULT IN PERMANENT DATA LOSS. Always ask for user confirmation before running these commands and provide clear warnings about data loss.
+
 ## Project Overview
 
 **dimetuverdad** is a Spanish far-right content analysis system that combines pattern matching, machine learning, and LLMs to detect hate speech, disinformation, and extremist content in Twitter/X data. The system follows a **multi-stage pipeline**: data collection → storage → analysis → web visualization.

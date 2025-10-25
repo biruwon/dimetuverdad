@@ -124,7 +124,6 @@ class Analyzer:
                 external_analysis_used=stages.external,
                 media_urls=media_urls or [],
                 media_type=self._detect_media_type(media_urls) if media_urls else '',
-                multimodal_analysis=bool(media_urls and external_explanation),
                 pattern_matches=pattern_data.get('pattern_matches', []),
                 topic_classification=pattern_data.get('topic_classification', {}),
                 analysis_json=f'{{"stages": "{stages.to_string()}", "has_media": {bool(media_urls)}}}',
@@ -184,7 +183,6 @@ class Analyzer:
                 external_analysis_used=False,
                 media_urls=media_urls or [],
                 media_type="",
-                multimodal_analysis=False,
                 pattern_matches=[],
                 topic_classification={},
                 analysis_json=f'{{"error": "{str(e)[:500]}"}}'
@@ -276,7 +274,6 @@ class Analyzer:
                 external_analysis_used=analysis_result.external_analysis_used,
                 media_urls=analysis_result.media_urls,
                 media_type=analysis_result.media_type,
-                multimodal_analysis=analysis_result.multimodal_analysis,
                 pattern_matches=analysis_result.pattern_matches,
                 topic_classification=analysis_result.topic_classification,
                 analysis_json=analysis_result.analysis_json,
@@ -595,7 +592,6 @@ async def _execute_analysis_tasks(tweets, analyzer_instance, analysis_sema, llm_
                 external_analysis_used=result.external_analysis_used,
                 media_urls=getattr(result, 'media_urls', []),
                 media_type=getattr(result, 'media_type', ''),
-                multimodal_analysis=getattr(result, 'multimodal_analysis', False),
                 pattern_matches=getattr(result, 'pattern_matches', []),
                 topic_classification=getattr(result, 'topic_classification', {}),
                 analysis_json=getattr(result, 'analysis_json', '')

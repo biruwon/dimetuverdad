@@ -103,6 +103,14 @@ class ContentAnalysis:
     @classmethod
     def from_row(cls, row) -> 'ContentAnalysis':
         """Create ContentAnalysis instance from database row."""
+        # Parse media_urls from JSON if present
+        media_urls = []
+        if row.get('media_urls'):
+            try:
+                media_urls = json.loads(row['media_urls'])
+            except (json.JSONDecodeError, TypeError):
+                media_urls = []
+        
         return cls(
             post_id=row['post_id'],
             category=row['category'] or 'general',
@@ -113,7 +121,7 @@ class ContentAnalysis:
             author_username=row['author_username'] or '',
             analysis_timestamp=row['analysis_timestamp'] or '',
             categories_detected=row['categories_detected'],
-            multimodal_analysis=bool(row['multimodal_analysis']) if row['multimodal_analysis'] is not None else False
+            multimodal_analysis=bool(media_urls)
         )
 
     def to_dict(self) -> Dict[str, Any]:

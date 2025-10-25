@@ -160,7 +160,6 @@ class TestContentAnalysis(unittest.TestCase):
             analysis_stages="pattern->local_llm",
             media_urls=["https://example.com/image.jpg"],
             media_type="image",
-            multimodal_analysis=True,
             pattern_matches=[{"pattern": "hate", "score": 0.9}],
             topic_classification={"topic": "politics"},
             analysis_json='{"result": "test"}',

@@ -63,7 +63,6 @@ class TestContentAnalysisRepository:
             analysis_stages="pattern->local_llm",
             media_urls=["https://example.com/image.jpg"],
             media_type="image",
-            multimodal_analysis=True,
             pattern_matches=[],
             topic_classification={}
         )
@@ -80,7 +79,6 @@ class TestContentAnalysisRepository:
             assert row['post_id'] == "test_123"
             assert row['category'] == Categories.HATE_SPEECH
             assert row['local_explanation'] == "Test explanation"
-            assert row['multimodal_analysis'] == 1
 
     def test_save_fails_immediately_on_lock(self):
         """Test that save fails immediately on database lock (no retry logic)."""
@@ -164,7 +162,6 @@ class TestContentAnalysisRepository:
             analysis_stages="pattern->local_llm",
             media_urls=["https://example.com/image.jpg"],
             media_type="image",
-            multimodal_analysis=True,
             pattern_matches=[{"matched_text": "test", "category": "hate_speech"}],
             topic_classification={"topic": "politics"}
         )
@@ -371,7 +368,6 @@ class TestContentAnalysisRepository:
             assert row['category'] == "ERROR"
             assert "Analysis error occurred" in row['local_explanation']
             assert row['analysis_stages'] == "error"
-            assert row['multimodal_analysis'] == 1
 
     def test_save_failed_analysis_no_media(self):
         """Test saving failed analysis without media."""
@@ -404,7 +400,6 @@ class TestContentAnalysisRepository:
             row = cursor.fetchone()
 
             assert row is not None
-            assert row['multimodal_analysis'] == 0
 
     @patch('analyzer.repository.get_tweet_repository')
     def test_get_tweets_for_analysis_force_reanalyze(self, mock_tweet_repo):

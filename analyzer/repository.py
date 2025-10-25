@@ -56,9 +56,9 @@ class ContentAnalysisRepository:
                 (post_id, post_url, author_username, platform, post_content, category,
                  local_explanation, external_explanation, analysis_stages, external_analysis_used,
                  analysis_json, analysis_timestamp, categories_detected, 
-                 media_urls, media_type, multimodal_analysis,
+                 media_urls, media_type,
                  verification_data, verification_confidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     analysis.post_id,
                     analysis.post_url,
@@ -75,7 +75,6 @@ class ContentAnalysisRepository:
                     json.dumps(analysis.categories_detected, ensure_ascii=False),
                     json.dumps(analysis.media_urls, ensure_ascii=False),
                     analysis.media_type,
-                    analysis.multimodal_analysis,
                     json.dumps(analysis.verification_data, ensure_ascii=False, default=str) if analysis.verification_data else None,
                     analysis.verification_confidence
                 ))
@@ -225,7 +224,6 @@ class ContentAnalysisRepository:
                 external_analysis_used=False,
                 media_urls=media_urls or [],
                 media_type="",
-                multimodal_analysis=bool(media_urls),
                 pattern_matches=[],
                 topic_classification={},
                 analysis_json=f'{{"error": "{error_message[:500]}", "media_urls": {len(media_urls or [])}}}'
@@ -435,7 +433,6 @@ class ContentAnalysisRepository:
             external_analysis_used=bool(_g('external_analysis_used', False)),
             media_urls=json.loads(media_urls_raw or '[]'),
             media_type=_g('media_type', ''),
-            multimodal_analysis=bool(_g('multimodal_analysis')),
             pattern_matches=json.loads(analysis_json_raw).get('pattern_matches', []) if analysis_json_raw else [],
             topic_classification=json.loads(analysis_json_raw).get('topic_classification', {}) if analysis_json_raw else {},
             analysis_json=analysis_json_raw,

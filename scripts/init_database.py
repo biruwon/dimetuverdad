@@ -122,7 +122,6 @@ def create_fresh_database_schema(db_path: str = None):
             topic_classification TEXT,
             media_urls TEXT,
             media_type TEXT,
-            multimodal_analysis BOOLEAN DEFAULT FALSE,
             verification_data TEXT,
             verification_confidence REAL DEFAULT 0.0
         )
@@ -204,7 +203,6 @@ def create_fresh_database_schema(db_path: str = None):
             ('idx_content_analyses_timestamp', 'content_analyses', 'analysis_timestamp'),
             ('idx_content_analyses_stages', 'content_analyses', 'analysis_stages'),
             ('idx_content_analyses_external', 'content_analyses', 'external_analysis_used'),
-            ('idx_content_analyses_multimodal', 'content_analyses', 'multimodal_analysis'),
             ('idx_post_edits_post', 'post_edits', 'post_id'),
             ('idx_user_feedback_post', 'user_feedback', 'post_id'),
             ('idx_user_feedback_type', 'user_feedback', 'feedback_type'),
@@ -260,7 +258,7 @@ def verify_schema():
         ca_columns = [row['name'] for row in c.fetchall()]
         essential_ca_fields = [
             'post_id', 'author_username', 'platform', 'category', 'analysis_stages', 'analysis_timestamp',
-            'categories_detected', 'media_urls', 'media_type', 'multimodal_analysis',
+            'categories_detected', 'media_urls', 'media_type',
             'verification_data', 'verification_confidence'
         ]
         

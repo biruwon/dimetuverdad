@@ -535,7 +535,7 @@ def process_tweet_row(row) -> Dict[str, Any]:
         'external_analysis_used': row['external_analysis_used'],
         'analysis_timestamp': row['analysis_timestamp'],
         'categories_detected': categories_detected,
-        'multimodal_analysis': bool(row['multimodal_analysis']) if row['multimodal_analysis'] is not None else False,
+        'multimodal_analysis': bool(row['media_links']) if row['media_links'] else False,
         'is_deleted': row['is_deleted'],
         'is_edited': row['is_edited'],
         'rt_original_analyzed': row['rt_original_analyzed'],

@@ -30,7 +30,6 @@ class ContentAnalysis:
     # Media analysis fields
     media_urls: List[str] = None  # List of media URLs
     media_type: str = ""          # "image", "video", or ""
-    multimodal_analysis: bool = False  # Whether media was analyzed
 
     # Technical data
     pattern_matches: List[Dict] = None
@@ -59,6 +58,11 @@ class ContentAnalysis:
     def has_multiple_categories(self) -> bool:
         """Check if content was classified with multiple categories."""
         return len(self.categories_detected) > 1
+
+    @property
+    def multimodal_analysis(self) -> bool:
+        """Whether media was analyzed (derived from media_urls)."""
+        return bool(self.media_urls)
 
     def get_secondary_categories(self) -> List[str]:
         """Get all categories except the primary one."""
