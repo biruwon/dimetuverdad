@@ -21,7 +21,7 @@ class AnalyzerConfig:
     verbose: bool = ConfigDefaults.VERBOSE
 
     # External analysis settings
-    enable_external_analysis: bool = True  # Auto-trigger for non-general/political_general categories
+    enable_external_analysis: bool = False  # Auto-trigger for non-general/political_general categories
     external_analysis_timeout: float = 120.0  # Timeout for external analysis (Gemini)
 
     # Performance settings

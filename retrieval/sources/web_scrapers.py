@@ -46,6 +46,7 @@ class NewsScraper:
         self.name = name
         self.language = language
         self.http_client = create_http_client()
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     def search_articles(self, query: str, max_results: int = 5) -> List[ScrapedContent]:
         """

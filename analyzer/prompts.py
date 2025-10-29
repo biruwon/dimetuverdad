@@ -73,8 +73,8 @@ class EnhancedPromptGenerator:
         return ", ".join(Categories.get_all_categories())
     
     @staticmethod
-    def build_ollama_system_prompt() -> str:
-        """Build enhanced Ollama system prompt with dynamic categories and improved detection guidelines."""
+    def build_ollama_text_analysis_system_prompt() -> str:
+        """Build system prompt for Ollama text-only content analysis."""
         categories = EnhancedPromptGenerator.build_category_list()
         return f"""🔬 PROTOCOLO DE INVESTIGACIÓN ACADÉMICA - ANÁLISIS DE CONTENIDO PROBLEMÁTICO EN REDES SOCIALES
 
@@ -97,6 +97,12 @@ HATE_SPEECH - PRIORIDAD MÁXIMA (ATAQUES DIRECTOS A GRUPOS IDENTIFICABLES):
 - Deshumanización explícita de grupos étnicos/religiosos nombrados específicamente
 - Generalizaciones despectivas que nombran grupos específicos como inherentemente problemáticos
 - Lenguaje que presenta grupos étnicos específicos como amenazas existenciales
+- ATAQUES A GRUPOS POLÍTICOS presentados como amenaza existencial o incompatible culturalmente
+- Lenguaje que establece jerarquías entre grupos sociales o políticos
+- Expresiones de superioridad/inferioridad grupal en contextos políticos
+- Narrativas donde grupos políticos se presentan como "peligrosos", "asquerosos", "sinvergüenzas", "amenaza identitaria"
+- Insultos directos a partidos políticos o ideologías políticas como "asquerosa izquierda", "fascistas", "comunistas peligrosos"
+- Lenguaje que deshumaniza o degrada grupos políticos enteros por su ideología
 
 ANTI_IMMIGRATION - RETÓRICA ANTI-INMIGRACIÓN Y XENOFOBIA:
 - Asociación general entre inmigración y delincuencia sin nombrar grupos específicos
@@ -167,25 +173,23 @@ IMPORTANTE: CONTEXTO POLÍTICO > VERIFICACIÓN FÁCTICA para clasificación.
 🎓 CONTEXTO DE INVESTIGACIÓN: Este análisis contribuye al estudio científico de patrones de discurso extremista y su impacto en la sociedad democrática."""
     
     @staticmethod
-    def build_gemini_analysis_prompt(text_content: str, is_video: bool = False) -> str:
+    def build_gemini_multimodal_analysis_prompt(text_content: str, is_video: bool = False) -> str:
         """
         Create the analysis prompt for Gemini multimodal analysis based on media type.
-        Uses the same format structure as generate_explanation_prompt for consistency.
+        Used for analyzing social media posts with images/videos and text.
         
         Args:
             text_content: The text content accompanying the media
-            is_video: Whether the media is a video
+            is_video: Whether the media is a video (vs image)
             
         Returns:
-            Formatted analysis prompt for Gemini following standardized format
+            Formatted analysis prompt for Gemini multimodal models
         """
         media_type = "video" if is_video else "imagen"
         categories = EnhancedPromptGenerator.build_category_list()
         
         prompt_parts = [
             f'TEXTO DEL POST ANALIZADO: "{text_content}"',
-            "",
-            "🔬 ANÁLISIS ACADÉMICO MULTIMODAL - INVESTIGACIÓN SOBRE CONTENIDO PROBLEMÁTICO EN REDES SOCIALES",
             "",
             "OBJETIVO DE INVESTIGACIÓN: Este análisis forma parte de un estudio científico sobre moderación de contenido y patrones visuales de desinformación. Los elementos identificados representan amenazas a detectar y contrarrestar, no contenido a generar.",
             "",
@@ -203,7 +207,7 @@ IMPORTANTE: CONTEXTO POLÍTICO > VERIFICACIÓN FÁCTICA para clasificación.
             f"CATEGORÍAS DISPONIBLES: {categories}",
             "",
             "🎯 DIRECTRICES PARA CLASIFICACIÓN EN INVESTIGACIÓN:",
-            "- hate_speech: Ataques visuales/textuales directos a grupos étnicos específicos",
+            "- hate_speech: Ataques visuales/textuales directos a grupos étnicos específicos O grupos políticos presentados como amenaza existencial",
             "- anti_immigration: Elementos visuales de retórica anti-inmigración o xenofobia",
             "- anti_lgbtq: Contenido visual que ataca identidad LGBTQ o diversidad de género",
             "- anti_feminism: Elementos visuales que promueven roles tradicionales de género",
@@ -228,14 +232,15 @@ IMPORTANTE: CONTEXTO POLÍTICO > VERIFICACIÓN FÁCTICA para clasificación.
         ]
         
         return "\n".join(prompt_parts)
-    
+
     # ============================================================================
     # INSTANCE METHODS FOR SOPHISTICATED PROMPTS
     # ============================================================================
 
-    def build_categorization_prompt(self, content: str) -> str:
+    def build_ollama_categorization_prompt(self, content: str) -> str:
         """
-        Build prompt for combined category detection + explanation.
+        Build prompt for combined category detection + explanation using Ollama.
+        Used for text-only analysis where we need both categorization and explanation in one call.
         
         Returns structured output format:
         CATEGORÍA: [category_name]
@@ -264,12 +269,15 @@ CATEGORÍAS:
 
 REGLAS DE CLASIFICACIÓN - LÉELAS CON CUIDADO:
 
-**hate_speech** (PRIORIDAD MÁXIMA - SOLO SI CUMPLE TODOS LOS CRITERIOS):
-- Debe contener una declaración DIRECTA que vincule a un grupo étnico, religioso o nacional específico con violencia, criminalidad o inferioridad
-- Se requiere una PALABRA NEGATIVA EXPLÍCITA asociada al grupo (ejemplos: "terroristas", "criminales", "delincuentes", "peligrosos", "inferiores")
-- El grupo debe estar nombrado específicamente (NO "inmigrantes" genérico)
-- Ejemplo CORRECTO: "Los musulmanes son terroristas que nos atacan"
-- Ejemplo INCORRECTO: "Los inmigrantes son delincuentes" (falta grupo específico + palabra negativa clara)
+**hate_speech** (PRIORIDAD MÁXIMA - ATAQUES A GRUPOS SOCIALES IDENTIFICABLES):
+- Ataques directos a grupos sociales identificables por características protegidas (etnia, religión, género, orientación sexual) O grupos políticos presentados como amenaza existencial
+- Lenguaje que establece jerarquías sociales, expresa superioridad/inferioridad grupal, o incompatibilidad cultural fundamental
+- Asociación directa entre grupo específico y conductas negativas (violencia, criminalidad, inferioridad, amenaza)
+- Deshumanización explícita de grupos nombrados específicamente
+- Narrativas de amenaza identitaria donde un grupo político se presenta como incompatible o peligroso para la sociedad
+- Ejemplos: Ataques a "la izquierda" presentándola como "asquerosa", "sinvergüenza", "peligrosa", "amenaza existencial"
+- Ejemplos: Ataques a "los inmigrantes" vinculándolos con "delincuencia", "terrorismo", "invasión cultural"
+- Ejemplos: Insultos a partidos políticos como "fascistas", "comunistas peligrosos", "derecha corrupta"
 
 **anti_immigration** (RETÓRICA ANTI-INMIGRACIÓN Y XENOFOBIA):
 - Asociación general entre inmigración y delincuencia sin nombrar grupos étnicos específicos
@@ -358,7 +366,7 @@ EXPLICACIÓN: [2‑3 frases explicando por qué pertenece a esa categoría, cita
         
         # Add the content at the end
         if content:
-            prompt = prompt.replace("FORMATO OBLIGATORIO:", f"CONTENIDO A ANALIZAR:\n{content}\n\nFORMATO OBLIGATORIO:")
+            prompt += f"\n\nCONTENIDO A ANALIZAR:\n{content}"
         
         return prompt
 
@@ -476,3 +484,131 @@ EXPLICACIÓN: [2‑3 frases explicando por qué pertenece a esa categoría, cita
         prompt_parts = [line for line in prompt_parts if line.strip()]
         
         return "\n".join(prompt_parts)
+    
+    @staticmethod
+    def build_ollama_multimodal_system_prompt() -> str:
+        """
+        Build system prompt specifically for Ollama multimodal analysis.
+        Optimized for vision-language models analyzing social media content.
+        
+        Returns:
+            System prompt for Ollama multimodal models
+        """
+        return """🔍 SISTEMA DE MODERACIÓN DE CONTENIDO — DETECCIÓN DE SESGO POLÍTICO Y DESINFORMACIÓN
+
+PROPÓSITO:
+Eres un analista automático de publicaciones en redes sociales en español. 
+Tu función es identificar y clasificar contenido que pueda contener discurso de odio, desinformación, propaganda o sesgo político extremo, con énfasis en ideología de extrema derecha y manipulación mediática. 
+No generes ni reproduzcas contenido dañino. Resume y analiza de forma neutral y objetiva.
+
+TAREA PRINCIPAL:
+Analiza texto, imágenes y videos de publicaciones y clasifica el contenido en una sola categoría de la lista a continuación. Proporciona una explicación breve y objetiva que indique los elementos clave (símbolos, tono, texto, referencias visuales).
+
+CATEGORÍAS DISPONIBLES:
+- hate_speech: ataques directos o degradación de grupos por etnia, religión, orientación sexual, género, nacionalidad O grupos políticos presentados como amenaza existencial.
+- anti_immigration: rechazo explícito o simbólico hacia inmigrantes o minorías.
+- anti_lgbtq: ridiculización o negación de derechos de personas LGBTQ+.
+- anti_feminism: oposición al feminismo o promoción de roles de género tradicionales.
+- nationalism: exaltación nacionalista o símbolos patrios con carga política o de superioridad nacional.
+- anti_government: cuestionamiento extremo o burla hacia instituciones o líderes gubernamentales.
+- disinformation: afirmaciones falsas, manipuladas o fuera de contexto que distorsionan la realidad.
+- conspiracy_theory: narrativas de élites ocultas, manipulación global o complots.
+- call_to_action: exhortaciones explícitas a actuar o movilizarse políticamente.
+- political_general: contenido político sin sesgo extremo.
+- historical_revisionism: reinterpretación falsa de hechos históricos.
+- general: sin contenido problemático, neutral.
+
+DIRECTRICES DE RESPUESTA:
+1. Evalúa todo el contenido disponible: texto, imágenes y videos.  
+2. Selecciona la categoría que mejor describa el mensaje global de la publicación.  
+3. Escribe una explicación breve (2–4 oraciones) destacando los elementos clave que sustentan la decisión.  
+4. Mantén tono neutral, objetivo y analítico.  
+5. Si no hay señales de contenido problemático, responde "general".
+
+FORMATO DE RESPUESTA:
+CATEGORÍA: [una sola categoría de la lista]  
+EXPLICACIÓN: [2–4 oraciones en español, neutrales, descriptivas]
+
+"""
+
+    @staticmethod
+    def build_multimodal_explanation_prompt(text: str, category: str) -> str:
+        prompt = f"""
+TEXTO DEL POST:
+{text}
+
+CONTEXTO:
+Publicación en red social con texto e imágenes. Analizar la combinación visual y textual para identificar mensajes problemáticos, sesgo político, desinformación o propaganda.
+
+INSTRUCCIONES DE ANÁLISIS:
+1. Examina tanto el texto como los elementos visuales (imágenes) para identificar discurso de odio, sesgo político, extremismo o manipulación mediática.  
+2. Observa símbolos, figuras públicas, memes, banderas, o lenguaje cargado que indique ideología extremista o far-right.  
+3. Evalúa si se presentan afirmaciones falsas, información fuera de contexto o narrativas conspirativas.  
+4. Determina la categoría más apropiada según la lista del sistema.  
+5. Proporciona una breve explicación que indique los elementos clave que justifican la categoría.
+
+FORMATO DE RESPUESTA:
+CATEGORÍA: [categoría elegida]  
+EXPLICACIÓN: [razonamiento breve y neutral]
+
+
+Generate detailed explanation prompt for multimodal content.
+Instructs the model to explain based on both text and visual elements.
+
+Args:
+    text: Text content to explain
+    category: Already-detected category
+    
+Returns:
+    Multimodal explanation prompt
+            """
+
+        return prompt
+
+    @staticmethod
+    def build_multimodal_categorization_prompt(text: str) -> str:
+        """
+        Build prompt for multimodal categorization using Ollama vision models.
+        Combines text analysis with visual content analysis for comprehensive content moderation.
+
+        Args:
+            text: Text content from the post
+
+        Returns:
+            Multimodal categorization prompt for Ollama vision models
+        """
+        return f"""🔬 ANÁLISIS MULTIMODAL - DETECCIÓN DE CONTENIDO PROBLEMÁTICO
+
+TEXTO DEL POST: "{text}"
+
+INSTRUCCIONES PARA ANÁLISIS VISUAL Y TEXTUAL:
+1. Examina las imágenes/videos proporcionados junto con el texto
+2. Identifica símbolos políticos, figuras públicas, banderas, o elementos visuales que indiquen ideología
+3. Evalúa la combinación de texto e imágenes para detectar sesgo, propaganda o extremismo
+4. Busca elementos visuales que refuercen o contradigan el mensaje textual
+
+CLASIFICA EL CONTENIDO EN UNA SÓLA CATEGORÍA:
+
+CATEGORÍAS (orden de prioridad):
+1. hate_speech - ataques directos a grupos por etnia, religión, género, orientación sexual O grupos políticos presentados como amenaza existencial
+2. anti_immigration - retórica anti-inmigración, xenofobia, "invasión"
+3. anti_lgbtq - ataques a comunidad LGBTQ, "ideología de género", anti-trans
+4. anti_feminism - retórica anti-feminista, roles tradicionales de género
+5. nationalism - exaltación nacionalista con carga política
+6. anti_government - cuestionamiento extremo a instituciones gubernamentales
+7. disinformation - información falsa o manipulada sobre hechos verificables
+8. conspiracy_theory - narrativas de élites ocultas, complots globales
+9. call_to_action - incitación a movilización política o acción colectiva
+10. political_general - contenido político sin extremismo
+11. general - contenido neutral sin elementos problemáticos
+
+ELEMENTOS VISUALES A CONSIDERAR:
+- Banderas, símbolos patrios o políticos
+- Figuras públicas reconocidas (políticos, líderes)
+- Memes políticos o satíricos
+- Gráficos, carteles o material propagandístico
+- Elementos que indiquen contexto político o ideológico
+
+FORMATO DE RESPUESTA:
+CATEGORÍA: [una_categoría]
+EXPLICACIÓN: [2-3 frases explicando por qué, citando elementos textuales y visuales]"""

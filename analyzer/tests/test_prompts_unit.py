@@ -18,9 +18,9 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
 
-    def test_build_ollama_system_prompt(self):
-        """Test build_ollama_system_prompt includes all required elements."""
-        result = EnhancedPromptGenerator.build_ollama_system_prompt()
+    def test_build_ollama_text_analysis_system_prompt(self):
+        """Test build_ollama_text_analysis_system_prompt includes all required elements."""
+        result = EnhancedPromptGenerator.build_ollama_text_analysis_system_prompt()
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
 
@@ -44,8 +44,8 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIn("GENERAL", result)
 
     def test_build_generation_system_prompt(self):
-        """Test build_ollama_system_prompt includes all required elements."""
-        result = EnhancedPromptGenerator.build_ollama_system_prompt()
+        """Test build_ollama_text_analysis_system_prompt includes all required elements."""
+        result = EnhancedPromptGenerator.build_ollama_text_analysis_system_prompt()
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
 
@@ -72,7 +72,7 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         """Test build_categorization_prompt formats correctly."""
         test_text = "Este es un texto de prueba"
         generator = EnhancedPromptGenerator()
-        result = generator.build_categorization_prompt(test_text)
+        result = generator.build_ollama_categorization_prompt(test_text)
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
 
@@ -88,10 +88,10 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIn("CLASIFICA EL TEXTO EN UNA SÓLO CATEGORÍA", result)
         self.assertIn("FORMATO OBLIGATORIO", result)
 
-    def test_build_gemini_analysis_prompt_text_only(self):
-        """Test build_gemini_analysis_prompt for text-only content."""
+    def test_build_gemini_multimodal_analysis_prompt_text_only(self):
+        """Test build_gemini_multimodal_analysis_prompt for text-only content."""
         test_text = "Texto de prueba para análisis"
-        result = EnhancedPromptGenerator.build_gemini_analysis_prompt(test_text, is_video=False)
+        result = EnhancedPromptGenerator.build_gemini_multimodal_analysis_prompt(test_text, is_video=False)
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
 
@@ -103,7 +103,7 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIn(test_text, result)
 
         # Check that it includes analysis questions
-        self.assertIn("ANÁLISIS ACADÉMICO MULTIMODAL", result)
+        self.assertIn("OBJETIVO DE INVESTIGACIÓN", result)
         self.assertIn("elementos visuales específicos", result)
 
         # Check that it includes categories
@@ -115,10 +115,10 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         self.assertIn("CATEGORÍA:", result)
         self.assertIn("EXPLICACIÓN:", result)
 
-    def test_build_gemini_analysis_prompt_video(self):
-        """Test build_gemini_analysis_prompt for video content."""
+    def test_build_gemini_multimodal_analysis_prompt_video(self):
+        """Test build_gemini_multimodal_analysis_prompt for video content."""
         test_text = "Texto de prueba para video"
-        result = EnhancedPromptGenerator.build_gemini_analysis_prompt(test_text, is_video=True)
+        result = EnhancedPromptGenerator.build_gemini_multimodal_analysis_prompt(test_text, is_video=True)
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
 
@@ -129,13 +129,13 @@ class TestEnhancedPromptGenerator(unittest.TestCase):
         # Check that it includes the text
         self.assertIn(test_text, result)
 
-    def test_build_gemini_analysis_prompt_empty_text(self):
-        """Test build_gemini_analysis_prompt with empty text."""
-        result = EnhancedPromptGenerator.build_gemini_analysis_prompt("", is_video=False)
+    def test_build_gemini_multimodal_analysis_prompt_empty_text(self):
+        """Test build_gemini_multimodal_analysis_prompt with empty text."""
+        result = EnhancedPromptGenerator.build_gemini_multimodal_analysis_prompt("", is_video=False)
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
         # Should still include the analysis structure
-        self.assertIn("ANÁLISIS ACADÉMICO MULTIMODAL", result)
+        self.assertIn("OBJETIVO DE INVESTIGACIÓN", result)
 
 
 class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
@@ -167,7 +167,7 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
     def test_generate_classification_prompt(self):
         """Test build_categorization_prompt creates detailed prompt."""
         test_text = "Texto de prueba para clasificación"
-        result = self.generator.build_categorization_prompt(test_text)
+        result = self.generator.build_ollama_categorization_prompt(test_text)
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
 

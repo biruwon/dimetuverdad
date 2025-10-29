@@ -101,7 +101,7 @@ test_integration(){
   echo "Running retrieval integration tests..."
   "$PY" -m pytest "$ROOT_DIR/retrieval/tests/test_retrieval_integration.py" -v -n 0 "$@"
   echo "Running analyzer integration tests..."
-  "$PY" "$ROOT_DIR/analyzer/tests/test_analyze_twitter_integration.py" --quick "$@"
+  "$PY" "$ROOT_DIR/analyzer/tests/test_analyzer_integration.py" "$@"
   echo "Running fetch integration tests..."
   "$PY" "$ROOT_DIR/fetcher/tests/test_fetch_integration.py"
 }

@@ -546,7 +546,7 @@ NO incluyas texto adicional, explicaciones, o formato markdown. Solo el JSON pur
         try:
             # Use the CUSTOM categorization prompt from current_prompts
             custom_prompt = self.current_prompts.get('categorization',
-                                                   self.prompt_generator.build_categorization_prompt(text))
+                                                   self.prompt_generator.build_ollama_categorization_prompt(text))
 
             # Add the content to classify
             full_prompt = f"{custom_prompt}\n\nCONTENIDO A ANALIZAR:\n{text}\n\nFORMATO OBLIGATORIO:\nCATEGORÍA: [nombre_categoría]\nEXPLICACIÓN: [2-3 frases explicando por qué pertenece a esa categoría]"
@@ -581,7 +581,7 @@ NO incluyas texto adicional, explicaciones, o formato markdown. Solo el JSON pur
         try:
             # Use the CUSTOM categorization prompt from current_prompts
             custom_prompt = self.current_prompts.get('categorization',
-                                                   self.prompt_generator.build_categorization_prompt(text))
+                                                   self.prompt_generator.build_ollama_categorization_prompt(text))
 
             full_prompt = f"{custom_prompt}\n\nCONTENIDO A ANALIZAR:\n{text}\n\nFORMATO OBLIGATORIO:\nCATEGORÍA: [nombre_categoría]\nEXPLICACIÓN: [2-3 frases explicando por qué pertenece a esa categoría]"
 

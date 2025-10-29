@@ -323,9 +323,16 @@ class TestAsyncAnalyzeContent(unittest.TestCase):
     def test_analyze_content_with_evidence_retrieval(self, mock_should_trigger, mock_flow_analyze):
         """Test analyze_content with evidence retrieval triggered."""
         # Mock the flow manager to return analysis results
-        from analyzer.flow_manager import AnalysisStages
+        from analyzer.flow_manager import AnalysisResult, AnalysisStages
         stages = AnalysisStages(pattern=True, local_llm=True, external=True)
-        mock_flow_analyze.return_value = ("disinformation", "This contains disinformation.", "External analysis confirms this.", stages, {}, {})
+        mock_flow_analyze.return_value = AnalysisResult(
+            category="disinformation",
+            local_explanation="This contains disinformation.",
+            external_explanation="External analysis confirms this.",
+            stages=stages,
+            pattern_data={},
+            verification_data={}
+        )
 
         # Mock the enhancement to return enhanced analysis
         with patch.object(self.analyzer, '_enhance_with_evidence_retrieval') as mock_enhance:
@@ -370,9 +377,16 @@ class TestAsyncAnalyzeContent(unittest.TestCase):
     def test_analyze_content_without_evidence_retrieval(self, mock_should_trigger, mock_flow_analyze):
         """Test analyze_content when evidence retrieval is not triggered."""
         # Mock the flow manager to return analysis results
-        from analyzer.flow_manager import AnalysisStages
+        from analyzer.flow_manager import AnalysisResult, AnalysisStages
         stages = AnalysisStages(pattern=True, local_llm=True, external=False)
-        mock_flow_analyze.return_value = ("general", "This is general content.", None, stages, {}, {})
+        mock_flow_analyze.return_value = AnalysisResult(
+            category="general",
+            local_explanation="This is general content.",
+            external_explanation=None,
+            stages=stages,
+            pattern_data={},
+            verification_data={}
+        )
 
         async def test_async():
             result = await self.analyzer.analyze_content(
@@ -471,9 +485,16 @@ class TestIntegrationEndToEnd(unittest.TestCase):
     def test_end_to_end_disinformation_with_evidence(self, mock_flow_analyze):
         """Test complete flow for disinformation content with evidence retrieval."""
         # Mock initial analysis
-        from analyzer.flow_manager import AnalysisStages
+        from analyzer.flow_manager import AnalysisResult, AnalysisStages
         stages = AnalysisStages(pattern=True, local_llm=True, external=True)
-        mock_flow_analyze.return_value = ("disinformation", "This appears to be a conspiracy theory about vaccines.", "External analysis confirms this.", stages, {}, {})
+        mock_flow_analyze.return_value = AnalysisResult(
+            category="disinformation",
+            local_explanation="This appears to be a conspiracy theory about vaccines.",
+            external_explanation="External analysis confirms this.",
+            stages=stages,
+            pattern_data={},
+            verification_data={}
+        )
 
         # Mock evidence enhancement
         with patch.object(self.analyzer, '_enhance_with_evidence_retrieval') as mock_enhance:
@@ -518,9 +539,16 @@ class TestIntegrationEndToEnd(unittest.TestCase):
     @patch.object(Analyzer, '_should_trigger_evidence_retrieval', return_value=False)
     def test_end_to_end_general_content_no_evidence(self, mock_should_trigger, mock_flow_analyze):
         """Test complete flow for general content without evidence retrieval."""
-        from analyzer.flow_manager import AnalysisStages
+        from analyzer.flow_manager import AnalysisResult, AnalysisStages
         stages = AnalysisStages(pattern=True, local_llm=True, external=False)
-        mock_flow_analyze.return_value = ("general", "This is a positive, general statement.", None, stages, {}, {})
+        mock_flow_analyze.return_value = AnalysisResult(
+            category="general",
+            local_explanation="This is a positive, general statement.",
+            external_explanation=None,
+            stages=stages,
+            pattern_data={},
+            verification_data={}
+        )
 
         async def test_async():
             result = await self.analyzer.analyze_content(

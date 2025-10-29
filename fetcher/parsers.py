@@ -687,6 +687,47 @@ def extract_tweet_with_quoted_content(page, tweet_id: str, username: str, tweet_
     return tweet_data
 
 
+def extract_tweet_with_media_monitoring(page, tweet_id: str, username: str, tweet_url: str, media_monitor, scroller) -> dict:
+    """
+    Extract complete tweet data including quoted content and comprehensive media monitoring.
+    This combines DOM extraction with network monitoring for videos.
+    
+    Args:
+        page: Playwright page object
+        tweet_id: Tweet ID
+        username: Tweet author username  
+        tweet_url: Tweet URL
+        media_monitor: MediaMonitor instance
+        scroller: Scroller instance
+        
+    Returns:
+        dict: Tweet data with all fields including network-captured media, or None if extraction failed
+    """
+    # Extract tweet data (DOM extraction for images)
+    tweet_data = extract_tweet_with_quoted_content(page, tweet_id, username, tweet_url)
+    
+    if not tweet_data:
+        return None
+    
+    # Monitor for videos and trigger loading if needed
+    video_urls = media_monitor.setup_and_monitor(page, scroller)
+    
+    # Process and combine video URL with tweet data
+    tweet_data = media_monitor.process_video_urls(video_urls, tweet_data)
+    
+    # Log final media information
+    media_count = tweet_data.get('media_count', 0)
+    if media_count > 0:
+        media_links = tweet_data.get('media_links', '')
+        media_urls = media_links.split(',') if media_links else []
+        print(f"🖼️ Total media (main + quoted + network): {media_count} items")
+        print(f"📹 Found {len(media_urls)} media URLs via DOM extraction + network monitoring")
+        for i, url in enumerate(media_urls):
+            print(f"  {i+1}. {url}")
+    
+    return tweet_data
+
+
 def find_and_extract_quoted_tweet(page, main_article, post_analysis: dict) -> dict:
     """
     Find and extract quoted tweet using multiple detection strategies.

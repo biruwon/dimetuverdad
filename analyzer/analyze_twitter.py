@@ -98,14 +98,11 @@ class Analyzer:
         analysis_start_time = time.time()
 
         try:
-            # Determine if external analysis should run based on config
-            run_external = self.config.enable_external_analysis or admin_override
-
             # Run dual-flow analysis
-            category, local_explanation, external_explanation, stages, pattern_data, verification_data = await self.flow_manager.analyze_full(
+            analysis_result = await self.flow_manager.analyze_full(
                 content=content,
                 media_urls=media_urls,
-                admin_override=run_external,
+                admin_override=admin_override,
                 force_disable_external=not self.config.enable_external_analysis
             )
 
@@ -116,18 +113,18 @@ class Analyzer:
                 author_username=username,
                 post_content=content,
                 analysis_timestamp=datetime.now().isoformat(),
-                category=category,
-                categories_detected=[category],  # Flow manager returns single primary category
-                local_explanation=local_explanation,
-                external_explanation=external_explanation or '',
-                analysis_stages=stages.to_string(),
-                external_analysis_used=stages.external,
+                category=analysis_result.category,
+                categories_detected=[analysis_result.category],  # Flow manager returns single primary category
+                local_explanation=analysis_result.local_explanation,
+                external_explanation=analysis_result.external_explanation or '',
+                analysis_stages=analysis_result.stages.to_string(),
+                external_analysis_used=analysis_result.stages.external,
                 media_urls=media_urls or [],
                 media_type=self._detect_media_type(media_urls) if media_urls else '',
-                pattern_matches=pattern_data.get('pattern_matches', []),
-                topic_classification=pattern_data.get('topic_classification', {}),
-                analysis_json=f'{{"stages": "{stages.to_string()}", "has_media": {bool(media_urls)}}}',
-                verification_data=verification_data if verification_data else None
+                pattern_matches=analysis_result.pattern_data.get('pattern_matches', []),
+                topic_classification=analysis_result.pattern_data.get('topic_classification', {}),
+                analysis_json=f'{{"stages": "{analysis_result.stages.to_string()}", "has_media": {bool(media_urls)}}}',
+                verification_data=analysis_result.verification_data if analysis_result.verification_data else None
             )
 
             # Check if evidence retrieval should be triggered (only if not already done by flow manager)
@@ -149,7 +146,7 @@ class Analyzer:
             # Track metrics
             analysis_time = time.time() - analysis_start_time
             self.metrics.record_analysis(
-                method="dual_flow" if stages.external else "local_only",
+                method="dual_flow" if analysis_result.stages.external else "local_only",
                 duration=analysis_time,
                 category=result.category,
                 model_used=self._get_model_name(result),
@@ -163,7 +160,18 @@ class Analyzer:
             return result
 
         except Exception as e:
-            # Handle analysis errors gracefully
+            # Check for critical Ollama errors that should cause immediate failure
+            error_str = str(e).lower()
+            if ("500" in error_str or "internal server error" in error_str or 
+                "ollama" in error_str or "connection" in error_str or
+                "model returned empty response" in error_str):
+                if self.verbose:
+                    print(f"💥 Critical Ollama error detected: {e}")
+                    traceback.print_exc()
+                # Re-raise critical errors to stop the analysis pipeline
+                raise RuntimeError(f"Critical Ollama error: {str(e)}") from e
+            
+            # Handle analysis errors gracefully for non-critical issues
             if self.verbose:
                 print(f"❌ Error en análisis: {e}")
                 traceback.print_exc()
@@ -188,15 +196,48 @@ class Analyzer:
                 analysis_json=f'{{"error": "{str(e)[:500]}"}}'
             )
     def _detect_media_type(self, media_urls: List[str]) -> str:
-        """Detect media type from URLs."""
-        if not media_urls:
-            return ''
+        """
+        Detect the primary media type from URLs.
         
-        # Simple detection based on URL patterns
+        Args:
+            media_urls: List of media URLs
+            
+        Returns:
+            "image", "video", or "" if no media or mixed/unknown
+        """
+        if not media_urls:
+            return ""
+            
+        # Check for video extensions and formats
+        video_extensions = ['.mp4', '.m3u8', '.mov', '.avi', '.webm', '.m4v', '.flv', '.wmv']
+        video_formats = ['format=mp4', 'format=m3u8', 'format=mov', 'format=avi', 'format=webm', 'format=m4v', 'format=flv', 'format=wmv']
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.svg']
+        image_formats = ['format=jpg', 'format=jpeg', 'format=png', 'format=gif', 'format=webp', 'format=bmp', 'format=tiff', 'format=svg']
+        
+        has_videos = False
+        has_images = False
+        
         for url in media_urls:
-            if any(ext in url.lower() for ext in ['.mp4', '.m3u8', '.mov', 'video']):
-                return 'video'
-        return 'image'
+            url_lower = url.lower()
+            # Check if it's a video (extensions, format parameters, or 'video' in URL)
+            if (any(ext in url_lower for ext in video_extensions) or 
+                any(fmt in url_lower for fmt in video_formats) or 
+                'video' in url_lower):
+                has_videos = True
+            # Check if it's an image (extensions, format parameters, or 'image' in URL)
+            elif (any(ext in url_lower for ext in image_extensions) or 
+                  any(fmt in url_lower for fmt in image_formats) or 
+                  'image' in url_lower):
+                has_images = True
+        
+        if has_videos and not has_images:
+            return "video"
+        elif has_images and not has_videos:
+            return "image"
+        elif has_images and has_videos:
+            return "mixed"
+        else:
+            return ""
     
     def _should_trigger_evidence_retrieval(self, analysis_result: ContentAnalysis, content: str) -> bool:
         """
@@ -620,7 +661,7 @@ async def _execute_analysis_tasks(tweets, analyzer_instance, analysis_sema, llm_
 
             # Display best available explanation
             best_explanation = result.external_explanation if result.external_explanation else result.local_explanation
-            if best_explanation and len(best_explanation.strip()) > 0:
+            if best_explanation and isinstance(best_explanation, str) and len(best_explanation.strip()) > 0:
                 explanation = best_explanation[:120] + "..." if len(best_explanation) > 120 else best_explanation
                 print(f"    💭 {explanation}")
 
@@ -634,28 +675,19 @@ async def _execute_analysis_tasks(tweets, analyzer_instance, analysis_sema, llm_
             return ("ok", tw_id, category)
 
         except Exception as e:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            print(f"    ❌ Error analyzing tweet: {error_msg}")
-            logger.error(f"Analysis failed for tweet {tw_id} (@{tw_user}): {error_msg}")
-            logger.info(f"Tweet content: {content[:200]}...")
-            if media_urls:
-                logger.info(f"Media URLs that may have caused failure: {media_urls}")
-            analyzer_instance.repository.save_failed_analysis(
-                tweet_id=tw_id,
-                tweet_url=tw_url,
-                username=tw_user,
-                content=content,
-                error_message=error_msg,
-                media_urls=media_urls
-            )
-            category_counts["ERROR"] = category_counts.get("ERROR", 0) + 1
-            return ("err", tw_id, error_msg)
+            # Re-raise all errors to stop the entire analysis pipeline
+            raise RuntimeError(f"Analysis failed for tweet {tw_id}: {str(e)}") from e
         finally:
             print()
 
     # Kick off tasks and wait for all to complete
     tasks = [analyze_one(i, entry) for i, entry in enumerate(tweets, 1)]
     outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Check for exceptions and re-raise the first one encountered
+    for out in outcomes:
+        if isinstance(out, Exception):
+            raise out
 
     # Collect successful results for reporting compatibility
     results = []

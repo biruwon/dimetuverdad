@@ -90,31 +90,46 @@ class AnalyzerHooks:
 
     def explanation_indicates_disinformation(self, explanation: str) -> bool:
         """
-        Check if the LLM explanation indicates the content should be categorized as disinformation.
+        Check if the LLM explanation concludes that the content IS disinformation.
+        
+        This should return True when the explanation determines the content is disinformation,
+        not when it merely mentions disinformation detection concepts.
         
         Args:
             explanation: The explanation text from the LLM
             
         Returns:
-            True if explanation suggests disinformation, False otherwise
+            True if explanation concludes content IS disinformation, False otherwise
         """
         explanation_lower = explanation.lower()
         
-        # Check for key phrases that indicate disinformation detection
-        disinformation_indicators = [
-            "desinformación",
-            "sin citar fuentes",
-            "sin fuente oficial",
-            "no menciona fuente",
-            "fuentes verificables",
-            "afirmación sin fundamento",
-            "sin evidencia",
-            "no aporta evidencia",
-            "carece de fuentes",
-            "sin respaldo oficial"
+        # Check for phrases that conclude the content IS disinformation
+        # These are positive indicators that the content is classified as disinformation
+        is_disinformation_indicators = [
+            "se clasifica como desinformación",
+            "es desinformación", 
+            "contiene desinformación",
+            "clasificado como desinformación",
+            "categorizado como desinformación",
+            "es contenido de desinformación",
+            "es una desinformación",
+            "constituye desinformación"
         ]
         
-        return any(indicator in explanation_lower for indicator in disinformation_indicators)
+        # Check for negative indicators that explicitly say it's NOT disinformation
+        not_disinformation_indicators = [
+            "no contiene desinformación",
+            "no es desinformación",
+            "no se clasifica como desinformación",
+            "no constituye desinformación"
+        ]
+        
+        # If any negative indicator is present, definitely NOT disinformation
+        if any(indicator in explanation_lower for indicator in not_disinformation_indicators):
+            return False
+            
+        # If any positive indicator is present, IS disinformation
+        return any(indicator in explanation_lower for indicator in is_disinformation_indicators)
     
     def external_analysis_indicates_disinformation(self, external_explanation: str) -> bool:
         """

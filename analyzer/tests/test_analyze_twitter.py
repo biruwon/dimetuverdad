@@ -22,6 +22,7 @@ from analyzer.config import AnalyzerConfig
 from analyzer.models import ContentAnalysis
 from analyzer.repository import ContentAnalysisRepository
 from analyzer.categories import Categories
+from analyzer.external_analyzer import ExternalAnalysisResult
 from utils.database import get_db_connection_context
 
 class TestContentAnalysis(unittest.TestCase):
@@ -89,7 +90,7 @@ class TestAnalyzerInitialization(unittest.TestCase):
         """Test analyzer initialization with default config."""
         analyzer = Analyzer(config=AnalyzerConfig())
 
-        self.assertTrue(analyzer.config.enable_external_analysis)
+        self.assertFalse(analyzer.config.enable_external_analysis)  # External analysis disabled by default
         # REMOVED: self.assertEqual(analyzer.config.model_priority, "balanced")  # model_priority no longer exists
         self.assertFalse(analyzer.config.verbose)
 
@@ -134,7 +135,7 @@ class TestAnalyzerAnalysis(unittest.TestCase):
 
     def test_analyze_content_with_patterns(self):
         """Test analysis when patterns are detected."""
-        analyzer = Analyzer(config=AnalyzerConfig())
+        analyzer = Analyzer(config=AnalyzerConfig(enable_external_analysis=True))
 
         # Mock the flow manager's pattern analyzer
         mock_pattern_result = Mock()
@@ -146,7 +147,10 @@ class TestAnalyzerAnalysis(unittest.TestCase):
         analyzer.flow_manager.local_llm.explain_only = AsyncMock(return_value="Mock explanation")
 
         # Mock the external analyzer to avoid needing Gemini
-        analyzer.flow_manager.external.analyze = AsyncMock(return_value="Mock external explanation")
+        analyzer.flow_manager.external.analyze = AsyncMock(return_value=ExternalAnalysisResult(
+            category=None,
+            explanation="Mock external explanation"
+        ))
 
         async def test_async():
             result = await analyzer.analyze_content(
@@ -406,22 +410,25 @@ class TestCLIFunctions(unittest.TestCase):
     @patch('analyzer.analyze_twitter.create_analyzer')
     @patch('builtins.print')
     def test_analyze_tweets_from_db_analysis_error(self, mock_print, mock_create_analyzer):
-        """Test handling of analysis errors."""
+        """Test that analysis errors stop the entire pipeline."""
         mock_analyzer = Mock()
         mock_create_analyzer.return_value = mock_analyzer
 
-        tweets = [
+        # Mock repository methods
+        mock_analyzer.repository.get_tweets_for_analysis.return_value = [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
         ]
-        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
         mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
 
         mock_analyzer.analyze_content = AsyncMock(side_effect=Exception("Analysis failed"))
 
-        asyncio.run(analyze_tweets_from_db(max_tweets=1))
-
-        # Should save failed analysis
-        mock_analyzer.repository.save_failed_analysis.assert_called_once()
+        # Should re-raise the exception and stop the pipeline
+        with self.assertRaises(RuntimeError) as context:
+            asyncio.run(analyze_tweets_from_db(max_tweets=1))
+        
+        self.assertIn("Analysis failed for tweet 123", str(context.exception))
+        # save_failed_analysis should NOT be called since we re-raise exceptions
+        mock_analyzer.repository.save_failed_analysis.assert_not_called()
 
     @patch('analyzer.analyze_twitter.create_analyzer')
     @patch('builtins.print')

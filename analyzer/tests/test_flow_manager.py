@@ -8,6 +8,7 @@ import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
 from analyzer.flow_manager import AnalysisFlowManager, AnalysisStages
+from analyzer.external_analyzer import ExternalAnalysisResult
 from analyzer.categories import Categories
 from analyzer.pattern_analyzer import AnalysisResult, PatternMatch
 
@@ -34,7 +35,7 @@ def mock_pattern_analyzer():
 
 @pytest.fixture
 def mock_local_llm():
-    """Mock LocalLLMAnalyzer."""
+    """Mock LocalMultimodalAnalyzer."""
     mock = Mock()
     mock.categorize_and_explain = AsyncMock(return_value=(
         Categories.HATE_SPEECH,
@@ -48,7 +49,10 @@ def mock_local_llm():
 def mock_external():
     """Mock ExternalAnalyzer."""
     mock = Mock()
-    mock.analyze = AsyncMock(return_value="Análisis externo detallado usando Gemini.")
+    mock.analyze = AsyncMock(return_value=ExternalAnalysisResult(
+        category=None,  # Don't override local category by default
+        explanation="Análisis externo detallado usando Gemini."
+    ))
     return mock
 
 
@@ -56,7 +60,7 @@ def mock_external():
 def flow_manager(mock_pattern_analyzer, mock_local_llm, mock_external):
     """Create AnalysisFlowManager with mocked components."""
     with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-         patch('analyzer.flow_manager.LocalLLMAnalyzer', return_value=mock_local_llm), \
+         patch('analyzer.flow_manager.LocalMultimodalAnalyzer', return_value=mock_local_llm), \
          patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
         manager = AnalysisFlowManager(verbose=False)
         return manager
@@ -139,7 +143,7 @@ class TestFlowManagerInitialization:
     def test_default_initialization(self):
         """Test default initialization creates all analyzers."""
         with patch('analyzer.flow_manager.PatternAnalyzer'), \
-             patch('analyzer.flow_manager.LocalLLMAnalyzer'), \
+             patch('analyzer.flow_manager.LocalMultimodalAnalyzer'), \
              patch('analyzer.flow_manager.ExternalAnalyzer'):
             manager = AnalysisFlowManager()
             
@@ -151,7 +155,7 @@ class TestFlowManagerInitialization:
     def test_verbose_initialization(self):
         """Test verbose initialization passes to components."""
         with patch('analyzer.flow_manager.PatternAnalyzer'), \
-             patch('analyzer.flow_manager.LocalLLMAnalyzer') as mock_llm, \
+             patch('analyzer.flow_manager.LocalMultimodalAnalyzer') as mock_llm, \
              patch('analyzer.flow_manager.ExternalAnalyzer') as mock_ext:
             manager = AnalysisFlowManager(verbose=True)
             
@@ -169,25 +173,25 @@ class TestAnalyzeLocal:
         """Test local flow when pattern detection succeeds."""
         content = "Los inmigrantes destruyen nuestra cultura"
         
-        category, explanation, stages, pattern_data, verification_data = await flow_manager.analyze_local(content)
+        result = await flow_manager.analyze_local(content)
         
-        assert category == Categories.HATE_SPEECH
-        assert explanation == "Explicación para categoría detectada por patrones."
-        assert stages.pattern is True
-        assert stages.local_llm is True
-        assert stages.external is False
+        assert result.category == Categories.HATE_SPEECH
+        assert result.local_explanation == "Explicación para categoría detectada por patrones."
+        assert result.stages.pattern is True
+        assert result.stages.local_llm is True
+        assert result.stages.external is False
         
         # Verify pattern data is returned
-        assert 'pattern_matches' in pattern_data
-        assert 'topic_classification' in pattern_data
-        assert len(pattern_data['pattern_matches']) == 1
-        assert pattern_data['pattern_matches'][0]['matched_text'] == "inmigrantes"
+        assert 'pattern_matches' in result.pattern_data
+        assert 'topic_classification' in result.pattern_data
+        assert len(result.pattern_data['pattern_matches']) == 1
+        assert result.pattern_data['pattern_matches'][0]['matched_text'] == "inmigrantes"
         
         # Verify pattern analyzer was called
         mock_pattern_analyzer.analyze_content.assert_called_once_with(content)
         
         # Verify local LLM explain_only was called (not categorize_and_explain)
-        mock_local_llm.explain_only.assert_called_once_with(content, Categories.HATE_SPEECH)
+        mock_local_llm.explain_only.assert_called_once_with(content, Categories.HATE_SPEECH, None)
         mock_local_llm.categorize_and_explain.assert_not_called()
     
     @pytest.mark.asyncio
@@ -204,20 +208,20 @@ class TestAnalyzeLocal:
         
         content = "Contenido neutral sin patrones"
         
-        category, explanation, stages, pattern_data, verification_data = await flow_manager.analyze_local(content)
+        result = await flow_manager.analyze_local(content)
         
-        assert category == Categories.HATE_SPEECH  # From LLM mock
-        assert explanation == "Este contenido contiene discurso de odio xenófobo."
-        assert stages.pattern is True
-        assert stages.local_llm is True
+        assert result.category == Categories.HATE_SPEECH  # From LLM mock
+        assert result.local_explanation == "Este contenido contiene discurso de odio xenófobo."
+        assert result.stages.pattern is True
+        assert result.stages.local_llm is True
         
         # Verify pattern data is returned
-        assert 'pattern_matches' in pattern_data
-        assert 'topic_classification' in pattern_data
-        assert len(pattern_data['pattern_matches']) == 0
+        assert 'pattern_matches' in result.pattern_data
+        assert 'topic_classification' in result.pattern_data
+        assert len(result.pattern_data['pattern_matches']) == 0
         
         # Verify local LLM categorize_and_explain was called (not explain_only)
-        mock_local_llm.categorize_and_explain.assert_called_once_with(content)
+        mock_local_llm.categorize_and_explain.assert_called_once_with(content, None)
         mock_local_llm.explain_only.assert_not_called()
     
     @pytest.mark.asyncio
@@ -233,15 +237,15 @@ class TestAnalyzeLocal:
         
         content = "Test content"
         
-        category, explanation, stages, pattern_data, verification_data = await flow_manager.analyze_local(content)
+        result = await flow_manager.analyze_local(content)
         
         # Should use LLM for both category and explanation
         mock_local_llm.categorize_and_explain.assert_called_once()
         mock_local_llm.explain_only.assert_not_called()
         
         # Verify pattern data is returned
-        assert 'pattern_matches' in pattern_data
-        assert 'topic_classification' in pattern_data
+        assert 'pattern_matches' in result.pattern_data
+        assert 'topic_classification' in result.pattern_data
     
     @pytest.mark.asyncio
     async def test_local_with_multiple_pattern_categories(self, flow_manager, mock_pattern_analyzer, mock_local_llm):
@@ -261,15 +265,15 @@ class TestAnalyzeLocal:
         
         content = "Fake news content"
         
-        category, explanation, stages, pattern_data, verification_data = await flow_manager.analyze_local(content)
+        result = await flow_manager.analyze_local(content)
         
-        assert category == Categories.DISINFORMATION  # First category
-        mock_local_llm.explain_only.assert_called_once_with(content, Categories.DISINFORMATION)
+        assert result.category == Categories.DISINFORMATION  # First category
+        mock_local_llm.explain_only.assert_called_once_with(content, Categories.DISINFORMATION, None)
         
         # Verify pattern data is returned
-        assert 'pattern_matches' in pattern_data
-        assert 'topic_classification' in pattern_data
-        assert len(pattern_data['pattern_matches']) == 1
+        assert 'pattern_matches' in result.pattern_data
+        assert 'topic_classification' in result.pattern_data
+        assert len(result.pattern_data['pattern_matches']) == 1
 
 
 class TestAnalyzeExternal:
@@ -282,7 +286,9 @@ class TestAnalyzeExternal:
         
         result = await flow_manager.analyze_external(content)
         
-        assert result == "Análisis externo detallado usando Gemini."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category is None
+        assert result.explanation == "Análisis externo detallado usando Gemini."
         mock_external.analyze.assert_called_once_with(content, None)
     
     @pytest.mark.asyncio
@@ -293,7 +299,9 @@ class TestAnalyzeExternal:
         
         result = await flow_manager.analyze_external(content, media_urls)
         
-        assert result == "Análisis externo detallado usando Gemini."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category is None
+        assert result.explanation == "Análisis externo detallado usando Gemini."
         mock_external.analyze.assert_called_once_with(content, media_urls)
 
 
@@ -307,18 +315,18 @@ class TestAnalyzeFull:
         """Test full flow triggers external for hate_speech category."""
         content = "Hate speech content"
         
-        category, local_exp, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full(content)
+        result = await flow_manager.analyze_full(content)
         
-        assert category == Categories.HATE_SPEECH
-        assert local_exp == "Explicación para categoría detectada por patrones."
-        assert external_exp == "Análisis externo detallado usando Gemini."
-        assert stages.pattern is True
-        assert stages.local_llm is True
-        assert stages.external is True  # Should run external
+        assert result.category == Categories.HATE_SPEECH
+        assert result.local_explanation == "Explicación para categoría detectada por patrones."
+        assert result.external_explanation == "Análisis externo detallado usando Gemini."
+        assert result.stages.pattern is True
+        assert result.stages.local_llm is True
+        assert result.stages.external is True  # Should run external
         
         # Verify pattern data is returned
-        assert 'pattern_matches' in pattern_data
-        assert 'topic_classification' in pattern_data
+        assert 'pattern_matches' in result.pattern_data
+        assert 'topic_classification' in result.pattern_data
         
         # Verify external was called
         mock_external.analyze.assert_called_once_with(content, None)
@@ -343,15 +351,15 @@ class TestAnalyzeFull:
         
         content = "Normal neutral content"
         
-        category, local_exp, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full(content)
+        result = await flow_manager.analyze_full(content)
         
-        assert category == Categories.GENERAL
-        assert external_exp is None  # Should NOT run external
-        assert stages.external is False
+        assert result.category == Categories.GENERAL
+        assert result.external_explanation is None  # Should NOT run external
+        assert result.stages.external is False
         
         # Verify pattern data is returned
-        assert 'pattern_matches' in pattern_data
-        assert 'topic_classification' in pattern_data
+        assert 'pattern_matches' in result.pattern_data
+        assert 'topic_classification' in result.pattern_data
         
         # Verify external was NOT called
         mock_external.analyze.assert_not_called()
@@ -376,15 +384,15 @@ class TestAnalyzeFull:
         
         content = "General political discussion"
         
-        category, local_exp, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full(content)
+        result = await flow_manager.analyze_full(content)
         
-        assert category == Categories.POLITICAL_GENERAL
-        assert external_exp is None
-        assert stages.external is False
+        assert result.category == Categories.POLITICAL_GENERAL
+        assert result.external_explanation is None
+        assert result.stages.external is False
         
         # Verify pattern data is returned
-        assert 'pattern_matches' in pattern_data
-        assert 'topic_classification' in pattern_data
+        assert 'pattern_matches' in result.pattern_data
+        assert 'topic_classification' in result.pattern_data
         
         mock_external.analyze.assert_not_called()
     
@@ -407,18 +415,15 @@ class TestAnalyzeFull:
         
         content = "Content requiring admin review"
         
-        category, local_exp, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full(
-            content,
-            admin_override=True
-        )
+        result = await flow_manager.analyze_full(content, admin_override=True)
         
-        assert category == Categories.GENERAL
-        assert external_exp == "Análisis externo detallado usando Gemini."
-        assert stages.external is True  # Should run due to admin override
+        assert result.category == Categories.GENERAL
+        assert result.external_explanation == "Análisis externo detallado usando Gemini."
+        assert result.stages.external is True  # Should run due to admin override
         
         # Verify pattern data is returned
-        assert 'pattern_matches' in pattern_data
-        assert 'topic_classification' in pattern_data
+        assert 'pattern_matches' in result.pattern_data
+        assert 'topic_classification' in result.pattern_data
         
         mock_external.analyze.assert_called_once()
     
@@ -430,14 +435,11 @@ class TestAnalyzeFull:
         content = "Content with images"
         media_urls = ["https://example.com/image.jpg"]
         
-        category, local_exp, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full(
-            content,
-            media_urls=media_urls
-        )
+        result = await flow_manager.analyze_full(content, media_urls=media_urls)
         
         # Verify pattern data is returned
-        assert 'pattern_matches' in pattern_data
-        assert 'topic_classification' in pattern_data
+        assert 'pattern_matches' in result.pattern_data
+        assert 'topic_classification' in result.pattern_data
         
         # Verify media URLs passed to external
         mock_external.analyze.assert_called_once_with(content, media_urls)
@@ -475,26 +477,50 @@ class TestAnalyzeFull:
             )
             mock_external.analyze.reset_mock()
             
-            _, _, external_exp, stages, pattern_data, verification_data = await flow_manager.analyze_full("Test content")
+            result = await flow_manager.analyze_full("Test content")
             
-            assert external_exp is not None, f"External should run for {category}"
-            assert stages.external is True, f"External stage should be True for {category}"
+            assert result.external_explanation is not None, f"External should run for {category}"
+            assert result.stages.external is True, f"External stage should be True for {category}"
             
             # Verify pattern data is returned
-            assert 'pattern_matches' in pattern_data
-            assert 'topic_classification' in pattern_data
+            assert 'pattern_matches' in result.pattern_data
+            assert 'topic_classification' in result.pattern_data
             
-            mock_external.analyze.assert_called_once()
-
-
-class TestVerboseLogging:
+    @pytest.mark.asyncio
+    async def test_full_external_overrides_category_any_category(
+        self, flow_manager, mock_pattern_analyzer, mock_local_llm, mock_external
+    ):
+        """Test that external analysis can override category for any category, not just disinformation."""
+        # Mock local analysis returns hate_speech
+        mock_pattern_analyzer.analyze_content.return_value = AnalysisResult(
+            categories=[Categories.HATE_SPEECH],
+            pattern_matches=[],
+            primary_category=Categories.HATE_SPEECH,
+            political_context=[],
+            keywords=[]
+        )
+        
+        # Mock external analysis to return conspiracy_theory category
+        mock_external.analyze.return_value = ExternalAnalysisResult(
+            category=Categories.CONSPIRACY_THEORY,
+            explanation="Este contenido promueve teorías conspirativas sobre el control global."
+        )
+        
+        content = "Content that external analysis reclassifies"
+        
+        result = await flow_manager.analyze_full(content)
+        
+        # Should be overridden to conspiracy_theory
+        assert result.category == Categories.CONSPIRACY_THEORY
+        assert result.external_explanation == "Este contenido promueve teorías conspirativas sobre el control global."
+        assert result.stages.external is True
     """Test verbose logging output."""
     
     @pytest.mark.asyncio
     async def test_local_verbose_output(self, mock_pattern_analyzer, mock_local_llm, mock_external, capsys):
         """Test verbose logging in local analysis."""
         with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-             patch('analyzer.flow_manager.LocalLLMAnalyzer', return_value=mock_local_llm), \
+             patch('analyzer.flow_manager.LocalMultimodalAnalyzer', return_value=mock_local_llm), \
              patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
             manager = AnalysisFlowManager(verbose=True)
             
@@ -509,7 +535,7 @@ class TestVerboseLogging:
     async def test_external_verbose_output(self, mock_pattern_analyzer, mock_local_llm, mock_external, capsys):
         """Test verbose logging in external analysis."""
         with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-             patch('analyzer.flow_manager.LocalLLMAnalyzer', return_value=mock_local_llm), \
+             patch('analyzer.flow_manager.LocalMultimodalAnalyzer', return_value=mock_local_llm), \
              patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
             manager = AnalysisFlowManager(verbose=True)
             
@@ -525,7 +551,7 @@ class TestVerboseLogging:
     ):
         """Test verbose logging in full analysis with external."""
         with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-             patch('analyzer.flow_manager.LocalLLMAnalyzer', return_value=mock_local_llm), \
+             patch('analyzer.flow_manager.LocalMultimodalAnalyzer', return_value=mock_local_llm), \
              patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
             manager = AnalysisFlowManager(verbose=True)
             

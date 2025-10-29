@@ -7,7 +7,7 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, Mock, patch, MagicMock
 
-from analyzer.external_analyzer import ExternalAnalyzer
+from analyzer.external_analyzer import ExternalAnalyzer, ExternalAnalysisResult
 
 
 @pytest.fixture
@@ -89,7 +89,9 @@ class TestAnalyzeMethod:
         
         result = await analyzer.analyze(content, media_urls)
         
-        assert result == "Este contenido muestra discurso de odio xenófobo."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category == "hate_speech"
+        assert result.explanation == "Este contenido muestra discurso de odio xenófobo."
         
         # Verify multimodal analysis was called
         mock_gemini.analyze_multimodal_content.assert_called_once()
@@ -103,7 +105,9 @@ class TestAnalyzeMethod:
         
         result = await analyzer_with_genai_mock.analyze(content, media_urls=None)
         
-        assert result == "Este contenido muestra discurso de odio xenófobo."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category == "hate_speech"
+        assert result.explanation == "Este contenido muestra discurso de odio xenófobo."
         
         # Verify analyze_multimodal_content was called with empty media list
         mock_gemini.analyze_multimodal_content.assert_called_once()
@@ -133,7 +137,9 @@ class TestAnalyzeMethod:
         content = "Test content"
         result = await analyzer_with_genai_mock.analyze(content)
         
-        assert "No se pudo completar el análisis de texto externo." in result
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category is None
+        assert "No se pudo completar el análisis de texto externo." in result.explanation
 
 
 class TestMultimodalAnalysis:
@@ -147,7 +153,9 @@ class TestMultimodalAnalysis:
         
         result = await analyzer._analyze_multimodal(content, media_urls)
         
-        assert "discurso de odio xenófobo" in result
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category == "hate_speech"
+        assert "discurso de odio xenófobo" in result.explanation
         
         # Verify media selection was called
         mock_gemini._select_media_url.assert_called_once_with(media_urls)
@@ -188,7 +196,9 @@ class TestMultimodalAnalysis:
         
         result = await analyzer._analyze_multimodal(content, media_urls)
         
-        assert result == "No se pudo completar el análisis multimodal externo."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category is None
+        assert result.explanation == "No se pudo completar el análisis multimodal externo."
 
 
 class TestTextOnlyAnalysis:
@@ -201,7 +211,9 @@ class TestTextOnlyAnalysis:
         
         result = await analyzer_with_genai_mock._analyze_text_only(content)
         
-        assert "discurso de odio xenófobo" in result
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category == "hate_speech"
+        assert "discurso de odio xenófobo" in result.explanation
         
         # Verify analyze_multimodal_content was called with empty media list
         mock_gemini.analyze_multimodal_content.assert_called_once()
@@ -218,7 +230,9 @@ class TestTextOnlyAnalysis:
         content = "Test content"
         result = await analyzer_with_genai_mock._analyze_text_only(content)
         
-        assert result == "No se pudo completar el análisis de texto externo."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category is None
+        assert result.explanation == "No se pudo completar el análisis de texto externo."
 
 
 class TestResponseParsing:
@@ -231,7 +245,9 @@ EXPLICACIÓN: Este contenido presenta información falsa sobre vacunas."""
         
         result = analyzer._parse_gemini_response(response)
         
-        assert result == "Este contenido presenta información falsa sobre vacunas."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category == "disinformation"
+        assert result.explanation == "Este contenido presenta información falsa sobre vacunas."
     
     def test_parse_response_with_extra_lines(self, analyzer):
         """Test parsing response with extra content."""
@@ -241,7 +257,9 @@ Additional context or metadata."""
         
         result = analyzer._parse_gemini_response(response)
         
-        assert "teorías conspirativas sin evidencia" in result
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category == "conspiracy_theory"
+        assert "teorías conspirativas sin evidencia" in result.explanation
     
     def test_parse_unstructured_response(self, analyzer):
         """Test parsing unstructured response."""
@@ -249,7 +267,9 @@ Additional context or metadata."""
         
         result = analyzer._parse_gemini_response(response)
         
-        assert result == "Este es un análisis directo sin formato estructurado."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category is None
+        assert result.explanation == "Este es un análisis directo sin formato estructurado."
     
     def test_parse_response_removes_category_line(self, analyzer):
         """Test parsing removes category line from unstructured response."""
@@ -259,17 +279,23 @@ Incluye lenguaje deshumanizante."""
         
         result = analyzer._parse_gemini_response(response)
         
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category == "hate_speech"
         # Should remove category line and return rest
-        assert "CATEGORÍA:" not in result
-        assert "xenófobos" in result
+        assert "CATEGORÍA:" not in result.explanation
+        assert "xenófobos" in result.explanation
     
     def test_parse_empty_response(self, analyzer):
         """Test parsing empty or whitespace-only response."""
         result = analyzer._parse_gemini_response("")
-        assert result == "Análisis externo no disponible."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category is None
+        assert result.explanation == "Análisis externo no disponible."
         
         result = analyzer._parse_gemini_response("   \n   ")
-        assert result == "Análisis externo no disponible."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category is None
+        assert result.explanation == "Análisis externo no disponible."
     
     def test_parse_short_response(self, analyzer):
         """Test parsing very short response (less than 10 chars)."""
@@ -277,7 +303,9 @@ Incluye lenguaje deshumanizante."""
         
         result = analyzer._parse_gemini_response(response)
         
-        assert result == "Análisis externo completado sin detalles adicionales."
+        assert isinstance(result, ExternalAnalysisResult)
+        assert result.category == "general"
+        assert result.explanation == "Análisis externo completado sin detalles adicionales."
 
 
 class TestVerboseLogging:

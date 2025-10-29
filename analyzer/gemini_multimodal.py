@@ -619,7 +619,7 @@ class GeminiMultimodal:
                 return None
 
             # Build text-only analysis prompt
-            prompt = EnhancedPromptGenerator.build_gemini_analysis_prompt(text_content, is_video=False)
+            prompt = EnhancedPromptGenerator.build_gemini_multimodal_analysis_prompt(text_content, is_video=False)
 
             # Use ThreadPoolExecutor with timeout for text generation
             with ThreadPoolExecutor(max_workers=1) as executor:
@@ -932,7 +932,7 @@ class GeminiMultimodal:
                 return None
 
             # Generate analysis
-            prompt = EnhancedPromptGenerator.build_gemini_analysis_prompt(text_content, is_video)
+            prompt = EnhancedPromptGenerator.build_gemini_multimodal_analysis_prompt(text_content, is_video)
 
             # Use ThreadPoolExecutor with timeout instead of signal-based timeout
             # to avoid "signal only works in main thread" error
@@ -989,7 +989,7 @@ class GeminiMultimodal:
                 return None
 
             # Generate analysis (run in thread pool with timeout)
-            prompt = EnhancedPromptGenerator.build_gemini_analysis_prompt(text_content, is_video)
+            prompt = EnhancedPromptGenerator.build_gemini_multimodal_analysis_prompt(text_content, is_video)
 
             try:
                 response = await asyncio.wait_for(

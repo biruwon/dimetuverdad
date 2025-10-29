@@ -1,60 +1,56 @@
 """
-Unit tests for LocalLLMAnalyzer component.
-Tests category detection and explanation generation using local LLM (gpt-oss:20b).
+Unit tests for LocalMultimodalAnalyzer component.
+Tests category detection and explanation generation using multiple Ollama models.
 """
 
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
-from analyzer.local_llm_analyzer import LocalLLMAnalyzer
+from analyzer.local_analyzer import LocalMultimodalAnalyzer
 from analyzer.categories import Categories
 
 
 @pytest.fixture
 def mock_ollama_client():
-    """Mock OpenAI client for Ollama responses."""
-    mock_client = Mock()
-    mock_response = Mock()
-    mock_choice = Mock()
-    mock_message = Mock()
+    """Mock Ollama AsyncClient for responses."""
+    mock_client = AsyncMock()
     
-    # Setup nested mock structure: client.chat.completions.create()
-    mock_message.content = "CATEGORÍA: hate_speech\nEXPLICACIÓN: Este contenido contiene discurso de odio xenófobo."
-    mock_choice.message = mock_message
-    mock_response.choices = [mock_choice]
-    mock_client.chat.completions.create.return_value = mock_response
+    # Mock the generate method to return a dict with 'response' key
+    mock_client.generate.return_value = {
+        "response": "CATEGORÍA: hate_speech\nEXPLICACIÓN: Este contenido contiene discurso de odio xenófobo."
+    }
     
     return mock_client
 
 
 @pytest.fixture
 def analyzer(mock_ollama_client):
-    """Create LocalLLMAnalyzer with mocked Ollama client."""
-    with patch('analyzer.local_llm_analyzer.OpenAI', return_value=mock_ollama_client):
-        analyzer = LocalLLMAnalyzer(verbose=False)
+    """Create LocalMultimodalAnalyzer with mocked Ollama client."""
+    with patch('ollama.AsyncClient', return_value=mock_ollama_client):
+        analyzer = LocalMultimodalAnalyzer(verbose=False)
         return analyzer
 
 
-class TestLocalLLMAnalyzerInitialization:
+class TestLocalMultimodalAnalyzerInitialization:
     """Test analyzer initialization and configuration."""
     
     def test_default_initialization(self):
         """Test default initialization with gpt-oss:20b model."""
-        with patch('analyzer.local_llm_analyzer.OpenAI'):
-            analyzer = LocalLLMAnalyzer()
+        with patch('ollama.AsyncClient'):
+            analyzer = LocalMultimodalAnalyzer()
             
-            assert analyzer.model == "gpt-oss:20b"
+            assert analyzer.primary_model == "gpt-oss:20b"
             assert analyzer.verbose is False
             assert analyzer.prompt_generator is not None
     
     def test_custom_model_initialization(self):
         """Test initialization with custom model name."""
-        with patch('analyzer.local_llm_analyzer.OpenAI'):
-            analyzer = LocalLLMAnalyzer(model="gpt-oss:7b", verbose=True)
+        with patch('ollama.AsyncClient'):
+            analyzer = LocalMultimodalAnalyzer(model="gemma3:12b")
             
-            assert analyzer.model == "gpt-oss:7b"
-            assert analyzer.verbose is True
+            assert analyzer.primary_model == "gemma3:12b"
+            assert analyzer.verbose is False
 
 
 class TestCategorizeAndExplain:
@@ -69,21 +65,17 @@ class TestCategorizeAndExplain:
         
         assert category == Categories.HATE_SPEECH
         assert explanation == "Este contenido contiene discurso de odio xenófobo."
-        
+    
         # Verify Ollama was called
-        mock_ollama_client.chat.completions.create.assert_called_once()
-        call_kwargs = mock_ollama_client.chat.completions.create.call_args.kwargs
-        assert call_kwargs['model'] == "gpt-oss:20b"
-        assert call_kwargs['temperature'] == 0.3
-        assert call_kwargs['max_tokens'] == 512
+        mock_ollama_client.generate.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_general_category_fallback(self, analyzer, mock_ollama_client):
         """Test fallback to general category when LLM returns unrecognized category."""
         # Mock response with unrecognized category
-        mock_ollama_client.chat.completions.create.return_value.choices[0].message.content = (
-            "CATEGORÍA: unknown_category\nEXPLICACIÓN: Some explanation."
-        )
+        mock_ollama_client.generate.return_value = {
+            "response": "CATEGORÍA: unknown_category\nEXPLICACIÓN: Some explanation."
+        }
         
         content = "Neutral political statement"
         category, explanation = await analyzer.categorize_and_explain(content)
@@ -95,13 +87,13 @@ class TestCategorizeAndExplain:
     @pytest.mark.asyncio
     async def test_error_handling(self, analyzer, mock_ollama_client):
         """Test error handling when Ollama fails."""
-        mock_ollama_client.chat.completions.create.side_effect = RuntimeError("Ollama connection failed")
+        mock_ollama_client.generate.side_effect = RuntimeError("Ollama connection failed")
         
         content = "Test content"
-        category, explanation = await analyzer.categorize_and_explain(content)
         
-        assert category == Categories.GENERAL
-        assert "Error en análisis local" in explanation
+        # Should re-raise the exception instead of graceful fallback
+        with pytest.raises(RuntimeError, match="Analysis failed: Ollama text generation failed"):
+            await analyzer.categorize_and_explain(content)
 
 
 class TestExplainOnly:
@@ -111,9 +103,9 @@ class TestExplainOnly:
     async def test_successful_explanation(self, analyzer, mock_ollama_client):
         """Test generating explanation for known category."""
         # Mock response for explanation-only
-        mock_ollama_client.chat.completions.create.return_value.choices[0].message.content = (
-            "Este contenido muestra retórica extremista con ataques xenófobos directos."
-        )
+        mock_ollama_client.generate.return_value = {
+            "response": "Este contenido muestra retórica extremista con ataques xenófobos directos."
+        }
         
         content = "Los inmigrantes son criminales"
         category = Categories.HATE_SPEECH
@@ -121,19 +113,17 @@ class TestExplainOnly:
         explanation = await analyzer.explain_only(content, category)
         
         assert "extremista" in explanation or "xenófobos" in explanation
-        
-        # Verify prompt was category-specific
-        mock_ollama_client.chat.completions.create.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_explanation_error_handling(self, analyzer, mock_ollama_client):
         """Test error handling in explanation generation."""
-        mock_ollama_client.chat.completions.create.side_effect = RuntimeError("Generation failed")
+        mock_ollama_client.generate.side_effect = RuntimeError("Generation failed")
         
         content = "Test content"
-        explanation = await analyzer.explain_only(content, Categories.DISINFORMATION)
         
-        assert "Error generando explicación local" in explanation
+        # Should re-raise the exception instead of graceful fallback
+        with pytest.raises(RuntimeError, match="Explanation generation failed: Ollama text generation failed"):
+            await analyzer.explain_only(content, Categories.DISINFORMATION)
 
 
 class TestPromptBuilding:
@@ -142,7 +132,7 @@ class TestPromptBuilding:
     def test_categorization_prompt_structure(self, analyzer):
         """Test categorization prompt contains all required elements."""
         content = "Test content for analysis"
-        prompt = analyzer.prompt_generator.build_categorization_prompt(content)
+        prompt = analyzer.prompt_generator.build_ollama_categorization_prompt(content)
         
         # Check prompt structure
         assert "CATEGORÍAS:" in prompt
@@ -236,30 +226,24 @@ EXPLICACIÓN: Este contenido contiene discurso de odio con ataques xenófobos di
 class TestOllamaGeneration:
     """Test Ollama API interaction."""
     
-    def test_generate_with_ollama_success(self, analyzer, mock_ollama_client):
+    @pytest.mark.asyncio
+    async def test_generate_with_ollama_success(self, analyzer, mock_ollama_client):
         """Test successful Ollama generation."""
         prompt = "Test prompt"
-        
-        result = analyzer._generate_with_ollama(prompt)
-        
-        assert result == "CATEGORÍA: hate_speech\nEXPLICACIÓN: Este contenido contiene discurso de odio xenófobo."
-        
-        # Verify API call structure
-        call_kwargs = mock_ollama_client.chat.completions.create.call_args.kwargs
-        assert call_kwargs['model'] == "gpt-oss:20b"
-        assert len(call_kwargs['messages']) == 2
-        assert call_kwargs['messages'][0]['role'] == "system"
-        assert call_kwargs['messages'][1]['role'] == "user"
-        assert call_kwargs['messages'][1]['content'] == prompt
     
-    def test_generate_with_ollama_error(self, analyzer, mock_ollama_client):
+        result = await analyzer._generate_with_ollama(prompt, "gpt-oss:20b")
+    
+        assert result == "CATEGORÍA: hate_speech\nEXPLICACIÓN: Este contenido contiene discurso de odio xenófobo."
+    
+    @pytest.mark.asyncio
+    async def test_generate_with_ollama_error(self, analyzer, mock_ollama_client):
         """Test error handling in Ollama generation."""
-        mock_ollama_client.chat.completions.create.side_effect = Exception("Connection timeout")
+        mock_ollama_client.generate.side_effect = Exception("Connection timeout")
         
         prompt = "Test prompt"
         
-        with pytest.raises(RuntimeError, match="Ollama generation failed"):
-            analyzer._generate_with_ollama(prompt)
+        with pytest.raises(RuntimeError, match="Ollama text generation failed"):
+            await analyzer._generate_with_ollama(prompt, "gpt-oss:20b")
 
 
 class TestVerboseLogging:
@@ -268,22 +252,49 @@ class TestVerboseLogging:
     @pytest.mark.asyncio
     async def test_categorize_verbose_output(self, mock_ollama_client, capsys):
         """Test verbose logging in categorize_and_explain."""
-        with patch('analyzer.local_llm_analyzer.OpenAI', return_value=mock_ollama_client):
-            analyzer = LocalLLMAnalyzer(verbose=True)
+        with patch('ollama.AsyncClient', return_value=mock_ollama_client):
+            analyzer = LocalMultimodalAnalyzer(verbose=True)
             
             await analyzer.categorize_and_explain("Test content")
             
             captured = capsys.readouterr()
-            assert "🔍 Running local LLM categorization + explanation" in captured.out
+            assert "🔍 Running local text categorization + explanation" in captured.out
             assert "✅ Category detected:" in captured.out
     
     @pytest.mark.asyncio
     async def test_explain_verbose_output(self, mock_ollama_client, capsys):
         """Test verbose logging in explain_only."""
-        with patch('analyzer.local_llm_analyzer.OpenAI', return_value=mock_ollama_client):
-            analyzer = LocalLLMAnalyzer(verbose=True)
+        with patch('ollama.AsyncClient', return_value=mock_ollama_client):
+            analyzer = LocalMultimodalAnalyzer(verbose=True)
             
             await analyzer.explain_only("Test content", Categories.HATE_SPEECH)
             
             captured = capsys.readouterr()
-            assert "🔍 Generating local explanation for category:" in captured.out
+            assert "🔍 Generating local text explanation for category:" in captured.out
+
+
+class TestMultimodalSupport:
+    """Test multimodal analysis capabilities."""
+    
+    @pytest.mark.asyncio
+    async def test_text_fallback_when_no_media(self, analyzer):
+        """Test that text-only analysis works when no media provided."""
+        content = "Contenido político normal"
+        
+        category, explanation = await analyzer.categorize_and_explain(content)
+        
+        # Should use text analysis and get some result
+        assert category in Categories.get_all_categories()
+        assert isinstance(explanation, str)
+        assert len(explanation) > 0
+    
+    @pytest.mark.asyncio
+    async def test_explanation_without_media(self, analyzer):
+        """Test explanation generation without media."""
+        content = "Contenido de prueba"
+        category = Categories.GENERAL
+        
+        explanation = await analyzer.explain_only(content, category)
+        
+        assert isinstance(explanation, str)
+        assert len(explanation) > 0

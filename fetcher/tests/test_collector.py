@@ -74,11 +74,11 @@ class TestTweetCollector:
     def test_setup_media_url_monitoring(self, collector, mock_page):
         """Test media URL monitoring setup."""
         expected_urls = ['url1', 'url2']
-        collector.media_monitor.setup_monitoring.return_value = expected_urls
+        collector.media_monitor.setup_and_monitor.return_value = expected_urls
 
         result = collector.setup_media_url_monitoring(mock_page)
 
-        collector.media_monitor.setup_monitoring.assert_called_once_with(mock_page)
+        collector.media_monitor.setup_and_monitor.assert_called_once_with(mock_page, collector.scroller)
         assert result == expected_urls
 
     def test_should_process_tweet_new_tweet(self, collector):
@@ -224,22 +224,29 @@ class TestTweetCollector:
 
         assert len(result) == 0
 
-    @patch('fetcher.collector.fetcher_parsers.analyze_post_type')
-    @patch('fetcher.collector.fetcher_parsers.extract_full_tweet_content')
-    @patch('fetcher.collector.fetcher_parsers.extract_media_data')
-    @patch('fetcher.collector.fetcher_parsers.extract_engagement_metrics')
     @patch('fetcher.collector.fetcher_parsers.extract_content_elements')
-    def test_extract_tweet_data_success(self, mock_content_elements, mock_engagement, mock_media, mock_content, mock_post_analysis, collector, mock_article):
+    @patch('fetcher.collector.fetcher_parsers.extract_engagement_metrics')
+    @patch('fetcher.collector.fetcher_parsers.extract_tweet_with_quoted_content')
+    def test_extract_tweet_data_success(self, mock_extract_tweet, mock_engagement, mock_content_elements, collector, mock_article):
         """Test successful tweet data extraction."""
         # Setup mocks
-        mock_post_analysis.return_value = {
+        mock_dict = {
+            'tweet_id': '123456789',
+            'tweet_url': 'https://x.com/user/status/123456789',
+            'username': 'testuser',
+            'content': 'Test tweet content',
             'post_type': 'original',
-            'should_skip': False,
             'original_author': None,
-            'original_tweet_id': None
+            'original_tweet_id': None,
+            'media_links': 'media1.jpg',
+            'media_count': 1,
+            'hashtags': '#test',
+            'mentions': '@user',
+            'external_links': 'http://example.com'
         }
-        mock_content.return_value = "Test tweet content"
-        mock_media.return_value = (['media1.jpg'], 1, ['image'])
+        mock_extract_tweet.return_value = mock_dict
+        # Mock process_video_urls to return the input dict
+        collector.media_monitor.process_video_urls.return_value = mock_dict
         mock_engagement.return_value = {
             'retweets': 10,
             'likes': 20,
@@ -306,20 +313,29 @@ class TestTweetCollector:
 
         assert result is None
 
-    @patch('fetcher.collector.fetcher_parsers.analyze_post_type')
-    @patch('fetcher.collector.fetcher_parsers.extract_full_tweet_content')
-    @patch('fetcher.collector.fetcher_parsers.extract_media_data')
-    @patch('fetcher.collector.fetcher_parsers.extract_engagement_metrics')
     @patch('fetcher.collector.fetcher_parsers.extract_content_elements')
-    def test_extract_tweet_data_with_media_urls(self, mock_content_elements, mock_engagement, mock_media, mock_content, mock_post_analysis, collector, mock_article):
+    @patch('fetcher.collector.fetcher_parsers.extract_engagement_metrics')
+    @patch('fetcher.collector.fetcher_parsers.extract_tweet_with_quoted_content')
+    def test_extract_tweet_data_with_media_urls(self, mock_extract_tweet, mock_engagement, mock_content_elements, collector, mock_article):
         """Test tweet data extraction with additional media URLs."""
         # Setup mocks
-        mock_post_analysis.return_value = {
+        mock_dict = {
+            'tweet_id': '123',
+            'content': 'Test content',
             'post_type': 'original',
-            'should_skip': False
+            'media_links': None,
+            'media_count': 0
         }
-        mock_content.return_value = "Test content"
-        mock_media.return_value = ([], 0, [])
+        mock_extract_tweet.return_value = mock_dict
+        
+        # Mock process_video_urls to return dict with processed media and clear media_urls
+        def mock_process_video_urls(media_urls_param, tweet_data_param):
+            media_urls_param.clear()  # Clear the list as expected
+            processed_dict = tweet_data_param.copy()
+            processed_dict['media_links'] = 'https://video.twimg.com/test.mp4'
+            processed_dict['media_count'] = 1
+            return processed_dict
+        collector.media_monitor.process_video_urls.side_effect = mock_process_video_urls
         mock_engagement.return_value = {
             'retweets': 0, 'likes': 0, 'replies': 0, 'views': 0
         }
@@ -354,20 +370,20 @@ class TestTweetCollector:
 
         assert result is None
 
-    @patch('fetcher.collector.fetcher_parsers.analyze_post_type')
-    @patch('fetcher.collector.fetcher_parsers.extract_full_tweet_content')
-    @patch('fetcher.collector.fetcher_parsers.extract_media_data')
-    @patch('fetcher.collector.fetcher_parsers.extract_engagement_metrics')
     @patch('fetcher.collector.fetcher_parsers.extract_content_elements')
-    def test_extract_tweet_data_no_timestamp(self, mock_content_elements, mock_engagement, mock_media, mock_content, mock_post_analysis, collector, mock_article):
+    @patch('fetcher.collector.fetcher_parsers.extract_engagement_metrics')
+    @patch('fetcher.collector.fetcher_parsers.extract_tweet_with_quoted_content')
+    def test_extract_tweet_data_no_timestamp(self, mock_extract_tweet, mock_engagement, mock_content_elements, collector, mock_article):
         """Test tweet data extraction when timestamp is not available."""
         # Setup mocks
-        mock_post_analysis.return_value = {
-            'post_type': 'original',
-            'should_skip': False
+        mock_dict = {
+            'tweet_id': '123',
+            'content': 'Test content',
+            'post_type': 'original'
         }
-        mock_content.return_value = "Test content"
-        mock_media.return_value = ([], 0, [])
+        mock_extract_tweet.return_value = mock_dict
+        # Mock process_video_urls to return the input dict
+        collector.media_monitor.process_video_urls.return_value = mock_dict
         mock_engagement.return_value = {
             'retweets': 0, 'likes': 0, 'replies': 0, 'views': 0
         }

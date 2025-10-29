@@ -40,7 +40,7 @@ class TweetCollector:
         Returns:
             List of captured media URLs
         """
-        return self.media_monitor.setup_monitoring(page)
+        return self.media_monitor.setup_and_monitor(page, self.scroller)
 
     def should_process_tweet(self, tweet_id: str, seen_ids: Set[str]) -> bool:
         """
@@ -98,79 +98,38 @@ class TweetCollector:
             tweet_url: Tweet URL
             username: Username
             profile_pic_url: Profile picture URL
-            media_urls: Captured media URLs
+            media_urls: Captured media URLs from monitoring
 
         Returns:
             Dict of tweet data or None if extraction failed
         """
         try:
-            # Extract post type analysis
-            post_analysis = fetcher_parsers.analyze_post_type(article, username)
-
-            # Skip pinned posts
-            if post_analysis.get('should_skip'):
+            tweet_data = fetcher_parsers.extract_tweet_with_quoted_content(article, tweet_id, username, tweet_url)
+            
+            if not tweet_data:
                 return None
-
-            # Extract content
-            content = fetcher_parsers.extract_full_tweet_content(article)
-            if not content:
-                logger.debug(f"Skipping content-less tweet: {tweet_id}")
-                return None
-
-            # Extract media information
-            media_links, media_count, media_types = fetcher_parsers.extract_media_data(article)
-
-            # Add captured media URLs
-            if media_urls:
-                for media_url in media_urls:
-                    if media_url not in media_links:
-                        media_links.append(media_url)
-                        media_types.append('video')
-                        media_count += 1
-                logger.debug(f"Added {len(media_urls)} media URLs from network monitoring")
-                media_urls.clear()  # Clear for next tweet
-
-            # Extract engagement metrics
-            engagement = fetcher_parsers.extract_engagement_metrics(article)
-
-            # Extract content elements
-            content_elements = fetcher_parsers.extract_content_elements(article)
-
+            
+            # Process video URLs like refetch does
+            tweet_data = self.media_monitor.process_video_urls(media_urls, tweet_data)
+            
             # Extract timestamp
-            time_elem = article.query_selector('time')
-            tweet_timestamp = time_elem.get_attribute('datetime') if time_elem else None
-
-            # Build tweet data
-            tweet_data = {
-                'tweet_id': tweet_id,
-                'tweet_url': tweet_url,
-                'username': username,
-                'content': content,
-                'tweet_timestamp': tweet_timestamp,
-                'profile_pic_url': profile_pic_url,
-
-                # Post type analysis
-                **post_analysis,
-
-                # Media data
-                'media_links': ','.join(media_links) if media_links else None,
-                'media_count': media_count,
-                'media_types': json.dumps(media_types) if media_types else None,
-
-                # Content elements
-                **content_elements,
-
-                # Engagement metrics
+            time_element = article.query_selector('time')
+            if time_element:
+                tweet_data['tweet_timestamp'] = time_element.get_attribute('datetime')
+            else:
+                tweet_data['tweet_timestamp'] = None
+            
+            # Add profile picture URL
+            tweet_data['profile_pic_url'] = profile_pic_url
+            
+            # Extract engagement metrics (additional data not in refetch)
+            engagement = fetcher_parsers.extract_engagement_metrics(article)
+            tweet_data.update({
                 'engagement_retweets': engagement['retweets'],
                 'engagement_likes': engagement['likes'],
                 'engagement_replies': engagement['replies'],
                 'engagement_views': engagement['views'],
-
-                # Legacy compatibility
-                'is_repost': 1 if 'repost' in post_analysis['post_type'] else 0,
-                'is_comment': 1 if post_analysis['post_type'] == 'repost_reply' else 0,
-                'parent_tweet_id': post_analysis.get('reply_to_tweet_id') or post_analysis.get('original_tweet_id')
-            }
+            })
 
             return tweet_data
 

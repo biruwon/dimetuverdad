@@ -50,50 +50,6 @@ class RefetchManager:
             
             return row['username'], row['tweet_url']
 
-    def extract_and_update_tweet(self, page, tweet_id: str, username: str, tweet_url: str) -> bool:
-        """
-        Helper function to extract tweet data and update database.
-        Consolidates extraction logic used in refetch operations.
-        
-        Args:
-            page: Playwright page instance
-            tweet_id: The tweet ID
-            username: The username 
-            tweet_url: The tweet URL
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            # Load the tweet page
-            print(f"🌐 Loading tweet page...")
-            try:
-                page.goto(tweet_url, wait_until="domcontentloaded", timeout=60000)
-                self.scroller.delay(2.0, 3.0)
-            except Exception as e:
-                print(f"⚠️ Page load warning: {e}")
-            
-            # Extract tweet data
-            tweet_data = fetcher_parsers.extract_tweet_with_quoted_content(page, tweet_id, username, tweet_url)
-            
-            if not tweet_data:
-                print(f"❌ Failed to extract tweet data")
-                return False
-            
-            # Update database
-            success = fetcher_db.update_tweet_in_database(tweet_id, tweet_data)
-            
-            if success:
-                print(f"✅ Successfully updated tweet {tweet_id}")
-            else:
-                print(f"❌ Failed to update tweet {tweet_id} in database")
-                
-            return success
-            
-        except Exception as e:
-            print(f"❌ Error during tweet extraction: {e}")
-            return False
-
     def refetch_single_tweet(self, tweet_id: str) -> bool:
         """
         Re-fetch a specific tweet by ID, extracting complete content including quoted tweets.
@@ -126,18 +82,19 @@ class RefetchManager:
             with sync_playwright() as p:
                 browser, context, page = self.session_manager.create_browser_context(p)
                 
-                # Monitor network requests for media URLs (videos and images)
-                media_urls = self.media_monitor.setup_monitoring(page)
-                
                 # Navigate to tweet page
                 try:
-                    page.goto(tweet_url, wait_until="networkidle", timeout=30000)
+                    page.goto(tweet_url, wait_until="domcontentloaded", timeout=30000)
                     print(f"📄 Page loaded: {tweet_url}")
+                    # Add delay to let dynamic content load
+                    self.scroller.delay(2.0, 3.0)
                 except Exception as e:
                     print(f"⚠️ Page load warning: {e}")
                 
-                # Extract tweet data
-                tweet_data = fetcher_parsers.extract_tweet_with_quoted_content(page, tweet_id, username, tweet_url)
+                # Extract tweet data using shared parsing logic (includes media monitoring)
+                tweet_data = fetcher_parsers.extract_tweet_with_media_monitoring(
+                    page, tweet_id, username, tweet_url, self.media_monitor, self.scroller
+                )
                 
                 if not tweet_data:
                     print(f"❌ Failed to extract tweet data")
@@ -145,17 +102,7 @@ class RefetchManager:
                     browser.close()
                     return False
                 
-                # Add captured media URLs to tweet data
-                if media_urls:
-                    print(f"📹 Found {len(media_urls)} media URLs via network monitoring")
-                    # Combine media URLs with existing media_links
-                    existing_media = tweet_data.get('media_links', '')
-                    existing_urls = existing_media.split(',') if existing_media else []
-                    combined_urls = list(set(existing_urls + media_urls))  # Remove duplicates
-                    tweet_data['media_links'] = ','.join([url for url in combined_urls if url.strip()])
-                    tweet_data['media_count'] = len([u for u in combined_urls if u.strip()])
-                
-                # Update database with combined data
+                # Update database with DOM-extracted data
                 success = fetcher_db.update_tweet_in_database(tweet_id, tweet_data)
                 
                 if success:

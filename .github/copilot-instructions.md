@@ -402,6 +402,7 @@ ollama pull gpt-oss:20b  # Re-download model if corrupted
 - **Terminal output formatting**: Uses emoji indicators (🚫, ❌, 🕵️, ⚡, 📢, ✅) for categories
 - **Analysis method tracking**: Every result tagged as either `"pattern"` or `"llm"` in database
 - **No backward compatibility**: Never add legacy compatibility code, deprecated methods, or wrapper classes - always refactor existing code to use new patterns directly and immediately remove old code
+- **NO LEGACY COMPATIBILITY FIELDS**: Never add compatibility fields like `is_repost`, `is_comment`, `parent_tweet_id` or any other legacy database fields - use the current data structure directly
 - **Sensitive content handling**: Reference detection patterns abstractly (e.g., "hate speech detection logic") without displaying raw examples or prompts
 - **Import statements at top only**: ALL imports must be at the top of the file, never inside functions or methods - this follows PEP 8 standards and prevents import overhead on repeated function calls
 

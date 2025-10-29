@@ -228,20 +228,7 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
         from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
-            
-            # Get current media_links to combine with any new video URLs
-            c.execute("SELECT media_links FROM tweets WHERE tweet_id = ?", (tweet_id,))
-            row = c.fetchone()
-            current_media = row['media_links'] if row and row['media_links'] else ""
-            
-            # If tweet_data contains media_links, combine them with existing ones
-            if tweet_data.get('media_links'):
-                existing_urls = current_media.split(',') if current_media else []
-                new_urls = tweet_data['media_links'].split(',') if tweet_data['media_links'] else []
-                combined_urls = list(set(existing_urls + new_urls))  # Remove duplicates
-                tweet_data['media_links'] = ','.join([url for url in combined_urls if url.strip()])
-                tweet_data['media_count'] = len([url for url in combined_urls if url.strip()])
-            
+                        
             # Direct UPDATE to force save all fields
             c.execute("""
                 UPDATE tweets SET 

@@ -6,7 +6,7 @@ Tests all static and instance methods for prompt generation.
 
 import unittest
 from analyzer.prompts import EnhancedPromptGenerator, PromptContext
-from analyzer.categories import Categories
+from analyzer.categories import Categories, CATEGORY_INFO
 
 
 class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
@@ -30,9 +30,9 @@ class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
         self.assertIn("call_to_action", result)
         self.assertIn("general", result)
 
-    def test_build_ollama_system_prompt(self):
+    def test_build_ollama_text_analysis_system_prompt(self):
         """Test Ollama system prompt generation."""
-        result = EnhancedPromptGenerator.build_ollama_system_prompt()
+        result = EnhancedPromptGenerator.build_ollama_text_analysis_system_prompt()
         
         # Should be a non-empty string
         self.assertIsInstance(result, str)
@@ -56,10 +56,10 @@ class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
         self.assertIn("GUÍAS DE DETECCIÓN", result)
         self.assertIn("Identifica:", result)
 
-    def test_build_gemini_analysis_prompt_image(self):
+    def test_build_gemini_multimodal_analysis_prompt_image(self):
         """Test Gemini analysis prompt for images."""
         test_text = "Contenido de ejemplo"
-        result = EnhancedPromptGenerator.build_gemini_analysis_prompt(test_text, is_video=False)
+        result = EnhancedPromptGenerator.build_gemini_multimodal_analysis_prompt(test_text, is_video=False)
         
         # Should contain the text
         self.assertIn(test_text, result)
@@ -69,15 +69,15 @@ class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
         self.assertIn("imagen/video", result)  # Generic reference
         
         # Should have analysis instructions
-        self.assertIn("CONTENIDO PROBLEMÁTICO EN REDES SOCIALES", result)
+        self.assertIn("OBJETIVO DE INVESTIGACIÓN", result)
         
         # Should include analysis requirements
         self.assertIn("extrema derecha", result)
 
-    def test_build_gemini_analysis_prompt_video(self):
+    def test_build_gemini_multimodal_analysis_prompt_video(self):
         """Test Gemini analysis prompt for videos."""
         test_text = "Contenido de video"
-        result = EnhancedPromptGenerator.build_gemini_analysis_prompt(test_text, is_video=True)
+        result = EnhancedPromptGenerator.build_gemini_multimodal_analysis_prompt(test_text, is_video=True)
         
         # Should contain the text
         self.assertIn(test_text, result)
@@ -87,7 +87,7 @@ class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
         self.assertIn("imagen/video", result)  # Generic reference
         
         # Should have analysis instructions
-        self.assertIn("CONTENIDO PROBLEMÁTICO EN REDES SOCIALES", result)
+        self.assertIn("OBJETIVO DE INVESTIGACIÓN", result)
         
         # Should include analysis requirements
         self.assertIn("extrema derecha", result)
@@ -112,9 +112,28 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         self.assertIn(Categories.DISINFORMATION, self.generator.prompt_templates)
         self.assertIn(Categories.GENERAL, self.generator.prompt_templates)
 
+    def test_init_creates_base_context(self):
+        """Test that __init__ creates base Spanish context."""
+        self.assertIsInstance(self.generator.base_context, str)
+        self.assertGreater(len(self.generator.base_context), 0)
+        self.assertIn("especializado", self.generator.base_context)
+
+    def test_init_creates_prompt_templates(self):
+        """Test that __init__ creates prompt templates."""
+        self.assertIsInstance(self.generator.prompt_templates, dict)
+        self.assertGreater(len(self.generator.prompt_templates), 0)
+
+        # Check that all categories have templates
+        for category_name in CATEGORY_INFO.keys():
+            self.assertIn(category_name, self.generator.prompt_templates)
+            template = self.generator.prompt_templates[category_name]
+            self.assertIn("system", template)
+            self.assertIn("focus", template)
+            self.assertIn("questions", template)
+
     def test_build_categorization_prompt_structure(self):
         """Test categorization prompt has correct structure."""
-        result = self.generator.build_categorization_prompt(self.test_text)
+        result = self.generator.build_ollama_categorization_prompt(self.test_text)
         
         # Should contain the text
         self.assertIn(self.test_text, result)

@@ -3,7 +3,6 @@ LLM Models and Pipeline for Spanish Far-Right Analysis
 Extracted for reusability and model comparison.
 """
 
-import time
 import warnings
 from typing import Dict, List, Optional
 import torch
@@ -16,7 +15,6 @@ from openai import OpenAI
 from .categories import Categories
 
 from .prompts import EnhancedPromptGenerator
-from utils.text_utils import normalize_text
 import traceback
 
 # Suppress warnings including the parameter conflict warnings
@@ -1019,15 +1017,13 @@ class EnhancedLLMPipeline:
             response = self.ollama_client.chat.completions.create(
                 model=self.ollama_model_name,
                 messages=[
-                    {"role": "system", "content": EnhancedPromptGenerator.build_ollama_system_prompt()},
+                    {"role": "system", "content": EnhancedPromptGenerator.build_ollama_text_analysis_system_prompt()},
                     {"role": "user", "content": classification_prompt}
                 ],
                 temperature=0.1  # Lower temperature for more consistent results
                 # Note: max_tokens parameter causes empty responses with gpt-oss:20b
             )
-            
-            # Debug: Show response object only in verbose mode
-            # print(f"🔍 Response object: {response}")  # Commented out to reduce noise
+
             result = response.choices[0].message.content.strip().lower()
             print(f"🔍 Raw LLM response: '{result}'")
             

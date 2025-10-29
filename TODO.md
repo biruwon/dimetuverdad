@@ -5,6 +5,8 @@
 Top priority:
 
 - [M] Improve LLM explanation
+- Local multi modal do not process videos, have to implement the frame parsing
+- Posts with links, to use retrieval to fetch their info
 - [M] Disinformation/political retrieval to get up to date data/checks
 - What categories do we need?
 - deteled posts should be shown, example post id 1962875705101869390
