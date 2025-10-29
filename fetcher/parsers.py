@@ -17,6 +17,51 @@ def should_skip_existing_tweet(tweet_timestamp: str, oldest_timestamp: Optional[
         return False
 
 
+def parse_tweet_author_and_id(href: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Parse author username and tweet ID from a tweet URL.
+    
+    Args:
+        href: Tweet URL href (e.g., '/username/status/123456789')
+        
+    Returns:
+        Tuple of (author, tweet_id) or (None, None) if invalid format
+    """
+    if not href:
+        return None, None
+    
+    # URL format: /{author}/status/{tweet_id}
+    parts = href.strip('/').split('/')
+    if len(parts) >= 3 and parts[1] == 'status':
+        actual_author = parts[0]
+        tweet_id = parts[2].split('?')[0]  # Remove query params
+        return actual_author, tweet_id
+    
+    return None, None
+
+
+def should_process_tweet_by_author(href: str, target_username: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Check if a tweet should be processed based on author matching.
+    
+    Args:
+        href: Tweet URL href
+        target_username: The username we're targeting
+        
+    Returns:
+        Tuple of (should_process, author, tweet_id)
+    """
+    author, tweet_id = parse_tweet_author_and_id(href)
+    
+    if not author or not tweet_id:
+        return False, None, None
+    
+    # Only process tweets from the target user
+    should_process = author == target_username
+    
+    return should_process, author, tweet_id
+
+
 def extract_image_data(article) -> Tuple[List[str], List[str]]:
     """Extract image URLs from a tweet article."""
     media_links = []
@@ -609,7 +654,7 @@ def human_delay(min_seconds: float = 1.0, max_seconds: float = 3.0):
     time.sleep(delay)
 
 
-def extract_tweet_with_quoted_content(page, tweet_id: str, username: str, tweet_url: str) -> dict:
+def extract_tweet_with_quoted_content(page, tweet_id: str, username: str, tweet_url: str, article=None) -> dict:
     """
     Extract complete tweet data including quoted tweet content and media.
     
@@ -618,18 +663,22 @@ def extract_tweet_with_quoted_content(page, tweet_id: str, username: str, tweet_
         tweet_id: Tweet ID
         username: Tweet author username  
         tweet_url: Tweet URL
+        article: Optional article element (if already found on page)
         
     Returns:
         dict: Tweet data with all fields, or None if extraction failed
     """
-    # Find main tweet article
-    articles = page.query_selector_all('article[data-testid="tweet"]')
-    if not articles:
-        print(f"❌ Could not find tweet content on page")
-        return None
-
-    main_article = articles[0]
-    print(f"✅ Found main tweet article")
+    # Use provided article or find main tweet article
+    if article:
+        main_article = article
+        print(f"✅ Using provided article element")
+    else:
+        articles = page.query_selector_all('article[data-testid="tweet"]')
+        if not articles:
+            print(f"❌ Could not find tweet content on page")
+            return None
+        main_article = articles[0]
+        print(f"✅ Found main tweet article")
 
     # Extract main tweet content
     content = extract_full_tweet_content(main_article)
@@ -704,7 +753,7 @@ def extract_tweet_with_media_monitoring(page, tweet_id: str, username: str, twee
         dict: Tweet data with all fields including network-captured media, or None if extraction failed
     """
     # Extract tweet data (DOM extraction for images)
-    tweet_data = extract_tweet_with_quoted_content(page, tweet_id, username, tweet_url)
+    tweet_data = extract_tweet_with_quoted_content(page, tweet_id, username, tweet_url, None)
     
     if not tweet_data:
         return None

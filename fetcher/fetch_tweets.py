@@ -231,7 +231,14 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
                         continue
                         
                     href = tweet_link.get_attribute('href')
-                    tweet_id = href.split('/')[-1] if href else None
+                    if not href:
+                        continue
+                    
+                    # Parse author and tweet_id from URL using shared utility
+                    should_process, actual_author, tweet_id = fetcher_parsers.should_process_tweet_by_author(href, username)
+                    
+                    if not should_process:
+                        continue
                     
                     if not tweet_id:
                         continue
@@ -253,7 +260,7 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
                     
                     # Analyze post type
                     post_analysis = fetcher_parsers.analyze_post_type(article, username)
-                    tweet_url = f"https://x.com/{username}/status/{tweet_id}"
+                    tweet_url = f"https://x.com{href}"
                     
                     # Extract media information
                     media_links, media_count, media_types = fetcher_parsers.extract_media_data(article)
@@ -264,7 +271,7 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
                     # Build tweet data
                     tweet_data = {
                         'tweet_id': tweet_id,
-                        'username': username,
+                        'username': actual_author,
                         'content': content,
                         'tweet_url': tweet_url,
                         'tweet_timestamp': time_elem.get_attribute('datetime') if (time_elem := article.query_selector('time')) else None,
@@ -509,7 +516,7 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
     for handle in handles:
         print(f"\nFetching up to {max_tweets} tweets for @{handle}...")
         # Add retries with exponential backoff for each handle
-        max_retries = 5
+        max_retries = 0
         attempt = 0
         tweets = []
         while attempt <= max_retries:

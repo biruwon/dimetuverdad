@@ -104,7 +104,7 @@ class TweetCollector:
             Dict of tweet data or None if extraction failed
         """
         try:
-            tweet_data = fetcher_parsers.extract_tweet_with_quoted_content(article, tweet_id, username, tweet_url)
+            tweet_data = fetcher_parsers.extract_tweet_with_quoted_content(article, tweet_id, username, tweet_url, article)
             
             if not tweet_data:
                 return None
@@ -247,7 +247,15 @@ class TweetCollector:
                         continue
 
                     href = tweet_link.get_attribute('href')
-                    tweet_id = href.split('/')[-1] if href else None
+                    if not href:
+                        continue
+                    
+                    # Parse author and tweet_id from URL using shared utility
+                    should_process, actual_author, tweet_id = fetcher_parsers.should_process_tweet_by_author(href, username)
+                    
+                    if not should_process:
+                        logger.debug(f"Skipping tweet from @{actual_author} (not target user @{username})")
+                        continue
 
                     if not self.should_process_tweet(tweet_id, seen_tweet_ids):
                         continue
@@ -284,7 +292,7 @@ class TweetCollector:
 
                     # Extract full tweet data
                     tweet_data = self.extract_tweet_data(
-                        article, tweet_id, tweet_url, username,
+                        article, tweet_id, tweet_url, actual_author,
                         profile_pic_url, media_urls
                     )
 

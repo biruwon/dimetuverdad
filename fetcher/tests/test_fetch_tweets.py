@@ -739,7 +739,7 @@ class TestRefetchSingleTweet:
         monkeypatch.setattr(manager, 'get_tweet_info_from_db', lambda tweet_id: ('testuser', 'https://x.com/testuser/status/123456789'))
 
         # Mock extraction to return valid data
-        def fake_extract(page, tweet_id, username, tweet_url):
+        def fake_extract(page, tweet_id, username, tweet_url, media_monitor=None, scroller=None):
             return {
                 'tweet_id': tweet_id,
                 'tweet_url': tweet_url,
@@ -756,7 +756,7 @@ class TestRefetchSingleTweet:
 
         # Import the parsers module
         from fetcher import parsers as fetcher_parsers
-        monkeypatch.setattr(fetcher_parsers, 'extract_tweet_with_quoted_content', fake_extract)
+        monkeypatch.setattr(fetcher_parsers, 'extract_tweet_with_media_monitoring', fake_extract)
 
         # Mock database update to return success
         from fetcher import db as fetcher_db
