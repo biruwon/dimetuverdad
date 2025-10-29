@@ -232,7 +232,7 @@ class TestTweetCollector:
         # Setup mocks
         mock_dict = {
             'tweet_id': '123456789',
-            'tweet_url': 'https://x.com/user/status/123456789',
+            'tweet_url': 'https://x.com/testuser/status/123456789',
             'username': 'testuser',
             'content': 'Test tweet content',
             'post_type': 'original',
@@ -267,13 +267,13 @@ class TestTweetCollector:
         media_urls = []
 
         result = collector.extract_tweet_data(
-            mock_article, '123456789', 'https://x.com/user/status/123456789',
+            mock_article, '123456789', 'https://x.com/testuser/status/123456789',
             'testuser', 'https://profile.pic.url', media_urls
         )
 
         assert result is not None
         assert result['tweet_id'] == '123456789'
-        assert result['tweet_url'] == 'https://x.com/user/status/123456789'
+        assert result['tweet_url'] == 'https://x.com/testuser/status/123456789'
         assert result['username'] == 'testuser'
         assert result['content'] == 'Test tweet content'
         assert result['post_type'] == 'original'
@@ -290,7 +290,7 @@ class TestTweetCollector:
         }
 
         result = collector.extract_tweet_data(
-            mock_article, '123', 'https://x.com/user/status/123',
+            mock_article, '123', 'https://x.com/testuser/status/123',
             'testuser', None, []
         )
 
@@ -348,7 +348,7 @@ class TestTweetCollector:
         media_urls = ['https://video.twimg.com/test.mp4']
 
         result = collector.extract_tweet_data(
-            mock_article, '123', 'https://x.com/user/status/123',
+            mock_article, '123', 'https://x.com/testuser/status/123',
             'testuser', None, media_urls
         )
 
@@ -364,7 +364,7 @@ class TestTweetCollector:
         mock_post_analysis.side_effect = Exception("Analysis failed")
 
         result = collector.extract_tweet_data(
-            mock_article, '123', 'https://x.com/user/status/123',
+            mock_article, '123', 'https://x.com/testuser/status/123',
             'testuser', None, []
         )
 
@@ -393,7 +393,7 @@ class TestTweetCollector:
         mock_article.query_selector.return_value = None
 
         result = collector.extract_tweet_data(
-            mock_article, '123', 'https://x.com/user/status/123',
+            mock_article, '123', 'https://x.com/testuser/status/123',
             'testuser', None, []
         )
 
@@ -411,7 +411,7 @@ class TestTweetCollector:
         # Mock articles
         mock_article = Mock()
         mock_link = Mock()
-        mock_link.get_attribute.return_value = '/user/status/123456789'
+        mock_link.get_attribute.return_value = '/testuser/status/123456789'
         mock_article.query_selector.return_value = mock_link
         mock_page.query_selector_all.return_value = [mock_article]
 
@@ -466,7 +466,7 @@ class TestTweetCollector:
         # Mock article
         mock_article = Mock()
         mock_link = Mock()
-        mock_link.get_attribute.return_value = '/user/status/123456789'
+        mock_link.get_attribute.return_value = '/testuser/status/123456789'
         mock_article.query_selector.return_value = mock_link
         
         # Mock page to return article first time, then empty list

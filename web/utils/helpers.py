@@ -487,7 +487,7 @@ def get_user_tweets_data(username: str, page: int, per_page: int,
     # Sort by priority (non-general first) then by timestamp
     filtered_tweets.sort(key=lambda x: (
         0 if x.get('analysis_category') in [None, 'general'] else 1,
-        x.get('tweet_timestamp', ''),
+        x.get('tweet_timestamp') or '',
     ), reverse=True)
 
     # Apply pagination

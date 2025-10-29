@@ -2,7 +2,7 @@
 Analysis Flow Manager - Orchestrates the 3-stage pipeline.
 
 Stage 1: Pattern Detection
-Stage 2: Local LLM Analysis (gpt-oss:20b)
+Stage 2: Local LLM Analysis
 Stage 3: External Analysis (Gemini, admin-triggered only)
 """
 
@@ -62,7 +62,7 @@ class AnalysisFlowManager:
     
     Flow:
     1. Try pattern detection first (fast, rule-based)
-    2. If patterns insufficient → Local LLM analysis (gpt-oss:20b)
+    2. If patterns insufficient → Local LLM analysis (gemma3:4b)
     3. External analysis only when explicitly triggered (admin action)
     """
     

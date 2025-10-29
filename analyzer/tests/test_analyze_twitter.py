@@ -535,7 +535,8 @@ class TestUtilityFunctions(unittest.TestCase):
             username='testuser',
             max_tweets=5,
             force_reanalyze=False,
-            tweet_id=None
+            tweet_id=None,
+            verbose=False
         )
 
     @patch('analyzer.analyze_twitter.analyze_tweets_from_db')
@@ -547,7 +548,8 @@ class TestUtilityFunctions(unittest.TestCase):
             username=None,
             max_tweets=None,
             force_reanalyze=False,
-            tweet_id=None
+            tweet_id=None,
+            verbose=False
         )
 
     @patch('analyzer.analyze_twitter.analyze_tweets_from_db')
@@ -559,5 +561,6 @@ class TestUtilityFunctions(unittest.TestCase):
             username=None,
             max_tweets=None,
             force_reanalyze=True,
-            tweet_id='123'
+            tweet_id='123',
+            verbose=False
         )

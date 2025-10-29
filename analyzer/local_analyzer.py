@@ -21,15 +21,14 @@ class OllamaRetryError(Exception):
 
 class LocalMultimodalAnalyzer:
     """
-    Unified local multimodal analyzer supporting multiple Ollama models:
-    - Text-only models: gpt-oss:20b, gpt-oss:latest, gemma3:12b
-    - Multimodal models: gemma3:4b, gemma3:12b, gemma3:27b-it-qat
+    Unified local multimodal analyzer using Gemma3:4b for all analysis.
+    Supports both text-only and multimodal analysis with the same model.
     
-    Automatically selects appropriate model based on content type (text vs media).
+    Uses gemma3:4b for all content types (text, images, videos fallback to text).
     """
     
     # Model capabilities
-    TEXT_MODELS = "gpt-oss:20b"
+    TEXT_MODELS = "gemma3:4b"
     MULTIMODAL_MODELS = ["gemma3:4b", "gemma3:12b", "gemma3:27b-it-qat"]
     
     # Default generation parameters
@@ -43,15 +42,14 @@ class LocalMultimodalAnalyzer:
     DEFAULT_MEDIA_TIMEOUT = 5.0
     DEFAULT_MAX_MEDIA_SIZE = 10 * 1024 * 1024
     
-    def __init__(self, model: str = "gpt-oss:20b", verbose: bool = False):
+    def __init__(self, verbose: bool = False):
         """
         Initialize local multimodal analyzer with Ollama.
         
         Args:
-            model: Primary Ollama model to use (default: gpt-oss:20b)
             verbose: Enable detailed logging
         """
-        self.primary_model = model
+        self.primary_model = self.TEXT_MODELS
         self.verbose = verbose
         
         self.ollama_client = ollama.AsyncClient()
@@ -302,9 +300,9 @@ class LocalMultimodalAnalyzer:
     def _select_multimodal_model(self) -> str:
         """
         Select the multimodal model to use.
-        Returns the 4b Gemma model.
+        Now uses the same TEXT_MODELS for consistency.
         """
-        return self.MULTIMODAL_MODELS[0]  # gemma3:4b
+        return self.TEXT_MODELS  # gemma3:4b
     
     async def _prepare_media_content(self, media_urls: List[str]) -> List[dict]:
         """
