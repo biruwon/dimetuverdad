@@ -26,7 +26,8 @@ if str(project_root) not in sys.path:
 
 from utils import paths
 
-from analyzer.llm_models import LLMModelConfig, EnhancedLLMPipeline
+from analyzer.model_configs import LLMModelConfig
+from analyzer.llm_pipeline import EnhancedLLMPipeline
 from analyzer.analyze_twitter import Analyzer
 from analyzer.categories import Categories
 

@@ -566,7 +566,6 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
 def main():
     # Setup logging and get configuration
     setup_logging()
-    config = get_config()
 
     # Start performance tracking
     tracker = start_tracking("Tweet Fetcher")

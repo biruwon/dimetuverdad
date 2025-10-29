@@ -12,13 +12,12 @@ The **dimetuverdad analyzer pipeline** is a sophisticated multi-stage content an
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Analyzer (Main Orchestrator)             │
+│                     AnalysisFlowManager                      │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │ Components:                                            │  │
-│  │ • MetricsCollector (performance tracking)             │  │
-│  │ • ContentAnalysisRepository (database operations)     │  │
-│  │ • TextAnalyzer (text-only content)                    │  │
-│  │ • MultimodalAnalyzer (text + media content)           │  │
+│  │ • PatternAnalyzer (fast regex-based detection)        │  │
+│  │ • LocalMultimodalAnalyzer (Ollama gpt-oss:20b)        │  │
+│  │ • ExternalAnalyzer (Gemini 2.5 Flash API)             │  │
 │  │ • AnalyzerHooks (evidence retrieval integration)      │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
@@ -28,239 +27,176 @@ The **dimetuverdad analyzer pipeline** is a sophisticated multi-stage content an
 
 ## 📊 Analysis Pipeline Flow
 
-### 1. **Entry Point: `analyze_content()`**
+### 1. **Entry Point: `AnalysisFlowManager.analyze_full()`**
 
-The main orchestration method that routes content to appropriate analyzers:
+The main orchestration method that routes content through the complete 3-stage pipeline:
 
 ```python
-async def analyze_content(self, tweet_id, tweet_url, username, content, media_urls=None):
-    """
-    Main pipeline entry point - routes to text or multimodal analysis
-    """
+async def analyze_full(
+    self,
+    content: str,
+    media_urls: Optional[List[str]] = None,
+    admin_override: bool = False,
+    force_disable_external: bool = False
+) -> AnalysisResult:
 ```
 
 **Decision Logic:**
-- **Has media URLs?** → Route to `MultimodalAnalyzer`
-- **Text only?** → Route to `TextAnalyzer`
+- **Always runs**: Pattern Detection + Local LLM Analysis
+- **Conditional**: External Analysis (Gemini) when:
+  - Category is NOT `general` OR `political_general`
+  - OR `admin_override=True` (admin-triggered analysis)
 
 **Key Features:**
-- Async execution with `asyncio.to_thread()` to avoid blocking
-- Conditional evidence retrieval integration
-- Performance metrics tracking
-- Error handling with graceful fallbacks
+- Async execution with proper error handling
+- Dual explanation architecture (local + external)
+- Evidence retrieval integration
+- Performance tracking and logging
 
 ---
 
-## 🔍 Text Analysis Pipeline (TextAnalyzer)
+## 🔍 3-Stage Analysis Pipeline
 
-### Stage 1: Pattern Analysis
+### Stage 1: Pattern Detection
 **Component:** `PatternAnalyzer`
 
 ```
 Input: Normalized text content
   ↓
-Pattern Detection (regex-based)
+Regex-based Pattern Matching (13 categories)
   ↓
-Category Detection: 13 categories including:
-  • hate_speech (highest priority)
-  • disinformation
-  • conspiracy_theory
-  • anti_immigration
-  • anti_lgbtq
-  • anti_feminism
-  • nationalism
-  • anti_government
-  • historical_revisionism
-  • political_general
-  • call_to_action
-  • general (fallback)
+Category Detection with Priority Order:
+  1. hate_speech (highest priority)
+  2. anti_immigration
+  3. anti_lgbtq
+  4. anti_feminism
+  5. disinformation
+  6. conspiracy_theory
+  7. call_to_action
+  8. nationalism
+  9. anti_government
+  10. historical_revisionism
+  11. political_general
+  12. general (fallback)
   ↓
-Output: AnalysisResult with categories, pattern matches, political context
+Output: PatternResult with categories, pattern_matches, political_context
 ```
 
 **Pattern Matching Categories:**
 - **Hate Speech**: Xenophobic language, dehumanization, violence threats, anti-immigrant scapegoating
-- **Disinformation**: False medical/scientific claims, fabricated facts, conspiracy claims
-- **Conspiracy Theory**: Hidden agenda narratives, anti-institutional content, cabal theories
 - **Anti-Immigration**: Xenophobic rhetoric, anti-immigrant narratives, invasion metaphors
 - **Anti-LGBTQ**: Attacks on LGBTQ community, gender ideology criticism, traditional values defense
 - **Anti-Feminism**: Anti-feminist rhetoric, traditional gender roles, patriarchy defense
-- **Nationalism**: National pride, cultural preservation, patriotic narratives
-- **Anti-Government**: Government criticism, institutional distrust, anti-establishment views
+- **Disinformation**: False medical/scientific claims, fabricated facts, conspiracy claims presented as fact
+- **Conspiracy Theory**: Hidden agenda narratives, anti-institutional content, "deep state" theories
+- **Call to Action**: Mobilization calls, protest organization, organized activities
+- **Nationalism**: National identity emphasis, patriotic rhetoric, cultural preservation themes
+- **Anti-Government**: Government criticism, anti-establishment views, institutional distrust
 - **Historical Revisionism**: Historical reinterpretation, authoritarian regime glorification
 - **Political General**: General political discourse, neutral political commentary
-- **Call to Action**: Mobilization calls, protest organization, organized activities
+- **General**: Neutral content, no problematic patterns detected
 
-### Stage 2: Content Categorization
-**Method:** `_categorize_content()`
+### Stage 2: Local LLM Analysis
+**Component:** `LocalMultimodalAnalyzer` (Ollama gpt-oss:20b)
 
 ```
 Pattern Results Available?
   ↓
-YES → Return primary pattern category (method: "pattern")
+YES → LLM Explanation Only (for known category)
   ↓
-NO → LLM Fallback Available?
-     ↓
-     YES → Use LLM for category detection (method: "llm")
-     ↓
-     NO → Return "general" category
+NO → LLM Categorization + Explanation
+  ↓
+Enhanced Prompt Generation (Spanish-optimized)
+  ↓
+Ollama API Call (gpt-oss:20b, ~30-60s)
+  ↓
+Structured Response Parsing:
+  "CATEGORÍA: category_name
+   EXPLICACIÓN: explanation_text"
+  ↓
+Output: Local category + explanation (Spanish, 2-3 sentences)
 ```
 
-**Category Priority (when multiple patterns detected):**
-1. `hate_speech` (highest priority)
-2. `anti_immigration`
-3. `anti_lgbtq`
-4. `anti_feminism`
-5. `disinformation`
-6. `conspiracy_theory`
-7. `call_to_action`
-8. `nationalism`
-9. `anti_government`
-10. `historical_revisionism`
-11. `political_general`
-12. `general` (lowest priority)
+**LLM Operation Modes:**
+- **Categorize + Explain**: When patterns insufficient (full analysis)
+- **Explain Only**: When patterns found specific category (targeted explanation)
 
-### Stage 3: LLM Explanation Generation
-**Component:** `EnhancedLLMPipeline`
+**Model Configuration:**
+- **Primary Model**: `gemma3:4b` (fast, multimodal-capable)
+- **Fallback Model**: `gpt-oss:20b` (quality explanations)
+- **Temperature**: 0.3 (consistent categorization)
+- **Max Tokens**: 512 (concise explanations)
+
+### Stage 3: External Analysis (Conditional)
+**Component:** `ExternalAnalyzer` (Gemini 2.5 Flash)
 
 ```
-Input: Normalized content + detected category
+Category NOT general/political_general OR admin_override=True?
   ↓
-Category-Specific Prompt Generation
-  (using EnhancedPromptGenerator)
-  ↓
-LLM Inference (Ollama: gpt-oss:20b or HuggingFace models)
-  ↓
-Explanation Parsing & Validation
-  ↓
-Output: Detailed Spanish explanation (2-3 sentences)
-```
-
-**LLM Model Priority Levels:**
-- **Fast**: Lightweight models (DistilBERT, TinyBERT) - for development/testing
-- **Balanced**: Medium models (RoBERTa Spanish) - default production
-- **Quality**: Large models (gpt-oss:20b via Ollama) - best explanations
-
-**Prompt Engineering:**
-- Category-specific prompts for nuanced analysis
-- Context-aware based on pattern detection results
-- Structured output format enforcement
-- Spanish language optimization
-
-### Stage 4: Analysis Data Construction
-**Method:** `_build_analysis_data()`
-
-```
-Pattern Results + LLM Output
-  ↓
-Structured Analysis Data:
-  • category (primary)
-  • categories_detected (all found)
-  • pattern_matches (detailed regex matches)
-  • topic_classification (political context)
-  • llm_explanation (human-readable)
-  • analysis_method ("pattern" or "llm")
-  ↓
-Output: ContentAnalysis object
-```
-
----
-
-## 🖼️ Multimodal Analysis Pipeline (MultimodalAnalyzer)
-
-### Stage 1: Media Content Analysis
-**Component:** `GeminiMultimodal`
-
-```
-Input: Media URLs + text content
-  ↓
-Media URL Selection (best quality detection)
+YES → Independent Gemini Analysis
   ↓
 Gemini API Call (gemini-2.5-flash)
   ↓
-Structured Response Parsing:
-  "CATEGORÍA: [category]
-   EXPLICACIÓN: [explanation]"
+Multimodal Analysis (text + images/videos)
   ↓
-Output: Media analysis with category + description
+Category Override Logic:
+  • If Gemini detects different category → Override local result
+  • Special handling for disinformation detection
+  ↓
+Output: External category + explanation (independent verification)
 ```
 
-**Media Type Support:**
-- Images (JPG, PNG, GIF, WebP)
-- Videos (MP4, WebM, AVI, MOV)
-- Mixed media detection
+**Trigger Conditions:**
+1. **Automatic**: Content categorized as problematic (not general/political_general)
+2. **Admin Override**: Manual trigger for any content
+3. **Disinformation Priority**: External analysis takes precedence for disinformation detection
 
-**Gemini Model Benefits:**
-- Native multimodal understanding (text + images)
-- Visual content interpretation (memes, graphics, photos)
-- Contextual analysis combining visual and text elements
-
-### Stage 2: Category Determination
-**Method:** `_determine_combined_category()`
-
-```
-Media Analysis Results
-  ↓
-Media Category Detected?
-  ↓
-YES → Use media-determined category
-  ↓
-NO → Fallback to "general"
-```
-
-### Stage 3: Multimodal Explanation
-**Method:** `_generate_multimodal_explanation()`
-
-```
-Media Description + Text Content
-  ↓
-Combined Explanation Generation
-  ↓
-Output: Unified explanation (Spanish)
-```
+**External Analysis Benefits:**
+- Independent verification (no bias from local analysis)
+- Advanced multimodal understanding
+- Higher accuracy for complex cases
+- Cross-validation of local results
 
 ---
 
 ## 🔬 Evidence Retrieval Integration
 
-### Conditional Triggering
-**Method:** `_should_trigger_evidence_retrieval()`
+### Conditional Enhancement
+**Component:** `AnalyzerHooks`
 
 **Trigger Conditions:**
-1. Text-only analysis (multimodal excluded - already has visual verification)
-2. High-confidence disinformation detection
-3. Conspiracy theory content
-4. Content with numerical/statistical claims
-5. Far-right bias with potential factual claims
+1. **Text-only analysis** (multimodal excluded)
+2. **High-confidence disinformation detection**
+3. **Conspiracy theory content**
+4. **Content with numerical/statistical claims**
+5. **Far-right bias with potential factual claims**
 
 ### Enhancement Process
-**Method:** `_enhance_with_evidence_retrieval()`
 
 ```
-Original Analysis Result
+Local Analysis Complete
   ↓
-Claim Extraction
+Claim Extraction (numerical, temporal, causal claims)
   ↓
-Multi-Source Evidence Search:
+Multi-Source Verification:
   • Statistical APIs (INE, Eurostat, WHO, World Bank)
   • Web scraping (Wikipedia, fact-checkers)
   • Temporal consistency checks
   ↓
-Verification Report Generation:
+Credibility Scoring & Verdict Generation:
   • Overall verdict (VERIFIED/REFUTED/UNVERIFIED)
   • Confidence score (0-1)
-  • Claims verified (individual verdicts)
-  • Evidence sources (with credibility scores)
-  • Contradictions found
+  • Individual claim verdicts
+  • Evidence sources with credibility ratings
   ↓
 Enhanced Explanation with Verification Data
   ↓
-Output: Updated ContentAnalysis with verification_data
+Output: Updated AnalysisResult with verification_data
 ```
 
 **Verification Components:**
-- **ClaimExtractor**: Identifies verifiable claims (numerical, temporal, causal)
-- **QueryBuilder**: Constructs search queries for fact-checking
+- **ClaimExtractor**: Identifies verifiable claims
+- **QueryBuilder**: Constructs fact-checking queries
 - **EvidenceAggregator**: Combines evidence from multiple sources
 - **CredibilityScorer**: Assigns reliability scores to sources
 - **ClaimVerifier**: Produces final verification verdict
@@ -275,11 +211,20 @@ Output: Updated ContentAnalysis with verification_data
 ```sql
 INSERT OR REPLACE INTO content_analyses
 (post_id, post_url, author_username, platform, post_content,
- category, llm_explanation, analysis_method, analysis_json,
- analysis_timestamp, categories_detected, media_urls, media_analysis,
- media_type, multimodal_analysis, verification_data, verification_confidence)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ category, categories_detected, local_explanation, external_explanation,
+ analysis_stages, external_analysis_used, analysis_timestamp,
+ analysis_json, pattern_matches, topic_classification,
+ media_urls, media_type, verification_data, verification_confidence)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ```
+
+**Key Fields:**
+- **`local_explanation`**: Explanation from Ollama (gpt-oss:20b)
+- **`external_explanation`**: Explanation from Gemini (when triggered)
+- **`analysis_stages`**: Comma-separated stages executed ("pattern,local_llm,external")
+- **`external_analysis_used`**: Boolean flag for external analysis
+- **`verification_data`**: JSON with evidence retrieval results
+- **`verification_confidence`**: Confidence score (0-1)
 
 **Features:**
 - Automatic retry logic (max 5 attempts)
@@ -287,16 +232,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 - Connection pooling via `get_db_connection_context()`
 - JSON serialization for complex fields
 - Proper error handling and logging
-
-**Tweet Retrieval:**
-```python
-def get_tweets_for_analysis(self, username=None, max_tweets=None, force_reanalyze=False):
-    """
-    Retrieves unanalyzed tweets or all tweets (if force_reanalyze=True)
-    Filters by username if specified
-    Limits results if max_tweets provided
-    """
-```
 
 ---
 
@@ -306,21 +241,25 @@ def get_tweets_for_analysis(self, username=None, max_tweets=None, force_reanalyz
 
 **Tracked Metrics:**
 - Analysis duration (seconds)
-- Method used (pattern/llm/multimodal)
+- Method used (pattern/local_llm/external)
 - Category detected
-- Model used (ollama, gemini, pattern-only)
+- Model used (ollama, gemini)
 - Multimodal flag (true/false)
+- Evidence retrieval triggered
+- Verification confidence scores
 
 **Performance Summary Output:**
 ```
-📊 Tweet Analyzer Performance Summary
+📊 Analysis Performance Summary
 ==================================================
-⏱️  Duration: 17.05 seconds
-🧠 Peak Memory: 350.3 MB
+⏱️  Duration: 45.23 seconds
+🧠 Peak Memory: 420.7 MB
 ⚡ CPU Usage: 0.0%
 🔢 Operations: 1
-🚀 Throughput: 0.06 ops/sec
+🚀 Throughput: 0.02 ops/sec
 📈 Status: ✅ Success
+🔍 Stages: pattern,local_llm,external
+📋 Category: disinformation
 ```
 
 ---
@@ -398,7 +337,7 @@ def get_tweets_for_analysis(self, username=None, max_tweets=None, force_reanalyz
 
 ### Concurrency Control
 
-**Configuration (AnalyzerConfig):**
+**Configuration:**
 ```python
 max_concurrency = 10          # Total concurrent analyses
 max_llm_concurrency = 3       # LLM inference limit
@@ -413,7 +352,7 @@ llm_sema = asyncio.Semaphore(max_llm_concurrency)
 
 async with analysis_sema:
     async with llm_sema:
-        result = await analyzer.analyze_content(...)
+        result = await flow_manager.analyze_full(content, media_urls)
 ```
 
 **Benefits:**
@@ -424,119 +363,151 @@ async with analysis_sema:
 
 ---
 
-## 🛠️ Configuration System
+## 🖼️ Multimodal Analysis Capabilities
 
-### AnalyzerConfig
+### Local Multimodal (Ollama)
+**Component:** `LocalMultimodalAnalyzer`
 
-**Key Parameters:**
-- `use_llm` (bool): Enable/disable LLM analysis
-- `model_priority` (str): "fast", "balanced", "quality"
-- `max_concurrency` (int): Concurrent analysis limit
-- `max_llm_concurrency` (int): LLM inference limit
-- `max_retries` (int): Failure retry attempts
-- `retry_delay` (int): Initial retry delay
-- `verbose` (bool): Enable detailed logging
-
-**Model Priority Mapping:**
-```python
-fast = {
-    "ollama": "llama3.2:1b",
-    "classification": "distilbert-multilingual"
-}
-
-balanced = {
-    "ollama": "gpt-oss:20b",
-    "classification": "roberta-hate"
-}
-
-quality = {
-    "ollama": "llama3.1:70b",
-    "classification": "roberta-spanish"
-}
 ```
+Text + Media URLs
+  ↓
+Media Content Preparation:
+  • Download images (skip videos)
+  • Convert to base64
+  • Limit to 3 media files
+  ↓
+Ollama Multimodal API Call (gemma3:4b)
+  ↓
+Combined Text + Visual Analysis
+  ↓
+Output: Unified explanation considering both modalities
+```
+
+**Supported Media:**
+- Images: JPG, PNG, GIF, WebP, BMP
+- Videos: Skipped (Ollama limitation)
+- Mixed content: Images processed, videos ignored
+
+### External Multimodal (Gemini)
+**Component:** `ExternalAnalyzer`
+
+```
+Text + Media URLs
+  ↓
+Gemini 2.5 Flash API Call
+  ↓
+Native Multimodal Understanding
+  ↓
+Independent Category + Explanation
+  ↓
+Cross-Validation with Local Results
+```
+
+**Advantages:**
+- Native video support
+- Superior multimodal understanding
+- Independent verification
+- Higher accuracy for visual content
 
 ---
 
 ## 📝 Output Data Model
 
-### ContentAnalysis Object
+### AnalysisResult Object
 
 ```python
 @dataclass
-class ContentAnalysis:
-    post_id: str                          # Tweet ID
-    post_url: str                         # Tweet URL
-    author_username: str                  # Author handle
-    post_content: str                     # Original text
-    analysis_timestamp: str               # ISO datetime
-    category: str                         # Primary category
-    categories_detected: List[str]        # All detected categories
-    llm_explanation: str                  # Human-readable explanation
-    analysis_method: str                  # "pattern" / "llm" / "multimodal"
-    pattern_matches: List[Dict]           # Regex pattern details
-    topic_classification: Dict            # Political context
-    analysis_json: str                    # Full structured data
-    media_urls: List[str]                 # Media URLs (if any)
-    media_analysis: str                   # Media description (if multimodal)
-    media_type: str                       # "image" / "video" / "mixed"
-    multimodal_analysis: bool             # Multimodal flag
-    verification_data: Optional[Dict]     # Evidence retrieval results
-    verification_confidence: float        # Verification confidence (0-1)
-    analysis_time_seconds: float          # Processing time
-    model_used: str                       # Model identifier
+class AnalysisResult:
+    category: str                          # Final category (may be overridden by external)
+    local_explanation: str                 # Explanation from Ollama
+    stages: AnalysisStages                 # Which stages were executed
+    pattern_data: dict                     # Pattern detection results
+    verification_data: dict                # Evidence retrieval results
+    external_explanation: Optional[str]    # Explanation from Gemini (if triggered)
+```
+
+### AnalysisStages Tracking
+
+```python
+@dataclass
+class AnalysisStages:
+    pattern: bool = False      # Pattern detection executed
+    local_llm: bool = False    # Local LLM analysis executed
+    external: bool = False     # External analysis executed
+    
+    def to_string(self) -> str:
+        """Convert to database format: 'pattern,local_llm,external'"""
+```
+
+### Database ContentAnalysis Record
+
+```python
+# Key fields in content_analyses table
+{
+    "post_id": "1234567890",
+    "category": "disinformation",
+    "local_explanation": "Este contenido presenta información falsa...",
+    "external_explanation": "El contenido difunde datos manipulados...",
+    "analysis_stages": "pattern,local_llm,external",
+    "external_analysis_used": true,
+    "verification_data": {...},           # Evidence retrieval results
+    "verification_confidence": 0.85,      # Confidence score
+    "pattern_matches": [...],             # Detailed regex matches
+    "topic_classification": {...}         # Political context
+}
 ```
 
 ---
 
 ## 🚀 Usage Examples
 
-### Basic Analysis (Text Only)
+### Complete Analysis Pipeline
 
 ```python
-from analyzer.analyze_twitter import create_analyzer
+from analyzer.flow_manager import AnalysisFlowManager
 
-# Create analyzer with default config
-analyzer = create_analyzer()
+# Initialize flow manager
+flow_manager = AnalysisFlowManager(verbose=True)
 
-# Analyze single tweet
-result = await analyzer.analyze_content(
-    tweet_id="123456789",
-    tweet_url="https://twitter.com/user/status/123456789",
-    username="user",
-    content="Los inmigrantes nos están invadiendo y colapsan nuestros servicios."
+# Run complete 3-stage analysis
+result = await flow_manager.analyze_full(
+    content="Los inmigrantes están destruyendo España según datos oficiales",
+    media_urls=["https://example.com/chart.jpg"],
+    admin_override=False  # Let system decide external analysis
 )
 
-print(f"Category: {result.category}")  # hate_speech
-print(f"Method: {result.analysis_method}")  # pattern
-print(f"Explanation: {result.llm_explanation}")
+print(f"Category: {result.category}")
+print(f"Stages: {result.stages.to_string()}")
+print(f"Local: {result.local_explanation}")
+if result.external_explanation:
+    print(f"External: {result.external_explanation}")
 ```
 
-### Multimodal Analysis (Text + Image)
+### Local Analysis Only
 
 ```python
-# Analyze tweet with media
-result = await analyzer.analyze_content(
-    tweet_id="987654321",
-    tweet_url="https://twitter.com/user/status/987654321",
-    username="user",
-    content="Mira este meme sobre la inmigración",
-    media_urls=["https://pbs.twimg.com/media/image.jpg"]
+# Run pattern + local LLM only (no external)
+result = await flow_manager.analyze_local(
+    content="Contenido político normal",
+    media_urls=None
 )
 
-print(f"Media Type: {result.media_type}")  # image
-print(f"Multimodal: {result.multimodal_analysis}")  # True
-print(f"Media Analysis: {result.media_analysis}")
+print(f"Category: {result.category}")
+print(f"Local Explanation: {result.local_explanation}")
+print(f"Verification Data: {result.verification_data}")
 ```
 
-### Batch Analysis with Evidence Retrieval
+### External Analysis Only
 
 ```python
-# Analyze multiple tweets from database
-await analyze_tweets_from_db(
-    username="Santi_ABASCAL",
-    max_tweets=50,
-    force_reanalyze=True  # Reanalyze with updated prompts
+# Run independent external analysis
+external_result = await flow_manager.analyze_external(
+    content="Contenido sospechoso",
+    media_urls=["https://example.com/image.jpg"]
 )
+
+print(f"External Category: {external_result.category}")
+print(f"External Explanation: {external_result.explanation}")
 ```
 
 ---
@@ -545,19 +516,18 @@ await analyze_tweets_from_db(
 
 ### Graceful Degradation Strategy
 
-1. **Pattern Detection Fails** → LLM fallback
-2. **LLM Fails** → Return "general" category with error explanation
-3. **Multimodal Analysis Fails** → Return error message with context
+1. **Pattern Detection Fails** → Continue to LLM analysis
+2. **Local LLM Fails** → Return pattern-based result with error explanation
+3. **External Analysis Fails** → Continue with local result only
 4. **Evidence Retrieval Fails** → Continue with original analysis
 5. **Database Lock** → Retry with exponential backoff (max 5 attempts)
 
 ### Error Message System
 
 **Constants (ErrorMessages):**
-- `LLM_PIPELINE_NOT_AVAILABLE`: "LLM pipeline no disponible..."
-- `LLM_CATEGORY_ERROR`: "Error en categorización LLM: {error}"
-- `LLM_EXPLANATION_FAILED`: "LLM no generó explicación válida..."
-- `MULTIMODAL_ANALYSIS_FAILED`: "Error en análisis multimodal: {error}"
+- `LLM_PIPELINE_NOT_AVAILABLE`: "Análisis LLM no disponible..."
+- `EXTERNAL_ANALYSIS_FAILED`: "Error en análisis externo: {error}"
+- `EVIDENCE_RETRIEVAL_FAILED`: "Error en verificación de evidencia: {error}"
 
 ---
 
@@ -565,14 +535,21 @@ await analyze_tweets_from_db(
 
 ### Typical Processing Times
 
-**Text-Only Analysis:**
-- Pattern-only: 2-5 seconds
-- Pattern + LLM: 10-30 seconds (preloaded model)
-- Pattern + LLM (cold start): 3-5 minutes (first load)
+**Pattern-Only Analysis:**
+- Processing: 2-5 seconds
+- Memory: ~50MB
+- CPU: Minimal
 
-**Multimodal Analysis:**
-- Gemini API call: 5-15 seconds
-- Total with text: 15-45 seconds
+**Local LLM Analysis:**
+- Pattern + LLM: 10-30 seconds (preloaded model)
+- Pattern + LLM (cold start): 3-5 minutes
+- Memory: ~200-400MB
+- CPU: Moderate
+
+**Complete Pipeline (with External):**
+- Full analysis: 30-60 seconds
+- Memory: ~400-600MB
+- CPU: Moderate to high
 
 **Evidence Retrieval:**
 - Claim extraction: 1-2 seconds
@@ -581,10 +558,10 @@ await analyze_tweets_from_db(
 
 ### Optimization Strategies
 
-1. **Model Preloading**: `ollama run gpt-oss:20b --keepalive 24h`
+1. **Model Preloading**: `ollama run gemma3:4b --keepalive 24h`
 2. **Concurrent Processing**: Semaphore-based rate limiting
-3. **Pattern-First Approach**: Fast pattern detection before LLM
-4. **Selective Evidence Retrieval**: Only for high-value content
+3. **Pattern-First Approach**: Fast detection before expensive LLM calls
+4. **Selective External Analysis**: Only for high-value content
 5. **Connection Pooling**: Reuse database connections
 
 ---
@@ -594,22 +571,22 @@ await analyze_tweets_from_db(
 ### Test Coverage
 
 **Core Components:**
-- `TextAnalyzer`: 76% coverage (unit + integration)
-- `MultimodalAnalyzer`: 69% coverage (multimodal tests)
-- `PatternAnalyzer`: 96% coverage (comprehensive pattern tests)
+- `AnalysisFlowManager`: 89% coverage (pipeline orchestration)
+- `LocalMultimodalAnalyzer`: 82% coverage (Ollama integration)
+- `ExternalAnalyzer`: 76% coverage (Gemini API)
+- `PatternAnalyzer`: 96% coverage (regex validation)
 - `Repository`: 89% coverage (database operations)
-- `LLM Models`: 80% coverage (model loading, inference)
 
 **Overall Project Coverage:** 78.77% (above 70% requirement)
 
 ### Test Categories
 
 1. **Unit Tests**: Individual component behavior
-2. **Integration Tests**: Component interaction flows
-3. **Pattern Detection Tests**: Regex validation
-4. **LLM Tests**: Model loading, inference, prompts
-5. **Database Tests**: CRUD operations, retries
-6. **Performance Tests**: Benchmarking utilities
+2. **Integration Tests**: Pipeline flow validation
+3. **Pattern Detection Tests**: Regex accuracy validation
+4. **LLM Tests**: Model loading, inference, prompt validation
+5. **Database Tests**: CRUD operations, retry logic
+6. **Performance Tests**: Benchmarking and load testing
 
 ---
 
@@ -617,25 +594,28 @@ await analyze_tweets_from_db(
 
 ### Planned Improvements
 
-1. **Real-Time Analysis**: WebSocket streaming for live tweets
-2. **Multi-Language Support**: Extend beyond Spanish
-3. **Enhanced Evidence Retrieval**: More fact-checking sources
+1. **Real-Time Analysis**: WebSocket streaming for live content analysis
+2. **Multi-Language Support**: Extend beyond Spanish (English, French, German)
+3. **Enhanced Evidence Retrieval**: More fact-checking sources and APIs
 4. **Model Fine-Tuning**: Custom Spanish far-right detection models
 5. **Temporal Analysis**: Track narrative evolution over time
-6. **Network Analysis**: User interaction patterns
+6. **Network Analysis**: User interaction patterns and influence mapping
 7. **API Endpoints**: RESTful API for external integrations
-8. **Dashboard Analytics**: Real-time monitoring interface
+8. **Advanced Dashboard**: Real-time monitoring and analytics
+9. **Batch Processing**: High-throughput analysis for large datasets
+10. **Model Comparison**: A/B testing between different LLM configurations
 
 ---
 
 ## 📚 Related Documentation
 
 - **Pattern Detection**: See `analyzer/pattern_analyzer.py` for regex patterns
-- **LLM Models**: See `analyzer/llm_models.py` for model configurations
-- **Prompts**: See `analyzer/prompts.py` for category-specific prompts
+- **LLM Integration**: See `analyzer/local_analyzer.py` for Ollama integration
+- **External Analysis**: See `analyzer/external_analyzer.py` for Gemini integration
+- **Flow Orchestration**: See `analyzer/flow_manager.py` for pipeline logic
 - **Database Schema**: See `scripts/init_database.py` for table structures
-- **Web Interface**: See `web/app.py` for visualization components
 - **Evidence Retrieval**: See `retrieval/README.md` for verification system
+- **Web Interface**: See `web/app.py` for visualization components
 
 ---
 
@@ -643,30 +623,31 @@ await analyze_tweets_from_db(
 
 ### Architecture Strengths
 
-✅ **Modular Design**: Clear separation of concerns (text/multimodal/database)
-✅ **Flexible Configuration**: Easy model swapping and priority tuning
-✅ **Robust Error Handling**: Graceful degradation at every stage
-✅ **Performance Optimized**: Async execution, connection pooling, caching
-✅ **Evidence-Based**: Verification integration for factual claims
-✅ **Comprehensive Coverage**: 13 content categories with nuanced detection
-✅ **Production-Ready**: 78% test coverage, retry logic, monitoring
+✅ **3-Stage Pipeline**: Pattern → Local LLM → Conditional External Analysis
+✅ **Dual Explanations**: Independent local (Ollama) and external (Gemini) verification
+✅ **Evidence Integration**: Fact-checking for claims-based content
+✅ **Modular Design**: Clear separation of concerns, easy component swapping
+✅ **Performance Optimized**: Async execution, rate limiting, connection pooling
+✅ **Comprehensive Categories**: 13 categories with nuanced detection
+✅ **Production-Ready**: 78% test coverage, retry logic, error handling
 
 ### Workflow Summary
 
 ```
-Tweet → Route (Text/Multimodal) → Pattern Detection → LLM Analysis
-  → Evidence Retrieval (conditional) → Database Storage → Web Visualization
+Content → Pattern Detection (2-5s) → Local LLM Analysis (10-30s)
+  → Conditional External Analysis (30-60s) → Evidence Retrieval (if needed)
+  → Database Storage → Web Visualization
 ```
 
 **Critical Success Factors:**
-1. Pattern-first approach (fast + accurate for obvious cases)
-2. LLM fallback (handles nuanced content)
-3. Multimodal support (visual content analysis)
-4. Evidence retrieval (fact-checking integration)
-5. Performance tracking (monitoring and optimization)
+1. **Pattern-First Approach**: Fast, rule-based detection for obvious cases
+2. **LLM Fallback**: Handles nuanced content with Spanish-optimized prompts
+3. **External Validation**: Independent verification for high-confidence cases
+4. **Evidence Enhancement**: Fact-checking integration for factual claims
+5. **Dual Explanations**: Multiple perspectives for comprehensive analysis
 
 ---
 
-**Last Updated:** October 14, 2025
-**Version:** 1.0
+**Last Updated:** October 29, 2025
+**Version:** 2.0
 **Author:** dimetuverdad development team

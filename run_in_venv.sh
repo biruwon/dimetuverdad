@@ -66,7 +66,7 @@ analyze_twitter(){
   ensure_venv
   echo "Starting database analysis..."
   cd "$ROOT_DIR"
-  "$PY" -m analyzer.analyze_twitter "$@"
+  "$PY" "$ROOT_DIR/scripts/analyzer_cli.py" "$@"
 }
 
 web(){

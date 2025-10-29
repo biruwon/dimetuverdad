@@ -483,7 +483,7 @@ def trigger_external_analysis(tweet_id: str):
                     END,
                     analysis_timestamp = CURRENT_TIMESTAMP
                 WHERE post_id = ?
-            """, (external_explanation, tweet_id))
+            """, (external_explanation.explanation, tweet_id))
             conn.commit()
         
         return jsonify({

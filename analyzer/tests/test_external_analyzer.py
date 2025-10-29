@@ -12,13 +12,15 @@ from analyzer.external_analyzer import ExternalAnalyzer, ExternalAnalysisResult
 
 @pytest.fixture
 def mock_gemini():
-    """Mock GeminiMultimodal instance."""
+    """Mock GeminiAnalyzer instance."""
     mock = Mock()
     mock.analyze_multimodal_content = Mock(return_value=(
         "CATEGORÍA: hate_speech\nEXPLICACIÓN: Este contenido muestra discurso de odio xenófobo.",
         0.5  # analysis_time
     ))
-    mock._select_media_url = Mock(return_value="https://example.com/image.jpg")
+    # Mock the media_processor attribute
+    mock.media_processor = Mock()
+    mock.media_processor.select_media_url = Mock(return_value="https://example.com/image.jpg")
     return mock
 
 
@@ -40,7 +42,7 @@ def mock_genai():
 @pytest.fixture
 def analyzer(mock_gemini):
     """Create ExternalAnalyzer with mocked Gemini."""
-    with patch('analyzer.external_analyzer.GeminiMultimodal', return_value=mock_gemini):
+    with patch('analyzer.external_analyzer.GeminiAnalyzer', return_value=mock_gemini):
         analyzer = ExternalAnalyzer(verbose=False)
         return analyzer
 
@@ -54,7 +56,7 @@ def analyzer_with_genai_mock(mock_gemini):
         0.5
     )
     
-    with patch('analyzer.external_analyzer.GeminiMultimodal', return_value=mock_gemini):
+    with patch('analyzer.external_analyzer.GeminiAnalyzer', return_value=mock_gemini):
         analyzer = ExternalAnalyzer(verbose=False)
         yield analyzer
 
@@ -64,7 +66,7 @@ class TestExternalAnalyzerInitialization:
     
     def test_default_initialization(self):
         """Test default initialization with Gemini."""
-        with patch('analyzer.external_analyzer.GeminiMultimodal'):
+        with patch('analyzer.external_analyzer.GeminiAnalyzer'):
             analyzer = ExternalAnalyzer()
             
             assert analyzer.verbose is False
@@ -72,7 +74,7 @@ class TestExternalAnalyzerInitialization:
     
     def test_verbose_initialization(self):
         """Test initialization with verbose logging."""
-        with patch('analyzer.external_analyzer.GeminiMultimodal'):
+        with patch('analyzer.external_analyzer.GeminiAnalyzer'):
             analyzer = ExternalAnalyzer(verbose=True)
             
             assert analyzer.verbose is True
@@ -96,7 +98,7 @@ class TestAnalyzeMethod:
         # Verify multimodal analysis was called
         mock_gemini.analyze_multimodal_content.assert_called_once()
         # Verify media URL selection
-        mock_gemini._select_media_url.assert_called_once_with(media_urls)
+        mock_gemini.media_processor.select_media_url.assert_called_once_with(media_urls)
     
     @pytest.mark.asyncio
     async def test_analyze_text_only(self, analyzer_with_genai_mock, mock_gemini):
@@ -158,7 +160,7 @@ class TestMultimodalAnalysis:
         assert "discurso de odio xenófobo" in result.explanation
         
         # Verify media selection was called
-        mock_gemini._select_media_url.assert_called_once_with(media_urls)
+        mock_gemini.media_processor.select_media_url.assert_called_once_with(media_urls)
         
         # Verify Gemini was called with selected media
         call_args = mock_gemini.analyze_multimodal_content.call_args
@@ -168,7 +170,7 @@ class TestMultimodalAnalysis:
     @pytest.mark.asyncio
     async def test_multimodal_with_multiple_media(self, analyzer, mock_gemini):
         """Test multimodal analysis with multiple media URLs."""
-        mock_gemini._select_media_url.return_value = "https://example.com/image2.jpg"
+        mock_gemini.media_processor.select_media_url.return_value = "https://example.com/image2.jpg"
         
         content = "Test content"
         media_urls = [
@@ -180,7 +182,7 @@ class TestMultimodalAnalysis:
         result = await analyzer._analyze_multimodal(content, media_urls)
         
         # Verify best media was selected
-        mock_gemini._select_media_url.assert_called_once_with(media_urls)
+        mock_gemini.media_processor.select_media_url.assert_called_once_with(media_urls)
         
         # Verify selected media was used
         call_args = mock_gemini.analyze_multimodal_content.call_args
@@ -314,7 +316,7 @@ class TestVerboseLogging:
     @pytest.mark.asyncio
     async def test_analyze_verbose_output(self, mock_gemini, capsys):
         """Test verbose logging in analyze method."""
-        with patch('analyzer.external_analyzer.GeminiMultimodal', return_value=mock_gemini):
+        with patch('analyzer.external_analyzer.GeminiAnalyzer', return_value=mock_gemini):
             analyzer = ExternalAnalyzer(verbose=True)
             
             await analyzer.analyze("Test content", media_urls=["https://example.com/image.jpg"])
@@ -328,7 +330,7 @@ class TestVerboseLogging:
     @pytest.mark.asyncio
     async def test_analyze_verbose_without_media(self, mock_gemini, capsys):
         """Test verbose logging without media."""
-        with patch('analyzer.external_analyzer.GeminiMultimodal', return_value=mock_gemini):
+        with patch('analyzer.external_analyzer.GeminiAnalyzer', return_value=mock_gemini):
             analyzer = ExternalAnalyzer(verbose=True)
             
             await analyzer.analyze("Test content")

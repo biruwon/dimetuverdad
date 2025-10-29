@@ -16,8 +16,9 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from analyzer.analyze_twitter import (
-    Analyzer, analyze_tweets_from_db, create_analyzer, reanalyze_tweet, main
+    Analyzer, create_analyzer, reanalyze_tweet
 )
+from scripts.analyzer_cli import analyze_tweets_cli, main
 from analyzer.config import AnalyzerConfig
 from analyzer.models import ContentAnalysis
 from analyzer.repository import ContentAnalysisRepository
@@ -85,7 +86,7 @@ class TestContentAnalysis(unittest.TestCase):
 class TestAnalyzerInitialization(unittest.TestCase):
     """Test Analyzer initialization with different parameters."""
 
-    @patch('analyzer.llm_models.EnhancedLLMPipeline')
+    @patch('analyzer.llm_pipeline.EnhancedLLMPipeline')
     def test_analyzer_init_default(self, mock_llm_pipeline):
         """Test analyzer initialization with default config."""
         analyzer = Analyzer(config=AnalyzerConfig())
@@ -94,28 +95,28 @@ class TestAnalyzerInitialization(unittest.TestCase):
         # REMOVED: self.assertEqual(analyzer.config.model_priority, "balanced")  # model_priority no longer exists
         self.assertFalse(analyzer.config.verbose)
 
-    @patch('analyzer.llm_models.EnhancedLLMPipeline')
+    @patch('analyzer.llm_pipeline.EnhancedLLMPipeline')
     def test_analyzer_init_no_llm(self, mock_llm_pipeline):
         """Test analyzer initialization without external analysis."""
         analyzer = Analyzer(config=AnalyzerConfig(enable_external_analysis=False))
 
         self.assertFalse(analyzer.config.enable_external_analysis)
 
-    @patch('analyzer.llm_models.EnhancedLLMPipeline')
+    @patch('analyzer.llm_pipeline.EnhancedLLMPipeline')
     def test_analyzer_init_fast_priority(self, mock_llm_pipeline):
         """Test analyzer initialization with fast model priority."""
         analyzer = Analyzer(config=AnalyzerConfig())
 
         # REMOVED: self.assertEqual(analyzer.config.model_priority, "fast")  # model_priority no longer exists
 
-    @patch('analyzer.llm_models.EnhancedLLMPipeline')
+    @patch('analyzer.llm_pipeline.EnhancedLLMPipeline')
     def test_analyzer_init_verbose(self, mock_llm_pipeline):
         """Test analyzer initialization with verbose output."""
         analyzer = Analyzer(config=AnalyzerConfig(verbose=True))
 
         self.assertTrue(analyzer.config.verbose)
 
-    @patch('analyzer.llm_models.EnhancedLLMPipeline')
+    @patch('analyzer.llm_pipeline.EnhancedLLMPipeline')
     def test_analyzer_init_llm_failure(self, mock_llm_pipeline):
         """Test analyzer initialization when LLM fails."""
         analyzer = Analyzer(config=AnalyzerConfig())
@@ -284,61 +285,53 @@ class TestDatabaseFunctions:
 class TestCLIFunctions(unittest.TestCase):
     """Test CLI functions and main execution paths."""
 
-    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('scripts.analyzer_cli._handle_single_tweet_analysis')
     @patch('builtins.print')
-    def test_analyze_tweets_from_db_specific_tweet_success(self, mock_print, mock_create_analyzer):
+    def test_analyze_tweets_cli_specific_tweet_success(self, mock_print, mock_handle):
         """Test analyzing a specific tweet by ID successfully."""
-        mock_analyzer = Mock()
-        mock_create_analyzer.return_value = mock_create_analyzer
-
         mock_result = Mock()
         mock_result.category = Categories.HATE_SPEECH
         mock_result.local_explanation = "Hate speech detected"
         mock_result.analysis_stages = "llm"
 
-        with patch('analyzer.analyze_twitter.reanalyze_tweet', return_value=mock_result):
-            asyncio.run(analyze_tweets_from_db(tweet_id='123456789'))
+        mock_handle.return_value = None  # The function doesn't return anything
 
-        mock_create_analyzer.assert_called_once()
+        asyncio.run(analyze_tweets_cli(tweet_id='123456789'))
 
-    @patch('analyzer.analyze_twitter.create_analyzer')
+        mock_handle.assert_called_once_with('123456789', False)
+
+    @patch('scripts.analyzer_cli._handle_single_tweet_analysis')
     @patch('builtins.print')
-    def test_analyze_tweets_from_db_specific_tweet_not_found(self, mock_print, mock_create_analyzer):
+    def test_analyze_tweets_cli_specific_tweet_not_found(self, mock_print, mock_handle):
         """Test analyzing a specific tweet that doesn't exist."""
-        mock_analyzer = Mock()
-        mock_create_analyzer.return_value = mock_create_analyzer
+        mock_handle.return_value = None
 
-        with patch('analyzer.analyze_twitter.reanalyze_tweet', return_value=None):
-            asyncio.run(analyze_tweets_from_db(tweet_id='123456789'))
+        asyncio.run(analyze_tweets_cli(tweet_id='123456789'))
 
-        mock_create_analyzer.assert_called_once()
+        mock_handle.assert_called_once_with('123456789', False)
 
-    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('scripts.analyzer_cli._setup_analyzer_and_get_tweets')
     @patch('builtins.print')
-    def test_analyze_tweets_from_db_no_tweets(self, mock_print, mock_create_analyzer):
+    def test_analyze_tweets_cli_no_tweets(self, mock_print, mock_setup):
         """Test when no tweets are available for analysis."""
         mock_analyzer = Mock()
-        mock_create_analyzer.return_value = mock_analyzer
         mock_analyzer.repository.get_tweets_for_analysis.return_value = []
         mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
+        
+        mock_setup.return_value = (mock_analyzer, [], 0)
 
-        asyncio.run(analyze_tweets_from_db())
+        asyncio.run(analyze_tweets_cli())
 
-        mock_create_analyzer.assert_called_once()
+        mock_setup.assert_called_once()
 
-    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('scripts.analyzer_cli._setup_analyzer_and_get_tweets')
     @patch('builtins.print')
-    def test_analyze_tweets_from_db_with_tweets(self, mock_print, mock_create_analyzer):
+    def test_analyze_tweets_cli_with_tweets(self, mock_print, mock_setup):
         """Test analyzing tweets from database."""
         mock_analyzer = Mock()
-        mock_create_analyzer.return_value = mock_analyzer
-
-        # Mock tweets data
-        tweets = [
+        mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
-        ]
-        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
-        mock_analyzer.repository.get_analysis_count_by_author.return_value = 5
+        ], 5)
 
         # Mock analysis result
         mock_result = Mock()
@@ -348,24 +341,20 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.multimodal_analysis = False
         mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        asyncio.run(analyze_tweets_from_db(max_tweets=1))
+        asyncio.run(analyze_tweets_cli(max_tweets=1))
 
-        mock_create_analyzer.assert_called_once()
+        mock_setup.assert_called_once()
         mock_analyzer.analyze_content.assert_called_once()
         mock_analyzer.save_analysis.assert_called_once()
 
-    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('scripts.analyzer_cli._setup_analyzer_and_get_tweets')
     @patch('builtins.print')
-    def test_analyze_tweets_from_db_with_media(self, mock_print, mock_create_analyzer):
+    def test_analyze_tweets_cli_with_media(self, mock_print, mock_setup):
         """Test analyzing tweets with media content."""
         mock_analyzer = Mock()
-        mock_create_analyzer.return_value = mock_analyzer
-
-        tweets = [
+        mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', 'url1.jpg,url2.jpg', '')
-        ]
-        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
-        mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
+        ], 0)
 
         mock_result = Mock()
         mock_result.category = Categories.GENERAL
@@ -375,24 +364,20 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.media_type = "image"
         mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        asyncio.run(analyze_tweets_from_db(max_tweets=1))
+        asyncio.run(analyze_tweets_cli(max_tweets=1))
 
         # Verify media URLs were parsed correctly
         call_args = mock_analyzer.analyze_content.call_args
         assert call_args[1]['media_urls'] == ['url1.jpg', 'url2.jpg']
 
-    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('scripts.analyzer_cli._setup_analyzer_and_get_tweets')
     @patch('builtins.print')
-    def test_analyze_tweets_from_db_with_quoted_content(self, mock_print, mock_create_analyzer):
+    def test_analyze_tweets_cli_with_quoted_content(self, mock_print, mock_setup):
         """Test analyzing tweets with quoted content."""
         mock_analyzer = Mock()
-        mock_create_analyzer.return_value = mock_analyzer
-
-        tweets = [
+        mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Main content', '', 'Quoted content')
-        ]
-        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
-        mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
+        ], 0)
 
         mock_result = Mock()
         mock_result.category = Categories.GENERAL
@@ -400,48 +385,40 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.analysis_stages = "llm"
         mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        asyncio.run(analyze_tweets_from_db(max_tweets=1))
+        asyncio.run(analyze_tweets_cli(max_tweets=1))
 
         # Verify quoted content was combined
         call_args = mock_analyzer.analyze_content.call_args
         expected_content = "Main content\n\n[Contenido citado]: Quoted content"
         assert call_args[1]['content'] == expected_content
 
-    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('scripts.analyzer_cli._setup_analyzer_and_get_tweets')
     @patch('builtins.print')
-    def test_analyze_tweets_from_db_analysis_error(self, mock_print, mock_create_analyzer):
+    def test_analyze_tweets_cli_analysis_error(self, mock_print, mock_setup):
         """Test that analysis errors stop the entire pipeline."""
         mock_analyzer = Mock()
-        mock_create_analyzer.return_value = mock_analyzer
-
-        # Mock repository methods
-        mock_analyzer.repository.get_tweets_for_analysis.return_value = [
+        mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
-        ]
-        mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
+        ], 0)
 
         mock_analyzer.analyze_content = AsyncMock(side_effect=Exception("Analysis failed"))
 
         # Should re-raise the exception and stop the pipeline
         with self.assertRaises(RuntimeError) as context:
-            asyncio.run(analyze_tweets_from_db(max_tweets=1))
+            asyncio.run(analyze_tweets_cli(max_tweets=1))
         
         self.assertIn("Analysis failed for tweet 123", str(context.exception))
         # save_failed_analysis should NOT be called since we re-raise exceptions
         mock_analyzer.repository.save_failed_analysis.assert_not_called()
 
-    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('scripts.analyzer_cli._setup_analyzer_and_get_tweets')
     @patch('builtins.print')
-    def test_analyze_tweets_from_db_force_reanalyze(self, mock_print, mock_create_analyzer):
+    def test_analyze_tweets_cli_force_reanalyze(self, mock_print, mock_setup):
         """Test force reanalysis of tweets."""
         mock_analyzer = Mock()
-        mock_create_analyzer.return_value = mock_analyzer
-
-        tweets = [
+        mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
-        ]
-        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
-        mock_analyzer.repository.get_analysis_count_by_author.return_value = 10
+        ], 10)
 
         mock_result = Mock()
         mock_result.category = Categories.GENERAL
@@ -449,36 +426,28 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.analysis_stages = "llm"
         mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        asyncio.run(analyze_tweets_from_db(force_reanalyze=True, max_tweets=1))
+        asyncio.run(analyze_tweets_cli(force_reanalyze=True, max_tweets=1))
 
-        mock_create_analyzer.assert_called_once()
+        mock_setup.assert_called_once()
         mock_analyzer.analyze_content.assert_called_once()
         mock_analyzer.save_analysis.assert_called_once()
 
-    @patch('analyzer.analyze_twitter.create_analyzer')
+    @patch('scripts.analyzer_cli._setup_analyzer_and_get_tweets')
     @patch('builtins.print')
-    def test_analyze_tweets_from_db_username_filter(self, mock_print, mock_create_analyzer):
+    def test_analyze_tweets_cli_username_filter(self, mock_print, mock_setup):
         """Test filtering tweets by username."""
         mock_analyzer = Mock()
-        mock_create_analyzer.return_value = mock_analyzer
-
-        tweets = [
+        mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'specificuser', 'Test content', '', '')
-        ]
-        mock_analyzer.repository.get_tweets_for_analysis.return_value = tweets
-        mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
+        ], 0)
 
         mock_result = Mock()
         mock_result.category = Categories.GENERAL
         mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        asyncio.run(analyze_tweets_from_db(username='specificuser', max_tweets=1))
+        asyncio.run(analyze_tweets_cli(username='specificuser', max_tweets=1))
 
-        mock_analyzer.repository.get_tweets_for_analysis.assert_called_once_with(
-            username='specificuser',
-            max_tweets=1,
-            force_reanalyze=False
-        )
+        mock_setup.assert_called_once_with('specificuser', 1, False, False)
 
 
 class TestUtilityFunctions(unittest.TestCase):
@@ -526,7 +495,7 @@ class TestUtilityFunctions(unittest.TestCase):
         result = asyncio.run(reanalyze_tweet('123', analyzer=mock_analyzer))
         assert result is None
 
-    @patch('analyzer.analyze_twitter.analyze_tweets_from_db')
+    @patch('scripts.analyzer_cli.analyze_tweets_cli')
     @patch('sys.argv', ['analyze_twitter.py', '--username', 'testuser', '--limit', '5'])
     def test_main_with_args(self, mock_analyze):
         """Test main function with command line arguments."""
@@ -539,7 +508,7 @@ class TestUtilityFunctions(unittest.TestCase):
             verbose=False
         )
 
-    @patch('analyzer.analyze_twitter.analyze_tweets_from_db')
+    @patch('scripts.analyzer_cli.analyze_tweets_cli')
     @patch('sys.argv', ['analyze_twitter.py'])
     def test_main_no_args(self, mock_analyze):
         """Test main function with no arguments."""
@@ -552,7 +521,7 @@ class TestUtilityFunctions(unittest.TestCase):
             verbose=False
         )
 
-    @patch('analyzer.analyze_twitter.analyze_tweets_from_db')
+    @patch('scripts.analyzer_cli.analyze_tweets_cli')
     @patch('sys.argv', ['analyze_twitter.py', '--force-reanalyze', '--tweet-id', '123'])
     def test_main_force_reanalyze_with_tweet_id(self, mock_analyze):
         """Test main function with force reanalyze and tweet ID."""

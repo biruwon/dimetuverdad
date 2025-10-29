@@ -3,12 +3,11 @@ External Analyzer wrapper for Gemini multimodal analysis.
 Provides independent analysis without context from local analyzer.
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 import asyncio
 import os
 from dataclasses import dataclass
-
-from .gemini_multimodal import GeminiMultimodal
+from .gemini_analyzer import GeminiAnalyzer
 from .categories import Categories
 
 
@@ -33,7 +32,13 @@ class ExternalAnalyzer:
         Args:
             verbose: Enable detailed logging
         """
-        self.gemini = GeminiMultimodal()
+        # Get API key
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable is required")
+        
+        # Initialize GeminiAnalyzer with default settings
+        self.gemini = GeminiAnalyzer(api_key=api_key)
         self.verbose = verbose
         
         if self.verbose:
@@ -88,7 +93,7 @@ class ExternalAnalyzer:
             ExternalAnalysisResult with category and explanation
         """
         # Select best media URL for analysis
-        selected_media_url = self.gemini._select_media_url(media_urls)
+        selected_media_url = self.gemini.media_processor.select_media_url(media_urls)
         
         # Run Gemini multimodal analysis
         # Returns tuple: (analysis_text, analysis_time)

@@ -4,7 +4,7 @@ Configuration management for the analyzer module.
 
 from dataclasses import dataclass
 from typing import Optional
-from .llm_models import EnhancedLLMPipeline
+from .llm_pipeline import EnhancedLLMPipeline
 from .constants import ConfigDefaults
 
 
