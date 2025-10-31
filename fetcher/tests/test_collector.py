@@ -71,16 +71,6 @@ class TestTweetCollector:
         assert collector.scroller is not None
         assert collector.media_monitor is not None
 
-    def test_setup_media_url_monitoring(self, collector, mock_page):
-        """Test media URL monitoring setup."""
-        expected_urls = ['url1', 'url2']
-        collector.media_monitor.setup_and_monitor.return_value = expected_urls
-
-        result = collector.setup_media_url_monitoring(mock_page)
-
-        collector.media_monitor.setup_and_monitor.assert_called_once_with(mock_page, collector.scroller)
-        assert result == expected_urls
-
     def test_should_process_tweet_new_tweet(self, collector):
         """Test should_process_tweet with new tweet."""
         seen_ids = {'existing1', 'existing2'}
@@ -189,13 +179,13 @@ class TestTweetCollector:
         mock_cur.execute.assert_called_once()
         mock_conn.commit.assert_called_once()
 
-    @patch('fetcher.collector.sqlite3.connect')
-    def test_log_processing_error_no_tweet_id(self, mock_connect, collector, mock_config):
+    @patch('utils.database.get_db_connection_context')
+    def test_log_processing_error_no_tweet_id(self, mock_context, collector, mock_config):
         """Test processing error logging without tweet ID."""
         mock_conn = Mock()
         mock_cur = Mock()
         mock_conn.cursor.return_value = mock_cur
-        mock_connect.return_value = mock_conn
+        mock_context.return_value.__enter__.return_value = mock_conn
 
         error = Exception("Test error")
         collector.log_processing_error(None, 'testuser', error)
@@ -204,10 +194,10 @@ class TestTweetCollector:
         call_args = mock_cur.execute.call_args[0]
         assert call_args[1][1] is None  # tweet_id parameter
 
-    @patch('fetcher.collector.sqlite3.connect')
-    def test_log_processing_error_db_failure(self, mock_connect, collector):
+    @patch('utils.database.get_db_connection_context')
+    def test_log_processing_error_db_failure(self, mock_context, collector):
         """Test processing error logging when DB fails."""
-        mock_connect.side_effect = Exception("Connection failed")
+        mock_context.side_effect = Exception("Connection failed")
 
         error = Exception("Test error")
         # Should not raise exception
@@ -224,10 +214,9 @@ class TestTweetCollector:
 
         assert len(result) == 0
 
-    @patch('fetcher.collector.fetcher_parsers.extract_content_elements')
     @patch('fetcher.collector.fetcher_parsers.extract_engagement_metrics')
-    @patch('fetcher.collector.fetcher_parsers.extract_tweet_with_quoted_content')
-    def test_extract_tweet_data_success(self, mock_extract_tweet, mock_engagement, mock_content_elements, collector, mock_article):
+    @patch('fetcher.collector.fetcher_parsers.extract_tweet_with_media_monitoring')
+    def test_extract_tweet_data_success(self, mock_extract_tweet, mock_engagement, collector, mock_page, mock_article):
         """Test successful tweet data extraction."""
         # Setup mocks
         mock_dict = {
@@ -245,18 +234,11 @@ class TestTweetCollector:
             'external_links': 'http://example.com'
         }
         mock_extract_tweet.return_value = mock_dict
-        # Mock process_video_urls to return the input dict
-        collector.media_monitor.process_video_urls.return_value = mock_dict
         mock_engagement.return_value = {
             'retweets': 10,
             'likes': 20,
             'replies': 5,
             'views': 100
-        }
-        mock_content_elements.return_value = {
-            'hashtags': '#test',
-            'mentions': '@user',
-            'urls': 'http://example.com'
         }
 
         # Mock time element
@@ -264,11 +246,9 @@ class TestTweetCollector:
         mock_time.get_attribute.return_value = '2023-10-15T10:30:00.000Z'
         mock_article.query_selector.return_value = mock_time
 
-        media_urls = []
-
         result = collector.extract_tweet_data(
-            mock_article, '123456789', 'https://x.com/testuser/status/123456789',
-            'testuser', 'https://profile.pic.url', media_urls
+            mock_page, mock_article, '123456789', 'https://x.com/testuser/status/123456789',
+            'testuser', 'https://profile.pic.url'
         )
 
         assert result is not None
@@ -280,100 +260,56 @@ class TestTweetCollector:
         assert result['media_count'] == 1
         assert result['engagement_retweets'] == 10
         assert result['engagement_likes'] == 20
-
-    @patch('fetcher.collector.fetcher_parsers.analyze_post_type')
-    def test_extract_tweet_data_skip_pinned(self, mock_post_analysis, collector, mock_article):
-        """Test that pinned posts are skipped."""
-        mock_post_analysis.return_value = {
-            'should_skip': True,
-            'post_type': 'pinned'
-        }
-
-        result = collector.extract_tweet_data(
-            mock_article, '123', 'https://x.com/testuser/status/123',
-            'testuser', None, []
+        mock_extract_tweet.assert_called_once_with(
+            mock_page, '123456789', 'testuser', 'https://x.com/testuser/status/123456789',
+            collector.media_monitor, collector.scroller
         )
 
-        assert result is None
-
-    @patch('fetcher.collector.fetcher_parsers.analyze_post_type')
-    @patch('fetcher.collector.fetcher_parsers.extract_full_tweet_content')
-    def test_extract_tweet_data_skip_no_content(self, mock_content, mock_post_analysis, collector, mock_article):
-        """Test that tweets with no content are skipped."""
-        mock_post_analysis.return_value = {
-            'should_skip': False,
-            'post_type': 'original'
-        }
-        mock_content.return_value = None
-
-        result = collector.extract_tweet_data(
-            mock_article, '123', 'https://x.com/user/status/123',
-            'testuser', None, []
-        )
-
-        assert result is None
-
-    @patch('fetcher.collector.fetcher_parsers.extract_content_elements')
     @patch('fetcher.collector.fetcher_parsers.extract_engagement_metrics')
-    @patch('fetcher.collector.fetcher_parsers.extract_tweet_with_quoted_content')
-    def test_extract_tweet_data_with_media_urls(self, mock_extract_tweet, mock_engagement, mock_content_elements, collector, mock_article):
-        """Test tweet data extraction with additional media URLs."""
+    @patch('fetcher.collector.fetcher_parsers.extract_tweet_with_media_monitoring')
+    def test_extract_tweet_data_with_media_urls(self, mock_extract_tweet, mock_engagement, collector, mock_page, mock_article):
+        """Test tweet data extraction with media URLs."""
         # Setup mocks
         mock_dict = {
             'tweet_id': '123',
             'content': 'Test content',
             'post_type': 'original',
-            'media_links': None,
-            'media_count': 0
+            'media_links': 'https://video.twimg.com/test.mp4',
+            'media_count': 1
         }
         mock_extract_tweet.return_value = mock_dict
-        
-        # Mock process_video_urls to return dict with processed media and clear media_urls
-        def mock_process_video_urls(media_urls_param, tweet_data_param):
-            media_urls_param.clear()  # Clear the list as expected
-            processed_dict = tweet_data_param.copy()
-            processed_dict['media_links'] = 'https://video.twimg.com/test.mp4'
-            processed_dict['media_count'] = 1
-            return processed_dict
-        collector.media_monitor.process_video_urls.side_effect = mock_process_video_urls
         mock_engagement.return_value = {
             'retweets': 0, 'likes': 0, 'replies': 0, 'views': 0
         }
-        mock_content_elements.return_value = {}
 
         mock_time = Mock()
         mock_time.get_attribute.return_value = '2023-10-15T10:30:00.000Z'
         mock_article.query_selector.return_value = mock_time
 
-        media_urls = ['https://video.twimg.com/test.mp4']
-
         result = collector.extract_tweet_data(
-            mock_article, '123', 'https://x.com/testuser/status/123',
-            'testuser', None, media_urls
+            mock_page, mock_article, '123', 'https://x.com/testuser/status/123',
+            'testuser', None
         )
 
         assert result is not None
         assert result['media_count'] == 1
         assert 'test.mp4' in result['media_links']
-        assert len(media_urls) == 0  # Should be cleared
 
-    @patch('fetcher.collector.fetcher_parsers.analyze_post_type')
-    @patch('fetcher.collector.fetcher_parsers.extract_full_tweet_content')
-    def test_extract_tweet_data_extraction_error(self, mock_content, mock_post_analysis, collector, mock_article):
-        """Test handling of extraction errors."""
-        mock_post_analysis.side_effect = Exception("Analysis failed")
+    @patch('fetcher.collector.fetcher_parsers.extract_tweet_with_media_monitoring')
+    def test_extract_tweet_data_extraction_error(self, mock_extract, collector, mock_page, mock_article):
+        """Test that extraction errors are handled gracefully."""
+        mock_extract.side_effect = Exception("Extraction failed")
 
         result = collector.extract_tweet_data(
-            mock_article, '123', 'https://x.com/testuser/status/123',
-            'testuser', None, []
+            mock_page, mock_article, '123', 'https://x.com/testuser/status/123',
+            'testuser', None
         )
 
         assert result is None
 
-    @patch('fetcher.collector.fetcher_parsers.extract_content_elements')
     @patch('fetcher.collector.fetcher_parsers.extract_engagement_metrics')
-    @patch('fetcher.collector.fetcher_parsers.extract_tweet_with_quoted_content')
-    def test_extract_tweet_data_no_timestamp(self, mock_extract_tweet, mock_engagement, mock_content_elements, collector, mock_article):
+    @patch('fetcher.collector.fetcher_parsers.extract_tweet_with_media_monitoring')
+    def test_extract_tweet_data_no_timestamp(self, mock_extract_tweet, mock_engagement, collector, mock_page, mock_article):
         """Test tweet data extraction when timestamp is not available."""
         # Setup mocks
         mock_dict = {
@@ -382,19 +318,16 @@ class TestTweetCollector:
             'post_type': 'original'
         }
         mock_extract_tweet.return_value = mock_dict
-        # Mock process_video_urls to return the input dict
-        collector.media_monitor.process_video_urls.return_value = mock_dict
         mock_engagement.return_value = {
             'retweets': 0, 'likes': 0, 'replies': 0, 'views': 0
         }
-        mock_content_elements.return_value = {}
 
         # No time element found
         mock_article.query_selector.return_value = None
 
         result = collector.extract_tweet_data(
-            mock_article, '123', 'https://x.com/testuser/status/123',
-            'testuser', None, []
+            mock_page, mock_article, '123', 'https://x.com/testuser/status/123',
+            'testuser', None
         )
 
         assert result is not None

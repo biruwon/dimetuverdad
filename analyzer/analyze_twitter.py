@@ -310,6 +310,12 @@ async def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) ->
     if tweet_data.get('media_links'):
         media_urls = [url.strip() for url in tweet_data['media_links'].split(',') if url.strip()]
 
+    # Combine main content with quoted/original context when available
+    analysis_content = tweet_data['content']
+    original_content = tweet_data.get('original_content')
+    if original_content and original_content.strip():
+        analysis_content = f"{analysis_content}\n\n[Contenido citado]: {original_content}"
+
     # Debug print
     if media_urls:
         print(f"    🖼️ Found {len(media_urls)} media files for analysis")
@@ -321,9 +327,12 @@ async def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) ->
         tweet_id=tweet_data['tweet_id'],
         tweet_url=f"https://twitter.com/placeholder/status/{tweet_data['tweet_id']}",
         username=tweet_data['username'],
-        content=tweet_data['content'],
+        content=analysis_content,
         media_urls=media_urls
     )
+
+    # Preserve original tweet text in stored analysis for consistency with batch pipeline
+    analysis_result.post_content = tweet_data['content']
 
     # Only delete existing analysis AFTER successful reanalysis
     analyzer.repository.delete_existing_analysis(tweet_id)

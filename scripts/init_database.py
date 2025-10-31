@@ -101,7 +101,7 @@ def create_fresh_database_schema(db_path: str = None):
         
         # Content analysis results (platform-agnostic)
         print("  📝 Creating content_analyses table...")
-        # Content analyses table - dual explanation architecture
+        # Content analyses table - dual explanation architecture + multi-model support
         c.execute('''
         CREATE TABLE IF NOT EXISTS content_analyses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,7 +123,27 @@ def create_fresh_database_schema(db_path: str = None):
             media_urls TEXT,
             media_type TEXT,
             verification_data TEXT,
-            verification_confidence REAL DEFAULT 0.0
+            verification_confidence REAL DEFAULT 0.0,
+            multi_model_analysis BOOLEAN DEFAULT FALSE,
+            model_consensus_category TEXT
+        )
+        ''')
+        
+        # Multi-model analyses table - stores individual model results
+        print("  📝 Creating model_analyses table...")
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS model_analyses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id TEXT NOT NULL,
+            model_name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            explanation TEXT NOT NULL,
+            confidence_score REAL,
+            processing_time_seconds REAL,
+            analysis_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            error_message TEXT,
+            FOREIGN KEY (post_id) REFERENCES tweets (tweet_id),
+            UNIQUE(post_id, model_name)
         )
         ''')
         
@@ -203,6 +223,11 @@ def create_fresh_database_schema(db_path: str = None):
             ('idx_content_analyses_timestamp', 'content_analyses', 'analysis_timestamp'),
             ('idx_content_analyses_stages', 'content_analyses', 'analysis_stages'),
             ('idx_content_analyses_external', 'content_analyses', 'external_analysis_used'),
+            ('idx_content_analyses_multi_model', 'content_analyses', 'multi_model_analysis'),
+            ('idx_model_analyses_post', 'model_analyses', 'post_id'),
+            ('idx_model_analyses_model', 'model_analyses', 'model_name'),
+            ('idx_model_analyses_category', 'model_analyses', 'category'),
+            ('idx_model_analyses_timestamp', 'model_analyses', 'analysis_timestamp'),
             ('idx_post_edits_post', 'post_edits', 'post_id'),
             ('idx_user_feedback_post', 'user_feedback', 'post_id'),
             ('idx_user_feedback_type', 'user_feedback', 'feedback_type'),
@@ -243,7 +268,7 @@ def verify_schema():
         # Check tables exist
         c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = [row['name'] for row in c.fetchall()]
-        expected_tables = ['accounts', 'content_analyses', 'platforms', 'post_edits', 'tweets', 'user_feedback']
+        expected_tables = ['accounts', 'content_analyses', 'model_analyses', 'platforms', 'post_edits', 'tweets', 'user_feedback']
         
         print(f"  📋 Tables found: {tables}")
         for table in expected_tables:
@@ -259,7 +284,8 @@ def verify_schema():
         essential_ca_fields = [
             'post_id', 'author_username', 'platform', 'category', 'analysis_stages', 'analysis_timestamp',
             'categories_detected', 'media_urls', 'media_type',
-            'verification_data', 'verification_confidence'
+            'verification_data', 'verification_confidence',
+            'multi_model_analysis', 'model_consensus_category'
         ]
         
         print(f"  📋 Content analyses table columns: {len(ca_columns)} total")

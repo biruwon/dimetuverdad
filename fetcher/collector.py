@@ -5,19 +5,14 @@ Handles the core tweet collection workflow, processing individual tweets,
 and managing collection state.
 """
 
-import json
-import sqlite3
 from typing import Dict, List, Optional, Set, Tuple
 from datetime import datetime
-from playwright.sync_api import Page, TimeoutError
 from .config import get_config
 from .logging_config import get_logger
 from .scroller import get_scroller
 from .media_monitor import get_media_monitor
 from . import db as fetcher_db
 from . import parsers as fetcher_parsers
-from utils import paths
-# Import repository interfaces
 from repositories import get_tweet_repository
 
 logger = get_logger('collector')
@@ -29,18 +24,6 @@ class TweetCollector:
         self.config = get_config()
         self.scroller = get_scroller()
         self.media_monitor = get_media_monitor()
-
-    def setup_media_url_monitoring(self, page) -> List[str]:
-        """
-        Set up network request monitoring to capture media URLs.
-
-        Args:
-            page: Playwright page object
-
-        Returns:
-            List of captured media URLs
-        """
-        return self.media_monitor.setup_and_monitor(page, self.scroller)
 
     def should_process_tweet(self, tweet_id: str, seen_ids: Set[str]) -> bool:
         """
@@ -88,29 +71,30 @@ class TweetCollector:
             'original_tweet_id': tweet.get('original_tweet_id')
         }
 
-    def extract_tweet_data(self, article, tweet_id: str, tweet_url: str, username: str, profile_pic_url: Optional[str], media_urls: List[str]) -> Optional[Dict]:
+    def extract_tweet_data(self, page, article, tweet_id: str, tweet_url: str, username: str, profile_pic_url: Optional[str]) -> Optional[Dict]:
         """
-        Extract comprehensive tweet data from a tweet article.
+        Extract comprehensive tweet data from a tweet article using the same approach as refetch.
+        This ensures consistent media extraction across regular fetch and refetch operations.
 
         Args:
+            page: Playwright page object (for media monitoring)
             article: Playwright article element
             tweet_id: Tweet ID
             tweet_url: Tweet URL
             username: Username
             profile_pic_url: Profile picture URL
-            media_urls: Captured media URLs from monitoring
 
         Returns:
             Dict of tweet data or None if extraction failed
         """
         try:
-            tweet_data = fetcher_parsers.extract_tweet_with_quoted_content(article, tweet_id, username, tweet_url, article)
+            # Use the same extraction method as refetch_manager for consistency
+            tweet_data = fetcher_parsers.extract_tweet_with_media_monitoring(
+                page, tweet_id, username, tweet_url, self.media_monitor, self.scroller
+            )
             
             if not tweet_data:
                 return None
-            
-            # Process video URLs like refetch does
-            tweet_data = self.media_monitor.process_video_urls(media_urls, tweet_data)
             
             # Extract timestamp
             time_element = article.query_selector('time')
@@ -218,9 +202,6 @@ class TweetCollector:
         tweets_found_this_cycle = 0
         saved_count = 0
 
-        # Set up media URL monitoring
-        media_urls = self.setup_media_url_monitoring(page)
-
         if max_tweets == float('inf'):
             logger.info("Collecting unlimited tweets...")
         else:
@@ -292,8 +273,8 @@ class TweetCollector:
 
                     # Extract full tweet data
                     tweet_data = self.extract_tweet_data(
-                        article, tweet_id, tweet_url, actual_author,
-                        profile_pic_url, media_urls
+                        page, article, tweet_id, tweet_url, actual_author,
+                        profile_pic_url
                     )
 
                     if not tweet_data:

@@ -32,7 +32,8 @@ class TestAdminEditAnalysis:
             'original_content': None,
             'verification_data': None,
             'verification_confidence': 0.0,
-            'is_deleted': False
+            'is_deleted': False,
+            'media_links': ''
         })
 
         response = admin_client.get('/admin/edit-analysis/1234567890')

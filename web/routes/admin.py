@@ -360,18 +360,22 @@ def admin_edit_analysis(tweet_id: str) -> str:
                 # Manual update
                 handle_manual_update_action(tweet_id, new_category, new_explanation)
 
-            # Redirect back to user view if possible, otherwise admin dashboard
-            if referrer and '/user/' in referrer:
-                return redirect(referrer)
-            else:
-                return redirect(url_for('admin.admin_dashboard'))
+            # Stay on the edit page after action completes
+            flash('Operación completada exitosamente', 'success')
+            redirect_url = url_for('admin.admin_edit_analysis', tweet_id=tweet_id)
+            if referrer:
+                redirect_url += f'?from={referrer}'
+            return redirect(redirect_url)
 
         except Exception as e:
             admin_bp.logger.error(f"Error in admin_edit_analysis: {str(e)}")
             admin_bp.logger.error(f"Exception type: {type(e).__name__}")
             admin_bp.logger.error(f"Traceback: {traceback.format_exc()}")
             flash('Ocurrió un error al procesar la solicitud. Inténtalo de nuevo.', 'error')
-            return redirect(referrer or url_for('admin.admin_dashboard'))
+            redirect_url = url_for('admin.admin_edit_analysis', tweet_id=tweet_id)
+            if referrer:
+                redirect_url += f'?from={referrer}'
+            return redirect(redirect_url)
 
     # GET request - show edit form (use direct SQL to align with tests)
     from utils.database import get_db_connection_context
@@ -382,6 +386,7 @@ def admin_edit_analysis(tweet_id: str) -> str:
                 t.username,
                 t.tweet_timestamp,
                 t.is_deleted,
+                t.media_links,
                 ca.category,
                 ca.local_explanation,
                 ca.external_explanation,
@@ -419,6 +424,7 @@ def admin_edit_analysis(tweet_id: str) -> str:
         'username': row['username'],
         'tweet_timestamp': row['tweet_timestamp'],
         'is_deleted': row['is_deleted'],
+        'media_links': row['media_links'] if row['media_links'] is not None else '',
         'tweet_id': tweet_id,
         'tweet_url': row['tweet_url'] if row['tweet_url'] is not None else '',
         'analysis_category': row['category'] if row['category'] is not None else 'general',

@@ -2,6 +2,11 @@
 
 ## 🚀 High Priority
 
+Números con gemma3:4b y sin gemini:
+- Con 0.02 analisis/s
+- ~6.5 hours para 552 posts
+
+
 Top priority:
 
 - [M] Improve LLM explanation

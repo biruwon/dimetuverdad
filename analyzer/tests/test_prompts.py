@@ -52,9 +52,9 @@ class TestEnhancedPromptGeneratorStatic(unittest.TestCase):
         self.assertIn("call_to_action", result)
         self.assertIn("general", result)
         
-        # Should have detection guidelines
-        self.assertIn("GUÍAS DE DETECCIÓN", result)
-        self.assertIn("Identifica:", result)
+        # Should have category identification section
+        self.assertIn("IDENTIFICACIÓN DE CATEGORÍAS", result)
+        self.assertIn("FORMATO OBLIGATORIO", result)
 
     def test_build_gemini_multimodal_analysis_prompt_image(self):
         """Test Gemini analysis prompt for images."""
@@ -146,24 +146,12 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         # Should contain the text
         self.assertIn(self.test_text, result)
         
-        # Should have step-by-step analysis
-        self.assertIn("INVESTIGACIÓN ACADÉMICA", result)
-        self.assertIn("CLASIFICA EL TEXTO EN UNA SÓLO CATEGORÍA", result)
+        # User prompt is now minimal after optimization - just contains the content
+        self.assertIn("CONTENIDO A ANALIZAR", result)
         
-        # Should list all major categories
-        self.assertIn("hate_speech", result)
-        self.assertIn("anti_immigration", result)
-        self.assertIn("anti_lgbtq", result)
-        self.assertIn("anti_feminism", result)
-        self.assertIn("disinformation", result)
-        self.assertIn("conspiracy_theory", result)
-        self.assertIn("call_to_action", result)
-        self.assertIn("general", result)
-        
-        # Should have decision instructions
-        self.assertIn("FORMATO OBLIGATORIO", result)
-        self.assertIn("CATEGORÍA:", result)
-        self.assertIn("EXPLICACIÓN:", result)
+        # The detailed instructions are now in the system prompt, not user prompt
+        # This test checks the user prompt which is minimal by design
+        # (System prompt with instructions is tested separately)
 
     def test_generate_explanation_prompt_hate_speech(self):
         """Test explanation prompt for hate speech category."""
@@ -178,7 +166,8 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         
         # Should have the category-specific explanation structure
         self.assertIn("discurso de odio", result.lower())
-        self.assertIn("características protegidas", result.lower())
+        # Check for key detection criteria (after prompt simplification)
+        self.assertIn("lenguaje discriminatorio", result.lower())
 
     def test_generate_explanation_prompt_disinformation(self):
         """Test explanation prompt for disinformation category."""
@@ -211,7 +200,7 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         
         # Should have the category-specific explanation structure for anti-government
         self.assertIn("anti-gubernamental", result.lower())
-        self.assertIn("legitimidad del gobierno", result.lower())
+        self.assertIn("gobierno como ilegítimo", result.lower())
 
     def test_generate_explanation_prompt_anti_immigration(self):
         """Test explanation prompt for anti-immigration category."""
@@ -414,7 +403,8 @@ class TestCrossCategoryPromptGeneration(unittest.TestCase):
         
         # Should have the category-specific explanation structure for hate speech
         self.assertIn("discurso de odio", explanation_prompt.lower())
-        self.assertIn("características protegidas", explanation_prompt.lower())
+        # Check for key detection criteria (after prompt simplification)
+        self.assertIn("lenguaje discriminatorio", explanation_prompt.lower())
         
     def test_anti_government_political_rhetoric(self):
         """Test prompt generation for anti-government political rhetoric."""
@@ -424,7 +414,7 @@ class TestCrossCategoryPromptGeneration(unittest.TestCase):
         
         # Should have the category-specific explanation structure for anti-government
         self.assertIn("anti-gubernamental", explanation_prompt.lower())
-        self.assertIn("legitimidad del gobierno", explanation_prompt.lower())
+        self.assertIn("gobierno como ilegítimo", explanation_prompt.lower())
 
 
 if __name__ == '__main__':

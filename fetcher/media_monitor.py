@@ -35,14 +35,20 @@ class MediaMonitor:
                 
             url = request.url.lower()
 
-            # Only capture video files, not images
+            # Only capture video files, not images or thumbnails
             video_extensions = ['.mp4', '.m3u8', '.webm', '.mov']
             video_keywords = ['video.twimg.com']
+            
+            # Exclude image extensions and video thumbnails
+            image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+            is_image = any(ext in url for ext in image_extensions)
+            is_thumbnail = 'amplify_video_thumb' in url or 'thumb' in url
 
             has_video_extension = any(ext in url for ext in video_extensions)
             has_video_keyword = any(keyword in url for keyword in video_keywords)
 
-            if has_video_extension or has_video_keyword:
+            # Only capture if it's a video and NOT an image/thumbnail
+            if (has_video_extension or has_video_keyword) and not is_image and not is_thumbnail:
                 media_urls.append(request.url)
                 print(f"🎥 CAPTURED VIDEO URL: {request.url[:100]}...")
                 logger.debug(f"Captured first video URL: {request.url[:100]}...")
@@ -57,11 +63,17 @@ class MediaMonitor:
             url = response.url.lower()
             video_extensions = ['.mp4', '.m3u8', '.webm', '.mov']
             video_keywords = ['video.twimg.com']
+            
+            # Exclude image extensions and video thumbnails
+            image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+            is_image = any(ext in url for ext in image_extensions)
+            is_thumbnail = 'amplify_video_thumb' in url or 'thumb' in url
 
             has_video_extension = any(ext in url for ext in video_extensions)
             has_video_keyword = any(keyword in url for keyword in video_keywords)
 
-            if has_video_extension or has_video_keyword:
+            # Only capture if it's a video and NOT an image/thumbnail
+            if (has_video_extension or has_video_keyword) and not is_image and not is_thumbnail:
                 media_urls.append(response.url)
                 print(f"🎥 CAPTURED VIDEO URL (response): {response.url[:100]}...")
         
@@ -122,6 +134,7 @@ class MediaMonitor:
     def process_video_urls(self, video_urls: List[str], tweet_data: dict) -> dict:
         """
         Process captured video URL (first one found) and combine with existing tweet media.
+        Deduplicates URLs to prevent saving the same media twice.
         
         Args:
             video_urls: List of captured video URLs (should contain at most 1 URL)
@@ -137,16 +150,27 @@ class MediaMonitor:
         existing_media = tweet_data.get('media_links', '')
         existing_urls = existing_media.split(',') if existing_media else []
         
-        # Take only the first video URL
-        video_url = video_urls[0]
+        # Deduplicate: collect unique URLs preserving order
+        unique_urls = []
+        seen = set()
         
-        # Add video URL if not already captured by DOM extraction
-        if video_url not in existing_urls:
-            combined_urls = existing_urls + [video_url]
-            tweet_data['media_links'] = ','.join(combined_urls)
-            tweet_data['media_count'] = len(combined_urls)
-            
-            logger.info(f"Added video URL from network monitoring: {video_url[:100]}...")
+        # First add all existing URLs (from DOM extraction)
+        for url in existing_urls:
+            if url and url not in seen:
+                unique_urls.append(url)
+                seen.add(url)
+        
+        # Then add captured video URLs if not already present
+        for video_url in video_urls[:1]:  # Only process first video URL
+            if video_url and video_url not in seen:
+                unique_urls.append(video_url)
+                seen.add(video_url)
+                logger.info(f"Added video URL from network monitoring: {video_url[:100]}...")
+        
+        # Update tweet data with deduplicated URLs
+        if unique_urls != existing_urls:
+            tweet_data['media_links'] = ','.join(unique_urls)
+            tweet_data['media_count'] = len(unique_urls)
         
         return tweet_data
 

@@ -145,7 +145,7 @@ class TestIntegration:
         result = await api.analyze_with_verification(content, analyzer_result)
 
         assert result.original_result['category'] == "disinformation"
-        assert result.verification_data['verification_confidence'] >= 0
+        assert result.verification_data['confidence_score'] >= 0
         # Should have some verification even if no verification was triggered
         assert result.explanation_with_verification
 
@@ -216,7 +216,7 @@ class TestSpecificClaims:
             result = await self.api.analyze_with_verification(content, analyzer_result)
 
             assert result.original_result['category'] == "disinformation"
-            assert result.verification_data['verification_confidence'] >= 0
+            assert result.verification_data['confidence_score'] >= 0
             assert len(result.explanation_with_verification) > 0
             # Should have some form of verification
             assert result.explanation_with_verification != result.original_result.get('explanation', '')

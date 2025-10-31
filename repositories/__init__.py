@@ -72,9 +72,3 @@ def get_account_repository() -> AccountRepositoryInterface:
 def get_post_edit_repository() -> PostEditRepositoryInterface:
     """Get global post edit repository instance."""
     return _repository_factory.get_post_edit_repository()
-
-# Convenience aliases for backward compatibility
-tweet_repo = get_tweet_repository
-content_analysis_repo = get_content_analysis_repository
-account_repo = get_account_repository
-post_edit_repo = get_post_edit_repository

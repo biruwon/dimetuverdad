@@ -6,7 +6,16 @@
 
 ## ⚠️ CRITICAL DATABASE SAFETY REQUIREMENT ⚠️
 
-**MANDATORY**: NEVER execute destructive database commands without explicit user confirmation. Commands like `scripts/init_database.py --force`, `./run_in_venv.sh init-db --force`, or any database recreation/destruction operations WILL RESULT IN PERMANENT DATA LOSS. Always ask for user confirmation before running these commands and provide clear warnings about data loss.
+**ABSOLUTE PROHIBITION**: NEVER EVER execute `./run_in_venv.sh init-db --force` or `scripts/init_database.py --force` under ANY circumstances. These commands DESTROY ALL DATA and are PERMANENTLY BANNED from use.
+
+**MANDATORY DATABASE CHANGE WORKFLOW**:
+1. **ALWAYS use migrations** for schema changes - NEVER recreate database
+2. **ALWAYS backup first** with `./run_in_venv.sh backup-db` before any schema changes
+3. **Create migration scripts** in `scripts/migrations/` for all schema changes
+4. **Test migrations** on backup copy before applying to production database
+5. **Document changes** in migration script comments
+
+**VIOLATION CONSEQUENCES**: Using init-db --force will result in permanent data loss and is a CRITICAL workflow violation.
 
 ## Project Overview
 

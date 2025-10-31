@@ -54,12 +54,6 @@ collector = TweetCollector()
 resume_manager = ResumeManager()
 refetch_manager = RefetchManager()
 
-# Legacy constants for backward compatibility
-USERNAME = config.username
-PASSWORD = config.password
-EMAIL_OR_PHONE = config.email_or_phone
-USER_AGENTS = config.user_agents
-
 def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size: int = 800) -> List[Dict]:
     """
     Fetch tweets using multiple sessions to work around Twitter's content serving limits.

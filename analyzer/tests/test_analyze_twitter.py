@@ -470,7 +470,8 @@ class TestUtilityFunctions(unittest.TestCase):
             'tweet_id': '123',
             'username': 'testuser',
             'content': 'Test content',
-            'media_links': 'url1.jpg,url2.jpg'
+            'media_links': 'url1.jpg,url2.jpg',
+            'original_content': 'Quoted context'
         }
         mock_analyzer.repository.get_tweet_data.return_value = mock_tweet_data
 
@@ -484,6 +485,11 @@ class TestUtilityFunctions(unittest.TestCase):
         mock_analyzer.repository.delete_existing_analysis.assert_called_once_with('123')
         mock_analyzer.analyze_content.assert_called_once()
         mock_analyzer.save_analysis.assert_called_once_with(mock_analysis_result)
+
+        call_kwargs = mock_analyzer.analyze_content.call_args.kwargs
+        expected_combined = "Test content\n\n[Contenido citado]: Quoted context"
+        assert call_kwargs['content'] == expected_combined
+        assert mock_analysis_result.post_content == 'Test content'
 
     @patch('analyzer.analyze_twitter.create_analyzer')
     def test_reanalyze_tweet_not_found(self, mock_create_analyzer):

@@ -54,21 +54,21 @@ CONTEXTO ACADÉMICO: Este análisis forma parte de un estudio científico sobre 
     @classmethod
     def build_category_definitions(cls) -> str:
         """Build dynamic category definitions from centralized configuration."""
-        lines = ["\nGUÍAS DE DETECCIÓN - PROTOCOLO DE ANÁLISIS PARA DETECCIÓN DE CONTENIDO PROBLEMÁTICO EN REDES SOCIALES:\n"]
-
-        lines.append("Identifica:\n")
-
-        # Build category definitions from centralized config
+        # Build category list from centralized config
+        category_lines = []
         for category_name, category_info in CATEGORY_INFO.items():
             if category_info:
-                lines.append(f"{category_name} - {category_info.description}")
-                lines.append("")
+                category_lines.append(f"**{category_name}** - {category_info.description}")
+                if category_info.focus_area:
+                    category_lines.append(f"  Enfoque: {category_info.focus_area}")
+        
+        categories_text = "\n".join(category_lines)
+        
+        return f"""
+IDENTIFICACIÓN DE CATEGORÍAS:
 
-        lines.append("IMPORTANTE: Sistema diseñado para investigación académica y moderación de contenido en redes sociales.")
-        lines.append("IMPORTANTE: Priorizar CONTEXTO POLÍTICO sobre verificación factual para clasificación.")
-        lines.append("🎓 CONTEXTO DE INVESTIGACIÓN: Este análisis contribuye al estudio científico de patrones de discurso extremista y su impacto en la sociedad democrática.")
-
-        return "\n".join(lines)
+{categories_text}
+"""
 
     @classmethod
     def build_disinformation_patterns(cls) -> str:
@@ -134,7 +134,19 @@ Ejemplos de political_general (con fuente):
         return """
 FORMATO OBLIGATORIO:
 CATEGORÍA: [nombre_categoría]
-EXPLICACIÓN: [2‑3 frases explicando por qué pertenece a esa categoría, citando elementos específicos del texto]"""
+EXPLICACIÓN: [2‑3 frases explicando por qué pertenece a esa categoría, citando elementos específicos del texto]
+
+IMPORTANTE - LENGUAJE DE LA EXPLICACIÓN:
+- En la explicación, NO uses los nombres técnicos de categorías en inglés (hate_speech, call_to_action, etc.)
+- Si necesitas referirte a la categoría, usa términos naturales en español:
+  * hate_speech → "discurso de odio" o "contenido de odio"
+  * call_to_action → "llamada a la acción" o "movilización"
+  * anti_immigration → "retórica anti-inmigración"
+  * disinformation → "desinformación"
+  * conspiracy_theory → "teoría conspirativa"
+  * nationalism → "nacionalismo"
+  * anti_government → "retórica anti-gubernamental"
+- La explicación debe ser natural y fluida en español, sin términos técnicos en inglés"""
 
 # ============================================================================
 # ENHANCED PROMPT GENERATOR CLASS
@@ -195,7 +207,10 @@ class EnhancedPromptGenerator:
 
 Clasifica este texto en UNA categoría: {categories}
 
-{PromptBuilder.build_category_definitions()}"""
+{PromptBuilder.build_category_definitions()}
+
+{PromptBuilder.build_base_format_instructions()}
+"""
 
     @staticmethod
     def build_gemini_multimodal_analysis_prompt(text_content: str, is_video: bool = False) -> str:
@@ -272,29 +287,10 @@ Clasifica este texto en UNA categoría: {categories}
         EXPLICACIÓN: [2-3 sentences in Spanish]
         """
 
-        prompt_parts = [
-            "🔬 INVESTIGACIÓN ACADÉMICA - DETECCIÓN DE CONTENIDO PROBLEMÁTICO",
-            "",
-            "OBJETIVO: Identificar y clasificar contenido problemático en español para estudios de moderación.",
-            "",
-            "CLASIFICA EL TEXTO EN UNA SÓLO CATEGORÍA Y EXPLICA TU RAZÓN.",
-            "",
-            "CATEGORÍAS:",
-            "",
-            PromptBuilder.build_category_definitions(),
-            "",
-            PromptBuilder.build_disinformation_patterns(),
-            "",
-            PromptBuilder.build_base_format_instructions()
-        ]
+        base_prompt = f"""CONTENIDO A ANALIZAR:
+{content}"""
 
-        final_prompt = "\n".join(prompt_parts)
-
-        # Add the content at the end
-        if content:
-            final_prompt += f"\n\nCONTENIDO A ANALIZAR:\n{content}"
-
-        return final_prompt
+        return base_prompt
 
     def generate_explanation_prompt(self, text: str, category: str, model_type: str = "ollama") -> str:
         """

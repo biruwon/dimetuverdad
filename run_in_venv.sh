@@ -69,6 +69,20 @@ analyze_twitter(){
   "$PY" "$ROOT_DIR/scripts/analyzer_cli.py" "$@"
 }
 
+analyze_twitter_multi(){
+  ensure_venv
+  echo "Starting multi-model database analysis..."
+  cd "$ROOT_DIR"
+  "$PY" "$ROOT_DIR/scripts/analyze_multi_model.py" "$@"
+}
+
+compare_models(){
+  ensure_venv
+  echo "Generating model comparison report..."
+  cd "$ROOT_DIR"
+  "$PY" "$ROOT_DIR/scripts/analyze_multi_model.py" --limit 50
+}
+
 web(){
   ensure_venv
   echo "Starting web application on port 5000..."
@@ -157,6 +171,14 @@ case "${1-}" in
     shift
     analyze_twitter "$@"
     ;;
+  analyze-twitter-multi)
+    shift
+    analyze_twitter_multi "$@"
+    ;;
+  compare-models)
+    shift
+    compare_models "$@"
+    ;;
   web)
     web
     ;;
@@ -209,6 +231,8 @@ case "${1-}" in
     echo "  install           Create venv and install requirements + playwright browsers"
     echo "  fetch             Run fetch_tweets.py (requires X credentials in .env)"
     echo "  analyze-twitter        Run analysis on posts from database"
+    echo "  analyze-twitter-multi  Run multi-model analysis on posts"
+    echo "  compare-models         Generate model comparison report"
     echo "  web               Start web application on port 5000"
     echo "  test-analyzer-integration  Run analyzer integration tests"
     echo "  test-fetch-integration     Run fetch integration tests"
@@ -217,7 +241,6 @@ case "${1-}" in
     echo "  test-unit                   Run all unit test files in project"
     echo "  test-suite                 Run complete test suite (unit + integration)"
     echo "  init-db           Initialize/reset database schema"
-    echo "  compare-models    Run model comparison benchmarks"
     echo "  benchmarks        Run performance benchmarks"
     echo "  backup-db         Create/list/cleanup database backups"
     echo "  full              Run install, fetch, then analyze-twitter"
@@ -231,6 +254,9 @@ case "${1-}" in
     echo "  $0 test-unit"
     echo "  $0 test-suite"
     echo "  $0 analyze-twitter --username Vox_es --limit 10"
+    echo "  $0 analyze-twitter-multi --limit 5"
+    echo "  $0 analyze-twitter-multi --username Santi_ABASCAL --models gemma3:4b,gpt-oss:20b"
+    echo "  $0 compare-models"
     echo "  $0 backup-db list"
     exit 1
     ;;

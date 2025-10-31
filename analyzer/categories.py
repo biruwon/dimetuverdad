@@ -14,9 +14,9 @@ class Categories:
     """Content analysis categories with consistent naming across all components."""
     # Identity-based hate & discrimination
     HATE_SPEECH = "hate_speech"
-    ANTI_IMMIGRATION = "anti_immigration"  # NEW - "invasion", replacement theory
-    ANTI_LGBTQ = "anti_lgbtq"  # NEW - "gender ideology", anti-trans
-    ANTI_FEMINISM = "anti_feminism"  # NEW - "feminazis", traditional gender roles
+    ANTI_IMMIGRATION = "anti_immigration"
+    ANTI_LGBTQ = "anti_lgbtq"
+    ANTI_FEMINISM = "anti_feminism"
     
     # Information warfare
     DISINFORMATION = "disinformation"
@@ -74,14 +74,14 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
     Categories.HATE_SPEECH: CategoryInfo(
         name=Categories.HATE_SPEECH,
         display_name="Discurso de Odio",
-        description="Comunicación que establece jerarquías entre grupos sociales o expresa incompatibilidad cultural fundamental. Características: lenguaje que sugiere diferencias irreconciliables, expresiones de superioridad/inferioridad grupal, narrativas de amenaza identitaria.",
-        focus_area="detección de discurso de odio",
+        description="Comunicación que establece jerarquías entre grupos sociales, expresa incompatibilidad cultural fundamental, o emplea lenguaje despectivo/deshumanizante hacia grupos. INCLUYE: retórica sarcástica/burlona que menosprecia a ciudadanos por sus posturas políticas o solidaridad, uso de insultos colectivos (ej: '#paisdeborregos'), lenguaje divisivo 'nosotros vs ellos' con tono agresivo. Características: lenguaje que sugiere diferencias irreconciliables, expresiones de superioridad/inferioridad grupal, narrativas de amenaza identitaria, SARCASMO DESPECTIVO que ridiculiza/insulta a grupos por sus valores o acciones, emojis agresivos (🖕, 🤦) que refuerzan el desprecio.",
+        focus_area="detección de discurso de odio y retórica despectiva",
         analysis_questions=[
-            "¿Hay lenguaje discriminatorio o deshumanizante?",
-            "¿Se atacan grupos por características protegidas?",
-            "¿Cuál es la severidad del discurso de odio?"
+            "¿Hay lenguaje discriminatorio, deshumanizante, o despectivo hacia grupos?",
+            "¿Se usa sarcasmo o burla para menospreciar a ciudadanos por sus valores políticos?",
+            "¿Contiene insultos colectivos o lenguaje divisivo agresivo?"
         ],
-        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente discurso de odio y discriminación."
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente discurso de odio, discriminación, y retórica despectiva/sarcástica que ataca a grupos."
     ),
     
     Categories.ANTI_IMMIGRATION: CategoryInfo(
@@ -178,14 +178,14 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
     Categories.ANTI_GOVERNMENT: CategoryInfo(
         name=Categories.ANTI_GOVERNMENT,
         display_name="Anti-Gubernamental",
-        description="Comunicación que cuestiona la legitimidad institucional del gobierno. Características: deslegitimización del poder político, narrativas de autoritarismo, retórica anti-establishment.",
-        focus_area="análisis de retórica anti-gubernamental",
+        description="Comunicación que retrata al gobierno como ilegítimo, abusivo o persecutor. Características: denuncias de persecución política, acusaciones de censura estatal, narrativas que presentan a los medios públicos como propaganda oficial y llamados a desconocer la autoridad gubernamental.",
+        focus_area="detección de retórica anti-gubernamental, denuncias de abuso institucional y persecución política",
         analysis_questions=[
-            "¿Se cuestiona la legitimidad del gobierno?",
-            "¿Hay retórica deslegitimizadora de instituciones?",
-            "¿Se promueve resistencia o desobediencia?"
+            "¿El mensaje describe al gobierno como ilegítimo, autoritario o represivo?",
+            "¿Acusa a instituciones estatales o medios oficiales de perseguir, censurar o manipular a la ciudadanía o la oposición?",
+            "¿Promueve resistir, desacreditar o desobedecer directamente al gobierno en turno?"
         ],
-        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-gubernamental y anti-institucional."
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-gubernamental, denuncias de persecución del Estado, acusaciones de censura o manipulación institucional."
     ),
     
     Categories.HISTORICAL_REVISIONISM: CategoryInfo(

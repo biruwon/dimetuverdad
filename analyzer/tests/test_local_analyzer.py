@@ -124,20 +124,24 @@ class TestPromptBuilding:
     def test_categorization_prompt_structure(self, analyzer):
         """Test categorization prompt contains all required elements."""
         content = "Test content for analysis"
-        prompt = analyzer.prompt_generator.build_ollama_categorization_prompt(content)
+        user_prompt = analyzer.prompt_generator.build_ollama_categorization_prompt(content)
+        system_prompt = analyzer.prompt_generator.build_ollama_text_analysis_system_prompt()
         
-        # Check prompt structure
-        assert "CATEGORÍAS:" in prompt
-        assert content in prompt
-        assert "FORMATO OBLIGATORIO:" in prompt
-        assert "CATEGORÍA:" in prompt
-        assert "EXPLICACIÓN:" in prompt
+        # User prompt should contain only the content (optimized structure)
+        assert content in user_prompt
+        assert "CONTENIDO A ANALIZAR:" in user_prompt
         
-        # Check all categories are listed
-        assert Categories.HATE_SPEECH in prompt
-        assert Categories.DISINFORMATION in prompt
-        assert Categories.CONSPIRACY_THEORY in prompt
-        assert Categories.GENERAL in prompt
+        # System prompt should contain all instructions
+        assert "CATEGORÍAS:" in system_prompt
+        assert "FORMATO OBLIGATORIO:" in system_prompt
+        assert "CATEGORÍA:" in system_prompt
+        assert "EXPLICACIÓN:" in system_prompt
+        
+        # Check all categories are listed in system prompt
+        assert Categories.HATE_SPEECH in system_prompt
+        assert Categories.DISINFORMATION in system_prompt
+        assert Categories.CONSPIRACY_THEORY in system_prompt
+        assert Categories.GENERAL in system_prompt
     
     def test_explanation_prompt_delegates(self, analyzer):
         """Test explanation prompt uses EnhancedPromptGenerator."""
@@ -544,6 +548,31 @@ class TestMediaContentPreparation:
 
                 assert len(result) == 3  # Should limit to 3
                 assert mock_get.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_prepare_media_content_twitter_format_urls(self):
+        """Test that Twitter URLs with format=jpg are properly handled."""
+        with patch('ollama.AsyncClient'):
+            analyzer = LocalMultimodalAnalyzer(verbose=False)
+
+            # Mock successful response
+            mock_response = Mock()
+            mock_response.content = b"fake image data"
+            mock_response.headers = {'content-length': '1000'}
+            mock_response.raise_for_status.return_value = None
+
+            with patch('requests.get', return_value=mock_response) as mock_get:
+                # Test Twitter-style URLs with format parameter
+                twitter_urls = [
+                    "https://pbs.twimg.com/media/G3eSgyyXYAAWpzY?format=jpg&name=large",
+                    "https://pbs.twimg.com/media/ABC123?format=png&name=small"
+                ]
+                result = await analyzer._prepare_media_content(twitter_urls)
+
+                assert len(result) == 2  # Both should be processed
+                assert result[0]["type"] == "image_url"
+                assert result[1]["type"] == "image_url"
+                assert mock_get.call_count == 2
 
 
 class TestMultimodalGeneration:

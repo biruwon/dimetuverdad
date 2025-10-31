@@ -5,18 +5,15 @@ This module handles re-fetching individual tweets or entire accounts,
 including database operations and content extraction for updates.
 """
 
-import sqlite3
 import traceback
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple
 from playwright.sync_api import sync_playwright
 
 from fetcher import db as fetcher_db
 from fetcher import parsers as fetcher_parsers
 from fetcher.session_manager import SessionManager
 from fetcher.media_monitor import MediaMonitor
-from utils.database import get_db_connection
 from fetcher.scroller import Scroller
-from utils import paths
 
 class RefetchManager:
     """Manages re-fetching operations for tweets and accounts."""

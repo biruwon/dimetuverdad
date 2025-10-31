@@ -344,11 +344,11 @@ class TestAPIEndpoints:
                 elif 'DATABASE_PATH' in os.environ:
                     del os.environ['DATABASE_PATH']
         
-        response = client.get('/api/usernames')
-        assert response.status_code == 200  # Endpoint exists and is public
+        # Note: /api/usernames endpoint was removed - testing existing tweet-status endpoint instead
+        response = client.get('/api/tweet-status/nonexistent')
+        assert response.status_code in [200, 404]  # Endpoint exists
         data = response.get_json()
-        assert isinstance(data, list)
-        assert len(data) >= 2  # At least our test users
+        assert 'exists' in data  # Should return exists status
 
 
 class TestErrorHandlers:

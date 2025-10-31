@@ -1,11 +1,13 @@
 """
 Local Multimodal Analyzer supporting multiple Ollama models for text and media analysis.
 Supports both text-only and multimodal analysis with Gemma models and gpt-oss.
+Includes multi-model analysis for comparison and consensus building.
 """
 
 import base64
 import requests
-from typing import Tuple, Optional, List
+import time
+from typing import Tuple, Optional, List, Dict
 import ollama
 import asyncio
 from .categories import Categories
@@ -25,11 +27,36 @@ class LocalMultimodalAnalyzer:
     Supports both text-only and multimodal analysis with the same model.
     
     Uses gemma3:4b for all content types (text, images, videos fallback to text).
+    Supports multi-model analysis for comparison and consensus building.
     """
     
-    # Model capabilities
+    # Model capabilities and configurations
     TEXT_MODELS = "gemma3:4b"
     MULTIMODAL_MODELS = ["gemma3:4b", "gemma3:12b", "gemma3:27b-it-qat"]
+    
+    # Available models for multi-model analysis
+    AVAILABLE_MODELS = {
+        "gemma3:4b": {
+            "type": "fast",
+            "multimodal": True,
+            "description": "Fast 4B parameter model"
+        },
+        "gemma3:12b": {
+            "type": "fast",
+            "multimodal": True,
+            "description": "Fast 12B parameter model"
+        },
+        "gemma3:27b-it-qat": {
+            "type": "accurate",
+            "multimodal": True,
+            "description": "Large 27B parameter model with quantization"
+        },
+        "gpt-oss:20b": {
+            "type": "balanced",
+            "multimodal": False,
+            "description": "Balanced 20B parameter text-only model"
+        }
+    }
     
     # Default generation parameters
     DEFAULT_TEMPERATURE_TEXT = 0.3
@@ -253,7 +280,7 @@ class LocalMultimodalAnalyzer:
             # Re-raise all errors to stop the analysis pipeline
             raise RuntimeError(f"Explanation generation failed: {str(e)}") from e
     
-    async def _analyze_content(self, content: str, media_urls: Optional[List[str]] = None, category: Optional[str] = None) -> str:
+    async def _analyze_content(self, content: str, media_urls: Optional[List[str]] = None, category: Optional[str] = None, prepared_media_content: Optional[List[dict]] = None) -> str:
         """
         Unified method for analyzing content (text-only or multimodal, categorization or explanation).
 
@@ -261,12 +288,20 @@ class LocalMultimodalAnalyzer:
             content: Text content to analyze
             media_urls: Optional media URLs for multimodal analysis
             category: Optional known category for explanation-only mode
+            prepared_media_content: Optional pre-prepared media content (base64 encoded) for optimized multi-model analysis
 
         Returns:
             Analysis response (category + explanation or explanation only)
         """
         # Determine if this is multimodal analysis
-        is_multimodal = media_urls is not None and len(media_urls) > 0
+        # Use prepared media content if provided, otherwise check media_urls
+        if prepared_media_content is not None:
+            is_multimodal = len(prepared_media_content) > 0
+            media_content = prepared_media_content
+        else:
+            is_multimodal = media_urls is not None and len(media_urls) > 0
+            media_content = None
+
         is_explanation_only = category is not None
 
         # Build appropriate prompt
@@ -283,7 +318,6 @@ class LocalMultimodalAnalyzer:
 
         # Select model and analysis type
         if is_multimodal:
-            media_content = await self._prepare_media_content(media_urls)
             if media_content:  # Only do multimodal if we have valid media content
                 model_to_use = self._select_multimodal_model()
                 return await self._generate_multimodal_with_ollama(prompt, media_content, model_to_use)
@@ -293,16 +327,16 @@ class LocalMultimodalAnalyzer:
                     print("⚠️  No valid media content found, falling back to text-only analysis")
                 is_multimodal = False
         
-        # Text-only analysis
-        model_to_use = self.TEXT_MODELS
+        # Text-only analysis - use the current primary model (may be temporarily overridden)
+        model_to_use = self.primary_model
         return await self._generate_with_ollama(prompt, model_to_use)
     
     def _select_multimodal_model(self) -> str:
         """
         Select the multimodal model to use.
-        Now uses the same TEXT_MODELS for consistency.
+        Returns the current primary model (which may be temporarily overridden in multi-model analysis).
         """
-        return self.TEXT_MODELS  # gemma3:4b
+        return self.primary_model
     
     async def _prepare_media_content(self, media_urls: List[str]) -> List[dict]:
         """
@@ -312,16 +346,30 @@ class LocalMultimodalAnalyzer:
         """
         media_content = []
         
+        # Define supported formats (same as _has_only_videos method)
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.svg']
+        image_formats = ['format=jpg', 'format=jpeg', 'format=png', 'format=gif', 'format=webp', 'format=bmp', 'format=tiff', 'format=svg']
+        video_extensions = ['.mp4', '.m3u8', '.mov', '.avi', '.webm', '.m4v', '.flv', '.wmv']
+        video_formats = ['format=mp4', 'format=m3u8', 'format=mov', 'format=avi', 'format=webm', 'format=m4v', 'format=flv', 'format=wmv']
+        
         for url in media_urls[:3]:  # Limit to 3 media files for performance
             try:
+                url_lower = url.lower()
+                
                 # Skip videos - Ollama multimodal models only support images
-                if any(ext in url.lower() for ext in ['.mp4', '.m3u8', '.mov', '.avi', '.webm', 'video']):
+                if (any(ext in url_lower for ext in video_extensions) or 
+                    any(fmt in url_lower for fmt in video_formats) or 
+                    'video' in url_lower):
                     if self.verbose:
                         print(f"⚠️  Skipping video file (Ollama only supports images): {url}")
                     continue
                 
-                # Only process images
-                if not any(ext in url.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']):
+                # Only process images (check both extensions and format parameters)
+                is_image = (any(ext in url_lower for ext in image_extensions) or 
+                           any(fmt in url_lower for fmt in image_formats) or 
+                           'image' in url_lower)
+                
+                if not is_image:
                     if self.verbose:
                         print(f"⚠️  Skipping unsupported media format: {url}")
                     continue
@@ -483,16 +531,17 @@ class LocalMultimodalAnalyzer:
         
         for url in media_urls:
             url_lower = url.lower()
-            # Check if it's a video (extensions or format parameters)
-            if (any(ext in url_lower for ext in video_extensions) or 
-                any(fmt in url_lower for fmt in video_formats) or 
-                'video' in url_lower):
-                has_videos = True
-            # Check if it's an image (extensions or format parameters)
-            elif (any(ext in url_lower for ext in image_extensions) or 
-                  any(fmt in url_lower for fmt in image_formats) or 
-                  'image' in url_lower):
+            
+            # Check for image extensions first (more reliable than keywords)
+            # This includes video thumbnails which have image extensions (.jpg, .png, etc.)
+            if (any(ext in url_lower for ext in image_extensions) or 
+                any(fmt in url_lower for fmt in image_formats)):
                 has_images = True
+            # Then check if it's a video (extensions or format parameters)
+            # Note: 'video' keyword check removed because it catches video thumbnails
+            elif (any(ext in url_lower for ext in video_extensions) or 
+                  any(fmt in url_lower for fmt in video_formats)):
+                has_videos = True
         
         # Return True only if we have videos but no images
         return has_videos and not has_images
@@ -535,3 +584,146 @@ class LocalMultimodalAnalyzer:
             explanation = f"Contenido clasificado como {category}."
 
         return category, explanation
+    
+    async def analyze_with_multiple_models(
+        self,
+        content: str,
+        media_urls: Optional[List[str]] = None,
+        models: Optional[List[str]] = None
+    ) -> Dict[str, Tuple[str, str, float]]:
+        """
+        Analyze content with multiple models sequentially for comparison.
+        
+        Args:
+            content: Text content to analyze
+            media_urls: Optional list of media URLs
+            models: List of model names to use (defaults to all available models)
+        
+        Returns:
+            Dictionary mapping model_name -> (category, explanation, processing_time)
+            Example: {
+                "gemma3:4b": ("hate_speech", "Explanation...", 25.3),
+                "gpt-oss:20b": ("hate_speech", "Different explanation...", 45.2)
+            }
+        """
+        # Use default models if not specified
+        if models is None:
+            models = list(self.AVAILABLE_MODELS.keys())
+        
+        if self.verbose:
+            print(f"🔍 Running multi-model analysis with {len(models)} models")
+            print(f"📝 Models: {', '.join(models)}")
+        
+        # Check if we have media and if it's video-only
+        has_media = media_urls is not None and len(media_urls) > 0
+        if has_media and self._has_only_videos(media_urls):
+            if self.verbose:
+                print("🎥 Content contains only videos - analyzing text only")
+            media_urls = None
+            has_media = False
+        
+        # Prepare media content once for all multimodal models
+        prepared_media_content = None
+        if has_media:
+            if self.verbose:
+                print("📥 Preparing media content for multimodal analysis...")
+            prepared_media_content = await self._prepare_media_content(media_urls)
+            if prepared_media_content and self.verbose:
+                print(f"📦 Prepared {len(prepared_media_content)} media items for analysis")
+            elif not prepared_media_content and self.verbose:
+                print("⚠️  No valid media content prepared, falling back to text-only")
+                has_media = False
+        
+        # Build results dictionary
+        analysis_results = {}
+        
+        # Execute analyses sequentially
+        for i, model in enumerate(models, 1):
+            # Skip unknown models
+            model_info = self.AVAILABLE_MODELS.get(model)
+            if not model_info:
+                if self.verbose:
+                    print(f"⚠️  Unknown model: {model}, skipping")
+                continue
+            
+            # Determine if this model should use multimodal analysis
+            use_multimodal = has_media and model_info.get("multimodal", False) and prepared_media_content
+            
+            if self.verbose:
+                print(f"⚡ Analyzing with model {i}/{len(models)}: {model}")
+            
+            try:
+                category, explanation, processing_time = await self._analyze_with_specific_model(
+                    content, 
+                    prepared_media_content if use_multimodal else None, 
+                    model
+                )
+                
+                analysis_results[model] = (category, explanation, processing_time)
+                
+                if self.verbose:
+                    print(f"✅ Model {model}: {category} ({processing_time:.1f}s)")
+                    
+            except Exception as e:
+                if self.verbose:
+                    print(f"❌ Model {model} failed: {str(e)}")
+                # Store error result
+                analysis_results[model] = (
+                    Categories.GENERAL,
+                    f"Error durante el análisis: {str(e)[:100]}",
+                    0.0
+                )
+        
+        if not analysis_results:
+            raise RuntimeError("No valid models available for analysis")
+        
+        return analysis_results
+    
+    async def _analyze_with_specific_model(
+        self,
+        content: str,
+        prepared_media_content: Optional[List[dict]],
+        model: str
+    ) -> Tuple[str, str, float]:
+        """
+        Analyze content with a specific model and track processing time.
+        
+        Args:
+            content: Text content to analyze
+            prepared_media_content: Optional pre-prepared media content (base64 encoded)
+            model: Model name to use
+        
+        Returns:
+            Tuple of (category, explanation, processing_time_seconds)
+        """
+        start_time = time.time()
+        
+        try:
+            # Temporarily override the primary model
+            original_model = self.primary_model
+            self.primary_model = model
+            
+            # Determine if this is multimodal
+            model_info = self.AVAILABLE_MODELS.get(model, {})
+            is_multimodal = model_info.get("multimodal", False) and prepared_media_content
+            
+            # Run analysis
+            if is_multimodal:
+                response = await self._analyze_content(content, prepared_media_content=prepared_media_content)
+            else:
+                response = await self._analyze_content(content)
+            
+            # Parse response
+            category, explanation = self._parse_category_and_explanation(response)
+            
+            processing_time = time.time() - start_time
+            
+            return category, explanation, processing_time
+            
+        except Exception as e:
+            processing_time = time.time() - start_time
+            raise RuntimeError(f"Model {model} analysis failed: {str(e)}") from e
+        
+        finally:
+            # Restore original model
+            self.primary_model = original_model

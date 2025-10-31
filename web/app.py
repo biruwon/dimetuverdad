@@ -15,6 +15,7 @@ from web.routes.main import main_bp
 from web.routes.admin import admin_bp
 from web.routes.api import api_bp
 from web.routes.loading import loading_bp
+from web.routes.models import models_bp
 
 # Import utilities
 from web.utils.decorators import register_error_handlers
@@ -44,6 +45,7 @@ def create_app(config_name=None):
     app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(loading_bp)
+    app.register_blueprint(models_bp)
 
     # Export helpers for test mocks
     app.get_user_profile_data = helpers.get_user_profile_data

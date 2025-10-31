@@ -181,26 +181,72 @@ def get_tweet_status(tweet_id: str) -> str:
         api_bp.logger.error(f"Error checking tweet status for {tweet_id}: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
-@api_bp.route('/usernames')
+@api_bp.route('/reanalyze-multi/<post_id>', methods=['POST'])
 @rate_limit(**config.get_rate_limit('api_endpoints'))
-def get_usernames() -> str:
-    """API endpoint to get list of usernames for autocomplete."""
+def reanalyze_multi_model(post_id: str) -> str:
+    """API endpoint to re-run multi-model analysis for a specific post."""
     try:
+        # Import here to avoid circular imports
+        import subprocess
+        import sys
+        import os
+        
+        # Check if post exists
         from utils.database import get_db_connection_context
         with get_db_connection_context() as conn:
-            cursor = conn.cursor()
+            tweet_exists = conn.execute("""
+                SELECT tweet_id FROM tweets WHERE tweet_id = ?
+            """, (post_id,)).fetchone()
 
-            # Get distinct usernames from tweets table
-            cursor.execute("""
-                SELECT DISTINCT username
-                FROM tweets
-                ORDER BY username
-            """)
+            if not tweet_exists:
+                return jsonify({'error': 'Post not found'}), 404
 
-            usernames = [row['username'] for row in cursor.fetchall()]
-
-        return jsonify(usernames)
+        # Run the multi-model analysis script
+        try:
+            # Get the project root directory
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            
+            # Run the analysis script
+            cmd = [
+                sys.executable, 
+                os.path.join(project_root, 'scripts', 'analyze_multi_model.py'),
+                '--post-id', post_id,
+                '--force-reanalyze'
+            ]
+            
+            api_bp.logger.info(f"Running multi-model reanalysis for post {post_id}")
+            
+            # Run the command and capture output
+            result = subprocess.run(
+                cmd,
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+            
+            if result.returncode == 0:
+                api_bp.logger.info(f"Multi-model reanalysis completed for post {post_id}")
+                return jsonify({
+                    'success': True,
+                    'message': 'Multi-model analysis completed successfully',
+                    'output': result.stdout[-500:]  # Last 500 chars of output
+                })
+            else:
+                error_msg = result.stderr or result.stdout
+                api_bp.logger.error(f"Multi-model reanalysis failed for post {post_id}: {error_msg}")
+                return jsonify({
+                    'success': False,
+                    'error': f'Analysis failed: {error_msg[-200:]}'
+                }), 500
+                
+        except subprocess.TimeoutExpired:
+            api_bp.logger.error(f"Multi-model reanalysis timed out for post {post_id}")
+            return jsonify({'error': 'Analysis timed out'}), 504
+        except Exception as e:
+            api_bp.logger.error(f"Error running multi-model reanalysis for {post_id}: {str(e)}")
+            return jsonify({'error': f'Failed to run analysis: {str(e)}'}), 500
 
     except Exception as e:
-        api_bp.logger.error(f"Error getting usernames: {str(e)}")
+        api_bp.logger.error(f"Error in reanalyze-multi endpoint for {post_id}: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500

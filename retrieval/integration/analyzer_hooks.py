@@ -493,7 +493,6 @@ class AnalyzerHooks:
         simplified = {
             'overall_verdict': verification_report.overall_verdict.value,
             'confidence_score': verification_report.confidence_score,
-            'verification_confidence': verification_report.confidence_score,  # For backward compatibility
             'claims_summary': {
                 'total': len(verification_report.claims_verified),
                 'verified': verified_count,

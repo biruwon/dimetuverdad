@@ -232,6 +232,7 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
             # Direct UPDATE to force save all fields
             c.execute("""
                 UPDATE tweets SET 
+                    content = ?,
                     original_content = ?,
                     reply_to_username = ?,
                     media_links = ?,
@@ -241,13 +242,14 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
                     engagement_replies = ?
                 WHERE tweet_id = ?
             """, (
-                tweet_data['original_content'],
+                tweet_data.get('content'),
+                tweet_data.get('original_content'),
                 tweet_data.get('reply_to_username'),
                 tweet_data.get('media_links'),
                 tweet_data.get('media_count', 0),
-                tweet_data['engagement_likes'],
-                tweet_data['engagement_retweets'],
-                tweet_data['engagement_replies'],
+                tweet_data.get('engagement_likes', 0),
+                tweet_data.get('engagement_retweets', 0),
+                tweet_data.get('engagement_replies', 0),
                 tweet_id
             ))
             
