@@ -18,7 +18,7 @@ import argparse
 import asyncio
 from typing import Optional, List, Dict
 from datetime import datetime
-from analyzer.local_analyzer import LocalMultimodalAnalyzer
+from analyzer.multi_model_analyzer import MultiModelAnalyzer
 from analyzer.categories import Categories
 from utils.database import get_db_connection_context
 from utils import database_multi_model
@@ -107,7 +107,7 @@ def get_tweets_for_multi_model_analysis(
 
 async def analyze_tweet_multi_model(
     tweet_data: Dict,
-    analyzer: LocalMultimodalAnalyzer,
+    analyzer: MultiModelAnalyzer,
     models: Optional[List[str]] = None,
     verbose: bool = False
 ) -> Dict:
@@ -207,11 +207,11 @@ async def analyze_tweets_multi_model_cli(
     
     # Initialize analyzer
     print("🚀 Initializing Multi-Model Analyzer...")
-    analyzer = LocalMultimodalAnalyzer(verbose=verbose)
+    analyzer = MultiModelAnalyzer(verbose=verbose)
     
     # Determine which models to use
     if models is None:
-        models = list(LocalMultimodalAnalyzer.AVAILABLE_MODELS.keys())
+        models = list(MultiModelAnalyzer.AVAILABLE_MODELS.keys())
     
     print(f"✅ Using {len(models)} models: {', '.join(models)}")
     print()

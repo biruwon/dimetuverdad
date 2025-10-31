@@ -5,7 +5,6 @@ Provides standardized error classification and handling patterns used across
 all analyzer components.
 """
 
-import logging
 from enum import Enum
 from typing import Optional
 

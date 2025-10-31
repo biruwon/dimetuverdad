@@ -10,7 +10,7 @@ from typing import List, Optional, Tuple
 from dataclasses import dataclass
 
 from .pattern_analyzer import PatternAnalyzer
-from .local_analyzer import LocalMultimodalAnalyzer
+from .ollama_analyzer import OllamaAnalyzer
 from .external_analyzer import ExternalAnalyzer, ExternalAnalysisResult
 from .categories import Categories
 from retrieval.integration.analyzer_hooks import create_analyzer_hooks
@@ -73,8 +73,9 @@ class AnalysisFlowManager:
         Args:
             verbose: Enable detailed logging
         """
+        # Initialize analyzers
         self.pattern_analyzer = PatternAnalyzer()
-        self.local_llm = LocalMultimodalAnalyzer(verbose=verbose)
+        self.local_llm = OllamaAnalyzer(verbose=verbose)
         self.external = ExternalAnalyzer(verbose=verbose)
         self.analyzer_hooks = create_analyzer_hooks(verbose=verbose)
         self.verbose = verbose

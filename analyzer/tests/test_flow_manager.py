@@ -35,7 +35,7 @@ def mock_pattern_analyzer():
 
 @pytest.fixture
 def mock_local_llm():
-    """Mock LocalMultimodalAnalyzer."""
+    """Mock OllamaAnalyzer."""
     mock = Mock()
     mock.categorize_and_explain = AsyncMock(return_value=(
         Categories.HATE_SPEECH,
@@ -60,7 +60,7 @@ def mock_external():
 def flow_manager(mock_pattern_analyzer, mock_local_llm, mock_external):
     """Create AnalysisFlowManager with mocked components."""
     with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-         patch('analyzer.flow_manager.LocalMultimodalAnalyzer', return_value=mock_local_llm), \
+         patch('analyzer.flow_manager.OllamaAnalyzer', return_value=mock_local_llm), \
          patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
         manager = AnalysisFlowManager(verbose=False)
         return manager
@@ -143,7 +143,7 @@ class TestFlowManagerInitialization:
     def test_default_initialization(self):
         """Test default initialization creates all analyzers."""
         with patch('analyzer.flow_manager.PatternAnalyzer'), \
-             patch('analyzer.flow_manager.LocalMultimodalAnalyzer'), \
+             patch('analyzer.flow_manager.OllamaAnalyzer'), \
              patch('analyzer.flow_manager.ExternalAnalyzer'):
             manager = AnalysisFlowManager()
             
@@ -155,7 +155,7 @@ class TestFlowManagerInitialization:
     def test_verbose_initialization(self):
         """Test verbose initialization passes to components."""
         with patch('analyzer.flow_manager.PatternAnalyzer'), \
-             patch('analyzer.flow_manager.LocalMultimodalAnalyzer') as mock_llm, \
+             patch('analyzer.flow_manager.OllamaAnalyzer') as mock_llm, \
              patch('analyzer.flow_manager.ExternalAnalyzer') as mock_ext:
             manager = AnalysisFlowManager(verbose=True)
             
@@ -520,7 +520,7 @@ class TestAnalyzeFull:
     async def test_local_verbose_output(self, mock_pattern_analyzer, mock_local_llm, mock_external, capsys):
         """Test verbose logging in local analysis."""
         with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-             patch('analyzer.flow_manager.LocalMultimodalAnalyzer', return_value=mock_local_llm), \
+             patch('analyzer.flow_manager.OllamaAnalyzer', return_value=mock_local_llm), \
              patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
             manager = AnalysisFlowManager(verbose=True)
             
@@ -535,7 +535,7 @@ class TestAnalyzeFull:
     async def test_external_verbose_output(self, mock_pattern_analyzer, mock_local_llm, mock_external, capsys):
         """Test verbose logging in external analysis."""
         with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-             patch('analyzer.flow_manager.LocalMultimodalAnalyzer', return_value=mock_local_llm), \
+             patch('analyzer.flow_manager.OllamaAnalyzer', return_value=mock_local_llm), \
              patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
             manager = AnalysisFlowManager(verbose=True)
             
@@ -551,7 +551,7 @@ class TestAnalyzeFull:
     ):
         """Test verbose logging in full analysis with external."""
         with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-             patch('analyzer.flow_manager.LocalMultimodalAnalyzer', return_value=mock_local_llm), \
+             patch('analyzer.flow_manager.OllamaAnalyzer', return_value=mock_local_llm), \
              patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
             manager = AnalysisFlowManager(verbose=True)
             

@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 import aiohttp
 
-from .error_handler import classify_error, ErrorCategory
+from .error_handler import classify_error
 
 
 class HTTPClientProtocol(Protocol):
