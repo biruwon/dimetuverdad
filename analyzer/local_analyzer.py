@@ -69,6 +69,10 @@ class LocalMultimodalAnalyzer:
     DEFAULT_MEDIA_TIMEOUT = 5.0
     DEFAULT_MAX_MEDIA_SIZE = 10 * 1024 * 1024
     
+    # Ollama API timeout settings
+    DEFAULT_OLLAMA_TIMEOUT = 120.0  # 2 minutes max for any single Ollama call
+    DEFAULT_OLLAMA_MULTIMODAL_TIMEOUT = 240.0  # 4 minutes max for multimodal analysis
+    
     def __init__(self, verbose: bool = False):
         """
         Initialize local multimodal analyzer with Ollama.
@@ -107,31 +111,39 @@ class LocalMultimodalAnalyzer:
         else:
             raise RuntimeError(error_msg)
     
-    async def _retry_ollama_call(self, operation: str, call_func, *args, **kwargs) -> str:
+    async def _retry_ollama_call(self, operation: str, call_func, *args, timeout: float = None, **kwargs) -> str:
         """
-        Retry Ollama API calls with exponential backoff.
+        Retry Ollama API calls with exponential backoff and timeout.
         
         Args:
             operation: Description of the operation for logging
             call_func: Async function to call (ollama_client.generate)
+            timeout: Maximum time to wait for response (defaults to DEFAULT_OLLAMA_TIMEOUT)
             *args, **kwargs: Arguments to pass to call_func
         
         Returns:
             Generated text response
         
         Raises:
-            OllamaRetryError: When all retry attempts are exhausted
+            OllamaRetryError: When all retry attempts are exhausted or timeout occurs
         """
         max_retries = 3
         base_delay = 1.0
+        
+        # Use default timeout if not specified
+        if timeout is None:
+            timeout = self.DEFAULT_OLLAMA_TIMEOUT
         
         for attempt in range(max_retries):
             try:
                 if self.verbose and attempt > 0:
                     print(f"   🔄 Retry attempt {attempt + 1}/{max_retries} for {operation}")
                 
-                # Make the Ollama API call
-                response = await call_func(*args, **kwargs)
+                # Make the Ollama API call with timeout
+                response = await asyncio.wait_for(
+                    call_func(*args, **kwargs),
+                    timeout=timeout
+                )
                 
                 # Extract and validate response
                 generated_text = response.get("response", "").strip()
@@ -139,6 +151,17 @@ class LocalMultimodalAnalyzer:
                     raise OllamaEmptyResponseError("Model returned empty response")
                 
                 return generated_text
+                
+            except asyncio.TimeoutError:
+                error_msg = f"{operation} timed out after {timeout}s"
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    if self.verbose:
+                        print(f"   ⏱️  {error_msg}, retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    raise OllamaRetryError(f"{error_msg} after {max_retries} attempts")
                 
             except OllamaEmptyResponseError as e:
                 if attempt < max_retries - 1:
@@ -356,18 +379,26 @@ class LocalMultimodalAnalyzer:
             try:
                 url_lower = url.lower()
                 
+                # Check file extension first (most reliable indicator)
+                has_video_ext = any(url_lower.endswith(ext) for ext in video_extensions)
+                has_image_ext = any(url_lower.endswith(ext) for ext in image_extensions)
+                
+                # Check for video format parameters
+                has_video_format = any(fmt in url_lower for fmt in video_formats)
+                has_image_format = any(fmt in url_lower for fmt in image_formats)
+                
                 # Skip videos - Ollama multimodal models only support images
-                if (any(ext in url_lower for ext in video_extensions) or 
-                    any(fmt in url_lower for fmt in video_formats) or 
-                    'video' in url_lower):
+                # Check extension first, then format parameters, then path indicators
+                if has_video_ext or has_video_format or ('/vid/' in url_lower and not has_image_ext):
                     if self.verbose:
                         print(f"⚠️  Skipping video file (Ollama only supports images): {url}")
                     continue
                 
-                # Only process images (check both extensions and format parameters)
-                is_image = (any(ext in url_lower for ext in image_extensions) or 
-                           any(fmt in url_lower for fmt in image_formats) or 
-                           'image' in url_lower)
+                # Accept images by extension, format parameter, or path indicators
+                # Note: video thumbnails (amplify_video_thumb) with .jpg/.png extensions are valid images
+                is_image = (has_image_ext or has_image_format or 
+                           '/img/' in url_lower or 'image' in url_lower or
+                           'thumb' in url_lower)  # Video thumbnails are images
                 
                 if not is_image:
                     if self.verbose:
@@ -442,7 +473,7 @@ class LocalMultimodalAnalyzer:
             Generated text response
         """
         try:
-            # Use the retry utility for robust API calls
+            # Use the retry utility for robust API calls with timeout
             return await self._retry_ollama_call(
                 "Ollama text generation",
                 self.ollama_client.generate,
@@ -452,7 +483,8 @@ class LocalMultimodalAnalyzer:
                 options={
                     "temperature": self.DEFAULT_TEMPERATURE_TEXT,
                     "num_predict": self.DEFAULT_MAX_TOKENS,
-                }
+                },
+                timeout=self.DEFAULT_OLLAMA_TIMEOUT
             )
             
         except OllamaRetryError as e:
@@ -487,7 +519,7 @@ class LocalMultimodalAnalyzer:
             # Build multimodal-specific prompt that instructs analysis of both text and images
             prompt = self.prompt_generator.build_multimodal_categorization_prompt(content)
 
-            # Use the retry utility for robust multimodal API calls
+            # Use the retry utility for robust multimodal API calls with longer timeout
             return await self._retry_ollama_call(
                 "Ollama multimodal generation",
                 self.ollama_client.generate,
@@ -500,7 +532,8 @@ class LocalMultimodalAnalyzer:
                     "top_p": self.DEFAULT_TOP_P_MULTIMODAL,
                     "num_predict": self.DEFAULT_NUM_PREDICT_MULTIMODAL,
                 },
-                keep_alive=self.DEFAULT_KEEP_ALIVE
+                keep_alive=self.DEFAULT_KEEP_ALIVE,
+                timeout=self.DEFAULT_OLLAMA_MULTIMODAL_TIMEOUT
             )
             
         except OllamaRetryError as e:
@@ -706,6 +739,11 @@ class LocalMultimodalAnalyzer:
             # Determine if this is multimodal
             model_info = self.AVAILABLE_MODELS.get(model, {})
             is_multimodal = model_info.get("multimodal", False) and prepared_media_content
+            
+            if self.verbose:
+                mode = "MULTIMODAL" if is_multimodal else "TEXT-ONLY"
+                media_status = f"with {len(prepared_media_content)} media items" if prepared_media_content else "no media"
+                print(f"    🔬 Running {mode} analysis ({media_status})")
             
             # Run analysis
             if is_multimodal:

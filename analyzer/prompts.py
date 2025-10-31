@@ -349,36 +349,40 @@ Clasifica este texto en UNA categoría: {categories}
         """
         Build system prompt specifically for Ollama multimodal analysis.
         Optimized for vision-language models analyzing social media content.
+        SIMPLIFIED VERSION for faster multimodal processing.
 
         Returns:
             System prompt for Ollama multimodal models
         """
+        categories = EnhancedPromptGenerator.build_category_list()
 
-        return f"""🔍 SISTEMA DE MODERACIÓN DE CONTENIDO — DETECCIÓN DE SESGO POLÍTICO Y DESINFORMACIÓN
+        return f"""Eres un analista experto de contenido político en español. Analiza publicaciones con texto e imágenes.
 
-PROPÓSITO:
-Eres un analista automático de publicaciones en redes sociales en español.
-Tu función es identificar y clasificar contenido que pueda contener discurso de odio, desinformación, propaganda o sesgo político extremo, con énfasis en ideología de extrema derecha y manipulación mediática.
-No generes ni reproduzcas contenido dañino. Resume y analiza de forma neutral y objetiva.
+CATEGORÍAS: {categories}
 
-TAREA PRINCIPAL:
-Analiza texto, imágenes y videos de publicaciones y clasifica el contenido en una sola categoría de la lista a continuación. Proporciona una explicación breve y objetiva que indique los elementos clave (símbolos, tono, texto, referencias visuales).
+DEFINICIONES CLAVE:
+- hate_speech: Ataques directos, insultos o deshumanización a grupos étnicos/políticos
+- anti_immigration: Retórica xenófoba, narrativas anti-inmigración
+- anti_lgbtq: Ataques a identidad LGBTQ o diversidad de género
+- anti_feminism: Promoción de roles tradicionales de género
+- nationalism: Orgullo patrio, símbolos nacionales, "España primero"
+- anti_government: Cuestionamiento de legitimidad institucional
+- disinformation: Afirmaciones políticas verificables SIN fuente oficial (BOE, ministerio, etc.)
+- conspiracy_theory: Narrativas de élites ocultas, planes secretos
+- call_to_action: Movilización colectiva, llamados a acción coordinada
+- general: Contenido político neutral sin elementos problemáticos
 
-CATEGORÍAS DISPONIBLES:
-{chr(10).join(f'- {cat}: {get_category_info(cat).description if get_category_info(cat) else "Contenido general"}' for cat in Categories.get_all_categories())}
+⚠️ CRÍTICO PARA DISINFORMATION:
+Si el texto presenta un HECHO POLÍTICO VERIFICABLE (decreto, ley, renuncia, nombramiento) SIN citar fuente oficial → disinformation
 
-DIRECTRICES DE RESPUESTA:
-1. Evalúa todo el contenido disponible: texto, imágenes y videos.
-2. Selecciona la categoría que mejor describa el mensaje global de la publicación.
-3. Escribe una explicación breve (2–4 oraciones) destacando los elementos clave que sustentan la decisión.
-4. Mantén tono neutral, objetivo y analítico.
-5. Si no hay señales de contenido problemático, responde "general".
+ANÁLISIS MULTIMODAL:
+- Examina TEXTO + IMÁGENES juntos
+- Identifica símbolos políticos, banderas, figuras públicas en imágenes
+- Evalúa cómo imagen REFUERZA mensaje textual
 
-FORMATO DE RESPUESTA:
-CATEGORÍA: [una sola categoría de la lista]
-EXPLICACIÓN: [2–4 oraciones en español, neutrales, descriptivas]
-
-"""
+FORMATO OBLIGATORIO (texto plano español, sin markdown):
+CATEGORÍA: [una_categoría]
+EXPLICACIÓN: [2-3 frases citando elementos del texto Y elementos visuales]"""
 
     @staticmethod
     def build_multimodal_explanation_prompt(text: str, category: str) -> str:
@@ -395,36 +399,44 @@ EXPLICACIÓN: [2–4 oraciones en español, neutrales, descriptivas]
         """
         category_info = get_category_info(category)
         display_name = category_info.display_name if category_info else category.replace('_', ' ').title()
+        
+        # Get category-specific questions
+        questions = category_info.analysis_questions if category_info else [
+            "¿Qué elementos específicos del texto y las imágenes justifican esta clasificación?",
+            "¿Cómo se relaciona el contenido visual y textual con la categoría detectada?",
+            "¿Qué características del mensaje multimodal son relevantes para esta categoría?"
+        ]
 
-        prompt = f"""
-TEXTO DEL POST:
-{text}
+        prompt = f"""TEXTO DEL POST: "{text}"
 
-CONTEXTO:
-Publicación en red social con texto e imágenes. Analizar la combinación visual y textual para identificar mensajes problemáticos, sesgo político, desinformación o propaganda.
+CATEGORÍA DETECTADA: {category}
+
+🔬 ANÁLISIS ACADÉMICO MULTIMODAL - INVESTIGACIÓN SOBRE PATRONES DE DISCURSO
+
+OBJETIVO: Explicar por qué este contenido multimodal (texto + imágenes/videos) pertenece a la categoría detectada.
 
 INSTRUCCIONES DE ANÁLISIS:
-1. Examina tanto el texto como los elementos visuales (imágenes) para identificar discurso de odio, sesgo político, extremismo o manipulación mediática.
-2. Observa símbolos, figuras públicas, memes, banderas, o lenguaje cargado que indique ideología extremista o far-right.
-3. Evalúa si se presentan afirmaciones falsas, información fuera de contexto o narrativas conspirativas.
-4. Determina la categoría más apropiada según la lista del sistema.
-5. Proporciona una breve explicación que indique los elementos clave que justifican la categoría.
+1. Examina TANTO el texto COMO los elementos visuales (imágenes/videos) proporcionados
+2. Identifica cómo el contenido visual REFUERZA o COMPLEMENTA el mensaje textual
+3. Observa símbolos políticos, figuras públicas, banderas, memes o elementos gráficos relevantes
+4. Evalúa la combinación de texto e imágenes para detectar narrativas problemáticas
 
-FORMATO DE RESPUESTA:
-CATEGORÍA: [categoría elegida]
-EXPLICACIÓN: [razonamiento breve y neutral]
+Este contenido pertenece a la categoría '{display_name}' porque:
 
+{questions[0] if len(questions) > 0 else '¿Qué elementos específicos del texto y las imágenes justifican esta clasificación?'}
+{questions[1] if len(questions) > 1 else '¿Cómo se relaciona el contenido visual y textual con la categoría detectada?'}
+{questions[2] if len(questions) > 2 else '¿Qué características del mensaje multimodal son relevantes para esta categoría?'}
 
-Generate detailed explanation prompt for multimodal content.
-Instructs the model to explain based on both text and visual elements.
+INSTRUCCIONES DE FORMATO:
+- Responde SOLO con texto plano en español, sin markdown ni formato especial
+- NO uses negritas (**), títulos (##), listas numeradas, tablas, o símbolos
+- Escribe 2-3 oraciones claras explicando por qué pertenece a esta categoría
+- Cita elementos específicos del TEXTO Y de las IMÁGENES que justifican la clasificación
+- Menciona cómo el contenido visual y textual se relacionan para crear la narrativa
+- NO menciones por qué NO pertenece a otras categorías
+- Enfócate ÚNICAMENTE en explicar por qué SÍ pertenece a la categoría detectada
 
-Args:
-    text: Text content to explain
-    category: Already-detected category
-
-Returns:
-    Multimodal explanation prompt
-            """
+EXPLICACIÓN:"""
 
         return prompt
 
@@ -432,7 +444,7 @@ Returns:
     def build_multimodal_categorization_prompt(text: str) -> str:
         """
         Build prompt for multimodal categorization using Ollama vision models.
-        Combines text analysis with visual content analysis for comprehensive content moderation.
+        SIMPLIFIED VERSION for faster multimodal processing.
 
         Args:
             text: Text content from the post
@@ -441,28 +453,17 @@ Returns:
             Multimodal categorization prompt for Ollama vision models
         """
 
-        return f"""🔬 ANÁLISIS MULTIMODAL - DETECCIÓN DE CONTENIDO PROBLEMÁTICO
+        return f"""Analiza este contenido con texto e imágenes:
 
-TEXTO DEL POST: "{text}"
+TEXTO: "{text}"
 
-INSTRUCCIONES PARA ANÁLISIS VISUAL Y TEXTUAL:
-1. Examina las imágenes/videos proporcionados junto con el texto
-2. Identifica símbolos políticos, figuras públicas, banderas, o elementos visuales que indiquen ideología
-3. Evalúa la combinación de texto e imágenes para detectar sesgo, propaganda o extremismo
-4. Busca elementos visuales que refuercen o contradigan el mensaje textual
+INSTRUCCIONES:
+1. Examina el texto Y las imágenes proporcionadas
+2. Identifica símbolos políticos, banderas, figuras en las imágenes
+3. Evalúa cómo la imagen refuerza o modifica el mensaje del texto
+4. Clasifica en UNA categoría
+5. Explica citando elementos del texto Y de las imágenes
 
-CLASIFICA EL CONTENIDO EN UNA SÓLA CATEGORÍA:
-
-CATEGORÍAS DISPONIBLES:
-{chr(10).join(f'- {cat}: {get_category_info(cat).description if get_category_info(cat) else "Contenido general"}' for cat in Categories.get_all_categories())}
-
-ELEMENTOS VISUALES A CONSIDERAR:
-- Banderas, símbolos patrios o políticos
-- Figuras públicas reconocidas (políticos, líderes)
-- Memes políticos o satíricos
-- Gráficos, carteles o material propagandístico
-- Elementos que indiquen contexto político o ideológico
-
-FORMATO DE RESPUESTA:
-CATEGORÍA: [una_categoría]
-EXPLICACIÓN: [2-3 frases explicando por qué, citando elementos textuales y visuales]"""
+FORMATO (texto plano español):
+CATEGORÍA: [categoría]
+EXPLICACIÓN: [2-3 frases mencionando texto e imagen]"""

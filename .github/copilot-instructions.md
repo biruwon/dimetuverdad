@@ -4,6 +4,8 @@
 
 **MANDATORY**: EVERY code change MUST be tested IMMEDIATELY. No exceptions. See "MANDATORY Testing Workflow" section below for enforcement details.
 
+**NEW FEATURES REQUIRE TESTS**: When adding new features, refactoring code, or deleting functionality, corresponding unit tests MUST be updated or added IMMEDIATELY. No feature is complete without proper test coverage.
+
 ## ⚠️ CRITICAL DATABASE SAFETY REQUIREMENT ⚠️
 
 **ABSOLUTE PROHIBITION**: NEVER EVER execute `./run_in_venv.sh init-db --force` or `scripts/init_database.py --force` under ANY circumstances. These commands DESTROY ALL DATA and are PERMANENTLY BANNED from use.
@@ -259,93 +261,6 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 - **IMMEDIATE**: Test right after the change, not later, not at the end of session
 - **BLOCKING**: Cannot continue to other work until tests pass
 - **COPILOT VIOLATION**: Failing to test immediately after code changes is a critical workflow violation
-
-**Testing Requirements**:
-1. **After ANY code change** (refactor, new feature, bug fix, enhancement, or modification):
-   - **IMMEDIATELY identify** which test files cover the modified code
-   - **IMMEDIATELY run** relevant tests: specific test files
-   - If tests fail: **IMMEDIATELY STOP and fix them before any other work**
-   - **NEVER proceed** with additional changes while tests are failing
-   - **NEVER delay** testing until "later" - test NOW
-
-2. **Test Identification by Module** (Run Targeted Tests IMMEDIATELY):
-   - `analyzer/analyzer_twitter.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/analyze_twitter.py -v`
-   - `analyzer/gemini_multimodal.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_gemini_multimodal.py -v`
-   - `analyzer/prompts.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_prompts.py -v`
-   - `analyzer/llm_models.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_llm_models.py -v` (uses LLM pipeline)
-   - `fetcher/db.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_db.py -v`
-   - `fetcher/parsers.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_parsers.py -v`
-   - `fetcher/fetch_tweets.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_fetch_tweets.py -v`
-   - Database schema changes → **IMMEDIATELY** run all database tests (`source venv/bin/activate && python -m pytest fetcher/tests/test_db.py fetcher/tests/test_fetch_tweets.py -v`)
-   - Cross-module changes → **IMMEDIATELY** run `./run_in_venv.sh test-all`
-   
-   **CRITICAL**: Always run targeted tests IMMEDIATELY after changes (faster feedback)
-
-3. **Test Failure Resolution**:
-   - Read error messages carefully - they often indicate the exact issue
-   - Common issues:
-     - Database schema mismatches → Update test database schemas
-     - Mock object outdated → Update mock strategy to match current API
-     - Assertion expectations changed → Update test assertions to match new behavior
-   - **FIX TESTS IMMEDIATELY** in the SAME work session as the code change
-   - **NEVER leave failing tests** for "later" - they compound and become harder to fix
-
-4. **When to Run Full Test Suite vs Targeted Tests**:
-   - **Targeted tests IMMEDIATELY**: Run module-specific tests immediately after changes for fast feedback
-   - **Full test suite required**:
-     - Before any git commit (mandatory)
-     - After refactoring that touches multiple files
-     - When changing core interfaces or data structures
-     - After fixing test failures (to ensure no regressions)
-   - **Integration tests**: Run only on major refactors(not during regular development)
-     - `test-analyzer-integration` - Slow, comprehensive analyzer testing (requires LLM models)
-     - `test-fetch-integration` - Requires Twitter credentials, slow (live API calls)
-     - `test-retrieval-integration` - Slow retrieval integration tests (mocked, < 30 seconds)
-   - **Example workflow**: Change `gemini_multimodal.py` → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_gemini_multimodal.py -v` (30s)
-
-5. **Test Success Criteria**:
-   - All relevant tests must pass (100% pass rate for affected modules)
-   - No new warnings or deprecation notices
-   - Test execution time should be reasonable (< 2 minutes for module tests, < 2 minutes for full suite)
-
-6. **Test Coverage Requirements Before Commit**:
-   - **MANDATORY 70% COVERAGE**: Before committing and pushing ANY code changes, unit test coverage MUST be 70% or higher
-   - **Coverage Verification**: Run `./run_in_venv.sh test-coverage` to generate coverage report
-   - **Coverage Report**: Check `htmlcov/index.html` for detailed coverage analysis
-   - **BLOCKING REQUIREMENT**: Cannot commit or push if coverage falls below 70%
-   - **Coverage Improvement**: If coverage is below 70%, add tests to reach the threshold before proceeding
-   - **Exception Handling**: Only exempt files that cannot be meaningfully tested (e.g., configuration files, scripts)
-   - **Coverage Command**: Use `source venv/bin/activate && python -m pytest --cov=. --cov-report=html --cov-report=term-missing` for comprehensive coverage analysis
-
-**CRITICAL TESTING PRINCIPLES**:
-- **NEVER ADD FALLBACK CODE JUST FOR TESTS**: If tests fail due to mocking issues, fix the test mocks instead of adding production code workarounds
-- **TESTS SHOULD MIRROR PRODUCTION**: Test environments should behave as closely as possible to production environments
-- **MOCKING SHOULD BE REALISTIC**: Use proper mock objects that behave like real database rows, not just data structures
-- **PRODUCTION CODE STAYS CLEAN**: Don't pollute production code with test-specific compatibility layers
-
-**SEVERE VIOLATION CONSEQUENCES**: 
-- Code changes without IMMEDIATE testing WILL cause integration issues, break the pipeline, and create technical debt
-- **WORKFLOW VIOLATION**: Not testing immediately after code changes violates core development practices
-- **TESTING VIOLATION**: Adding fallback code just for tests creates maintenance burden and hides real issues
-- **USER TRUST VIOLATION**: User expects all changes to be properly tested before proceeding
-- **MANDATORY REMEDIATION**: If tests are not run immediately after changes, must stop all work and run tests before continuing
-
-**ENFORCEMENT**:
-- **COPILOT MUST** run tests immediately after any code change
-- **COPILOT MUST** report test results before proceeding to other work
-- **COPILOT MUST** fix any test failures before continuing
-- **COPILOT CANNOT** defer testing to a later time or session
-
-**MANDATORY Workflow Example**:
-```bash      
-# After analyzer changes
-source venv/bin/activate && python -m pytest analyzer/tests/ -v         
-# After any fetcher changes
-source venv/bin/activate && python -m pytest fetcher/tests/ -v       
-# After any retrieval changes
-source venv/bin/activate && python -m pytest retrieval/tests/ -v                   
-
-```
 
 ## Performance Considerations
 

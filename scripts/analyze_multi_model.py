@@ -150,6 +150,18 @@ async def analyze_tweet_multi_model(
     
     # Save individual model results to database
     with get_db_connection_context() as conn:
+        cursor = conn.cursor()
+        
+        # If reanalyzing, delete old analyses for these models
+        if models:
+            placeholders = ','.join('?' * len(models))
+            cursor.execute(
+                f"DELETE FROM model_analyses WHERE post_id = ? AND model_name IN ({placeholders})",
+                [tweet_id] + models
+            )
+            if verbose and cursor.rowcount > 0:
+                print(f"    🗑️  Deleted {cursor.rowcount} old analyses before reanalyzing")
+        
         for model_name, (category, explanation, processing_time) in model_results.items():
             database_multi_model.save_model_analysis(
                 conn=conn,

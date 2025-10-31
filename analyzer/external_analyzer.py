@@ -166,8 +166,8 @@ class ExternalAnalyzer:
         for line in lines:
             line = line.strip()
             if line.upper().startswith("CATEGORÍA:") or line.upper().startswith("CATEGORY:"):
-                category_part = line.split(":", 1)[1].strip().lower()
-                category = self._map_category_name(category_part)
+                # Extract category name directly (Gemini is instructed to use exact category names)
+                category = line.split(":", 1)[1].strip().lower()
             elif line.upper().startswith("EXPLICACIÓN:"):
                 explanation = line.split(":", 1)[1].strip()
                 break
@@ -189,43 +189,4 @@ class ExternalAnalyzer:
             explanation = "Análisis externo completado sin detalles adicionales."
         
         return ExternalAnalysisResult(category=category, explanation=explanation)
-    
-    def _map_category_name(self, category_name: str) -> Optional[str]:
-        """
-        Map category name from Gemini response to our Categories enum.
-        
-        Args:
-            category_name: Raw category name from Gemini
-            
-        Returns:
-            Mapped category string or None if not recognized
-        """
-        # Map common category names to our Categories enum
-        category_mapping = {
-            'hate_speech': Categories.HATE_SPEECH,
-            'disinformation': Categories.DISINFORMATION,
-            'conspiracy_theory': Categories.CONSPIRACY_THEORY,
-            'anti_immigration': Categories.ANTI_IMMIGRATION,
-            'anti_lgbtq': Categories.ANTI_LGBTQ,
-            'anti_feminism': Categories.ANTI_FEMINISM,
-            'nationalism': Categories.NATIONALISM,
-            'anti_government': Categories.ANTI_GOVERNMENT,
-            'historical_revisionism': Categories.HISTORICAL_REVISIONISM,
-            'call_to_action': Categories.CALL_TO_ACTION,
-            'political_general': Categories.POLITICAL_GENERAL,
-            'general': Categories.GENERAL,
-            # Spanish variations
-            'discurso_odio': Categories.HATE_SPEECH,
-            'desinformación': Categories.DISINFORMATION,
-            'teoría_conspiración': Categories.CONSPIRACY_THEORY,
-            'anti_inmigración': Categories.ANTI_IMMIGRATION,
-            'anti_lgbt': Categories.ANTI_LGBTQ,
-            'anti_feminista': Categories.ANTI_FEMINISM,
-            'nacionalismo': Categories.NATIONALISM,
-            'anti_gobierno': Categories.ANTI_GOVERNMENT,
-            'revisionismo_histórico': Categories.HISTORICAL_REVISIONISM,
-            'llamada_accion': Categories.CALL_TO_ACTION,
-            'política_general': Categories.POLITICAL_GENERAL
-        }
-        
-        return category_mapping.get(category_name.lower())
+
