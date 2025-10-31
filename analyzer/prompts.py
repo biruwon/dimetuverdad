@@ -216,9 +216,15 @@ Clasifica este texto en UNA categoría: {categories}
    - Hablar de tauromaquia, flamenco, cultura española SIN mencionar inmigración = general
    - SOLO clasifica como anti_immigration si presenta inmigración como amenaza
 
-2. **DISINFORMATION**: Claims políticos verificables DEBEN tener fuente oficial
-   - Decreto/ley sin BOE = disinformation
-   - Renuncia sin confirmación oficial = disinformation
+2. **DISINFORMATION**: Claims verificables presentados COMO HECHOS CONFIRMADOS sin fuente oficial
+   - DEBE presentarse como noticia/información factual verificable (no opinión política)
+   - ✅ ES disinformation: "El gobierno aprobó ley X sin consulta" (sin BOE confirmado)
+   - ✅ ES disinformation: "Ministro Y renunció ayer" (sin confirmación oficial)
+   - ✅ ES disinformation: "El BOE publicó decreto Z" (cuando no existe)
+   - ❌ NO es disinformation: Crítica política partidista ("el PP/PSOE es inconsistente")
+   - ❌ NO es disinformation: Opiniones sobre comportamiento político ("dicen una cosa, hacen otra")
+   - ❌ NO es disinformation: Caracterizaciones políticas ("nos estafan", "se ríen de nosotros")
+   - ❌ NO es disinformation: Retórica común en discurso político de oposición
 
 {PromptBuilder.build_base_format_instructions()}
 """
@@ -384,7 +390,12 @@ DEFINICIONES CLAVE:
 - general: Contenido político neutral sin elementos problemáticos
 
 ⚠️ CRÍTICO PARA DISINFORMATION:
-Si el texto presenta un HECHO POLÍTICO VERIFICABLE (decreto, ley, renuncia, nombramiento) SIN citar fuente oficial → disinformation
+- SOLO si presenta HECHO VERIFICABLE como noticia/información confirmada SIN fuente oficial
+- ✅ ES disinformation: "El BOE publicó decreto X", "El gobierno aprobó ley Y", "Ministro Z renunció"
+- ❌ NO es disinformation: Crítica política partidista ("el PP/PSOE miente", "son inconsistentes")
+- ❌ NO es disinformation: Opinión sobre comportamiento político ("dicen una cosa, hacen otra")
+- ❌ NO es disinformation: Caracterizaciones políticas ("nos estafan", "se ríen de nosotros")
+- ❌ NO es disinformation: Retórica común en discurso político de oposición
 
 ⚠️ CRÍTICO PARA ANTI_IMMIGRATION:
 - NO es anti_immigration solo porque mencione cultura/tradiciones españolas
