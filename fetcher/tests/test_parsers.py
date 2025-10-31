@@ -306,11 +306,18 @@ def test_engagement_metrics_and_profile_picture():
 # ===== CONTENT EXTRACTION TESTS =====
 
 def test_extract_full_tweet_content_and_elements():
+    """Test content extraction with proper selector matching."""
+    # Create article with tweetText selector
+    txt_elem = FakeElem(text='This is a post #test @other')
     img = FakeElem(attrs={'src': 'https://pbs.twimg.com/media/abc.jpg'}, tag='img')
     status = FakeElem(attrs={'href': '/user/status/123'})
     hashtag = FakeElem(attrs={'href': '/hashtag/test'}, text='#test')
     mention = FakeElem(attrs={'href': '/otheruser'}, text='@other')
-    art = FakeElem(children=[img, status, hashtag, mention], text='This is a post #test @other')
+    art = FakeElem(
+        children=[img, status, hashtag, mention], 
+        text='This is a post #test @other',
+        mapping={'[data-testid="tweetText"]': txt_elem}
+    )
     content = parsers.extract_full_tweet_content(art)
     assert 'This is a post' in content
     elems = parsers.extract_content_elements(art)
@@ -319,14 +326,16 @@ def test_extract_full_tweet_content_and_elements():
 
 
 def test_extract_full_tweet_content_and_fallback():
+    """Test content extraction with proper selectors - no overly broad fallbacks."""
     txt = FakeElem(text='Hello world')
     article = FakeElem(mapping={'[data-testid="tweetText"]': txt})
     assert parsers.extract_full_tweet_content(article) == 'Hello world'
 
-    # Fallback to article.inner_text
+    # When no proper tweet text selectors match, return empty (media-only post)
     article2 = FakeElem(text='This is a much longer fallback full text that should definitely be extracted properly')
-    article2.query_selector_all = lambda selector: []  # Mock to force fallback
-    assert parsers.extract_full_tweet_content(article2) == 'This is a much longer fallback full text that should definitely be extracted properly'
+    article2.query_selector_all = lambda selector: []  # Mock to force no matches
+    # Should return empty string since no tweet text selectors matched
+    assert parsers.extract_full_tweet_content(article2) == ''
 
 
 def test_extract_full_tweet_content_multiple_selectors():
@@ -373,19 +382,17 @@ def test_extract_full_tweet_content_multiple_selectors():
     result5 = parsers.extract_full_tweet_content(article5)
     assert result5 == 'Span tweet text'
 
-    # Test direction-based selectors
-    dir_elem = FakeElem(text='LTR direction tweet text')
-    article6 = FakeElem(mapping={
-        'div[dir="ltr"]': dir_elem,
-        '[data-testid="tweetText"]': None
-    })
+    # Test media-only post (no text selectors match)
+    article6 = FakeElem(mapping={})
+    article6.query_selector_all = lambda selector: []
     result6 = parsers.extract_full_tweet_content(article6)
-    assert result6 == 'LTR direction tweet text'
+    # Should return empty string for media-only posts
+    assert result6 == ''
 
 
 def test_extract_full_tweet_content_ultimate_fallback():
-    """Test the ultimate fallback text extraction from article.inner_text."""
-    # Test fallback with multiple lines, filtering out unwanted content
+    """Test that media-only posts return empty string (no overly broad fallbacks)."""
+    # When no proper tweet text selectors match, should return empty
     article_text = """@username
 This is the main tweet content that should be extracted.
 2h
@@ -393,11 +400,12 @@ Like Reply Retweet
 2024"""
 
     article = FakeElem(text=article_text)
-    # Mock all selectors to return None to trigger fallback
+    # Mock all selectors to return None (simulates media-only post)
     article.query_selector_all = lambda selector: []
 
     result = parsers.extract_full_tweet_content(article)
-    assert 'This is the main tweet content that should be extracted' in result
+    # Should return empty string since no tweet text selectors matched
+    assert result == ''
     assert '@username' not in result  # Should filter out usernames
     assert '2h' not in result  # Should filter out timestamps
     assert 'Like Reply Retweet' not in result  # Should filter out engagement text
@@ -542,8 +550,13 @@ def test_extract_content_elements_hashtags_mentions_and_links():
 
 
 def test_extract_full_tweet_content_expansion():
+    """Test tweet content extraction with proper selector."""
     # Simulate an article with tweetText element
-    article = FakeElem(text='Long tweet content that should be returned')
+    txt_elem = FakeElem(text='Long tweet content that should be returned')
+    article = FakeElem(
+        text='Long tweet content that should be returned',
+        mapping={'[data-testid="tweetText"]': txt_elem}
+    )
     res = parsers.extract_full_tweet_content(article)
     assert 'Long tweet content' in res
 

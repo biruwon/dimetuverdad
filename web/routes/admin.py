@@ -24,7 +24,7 @@ from web.utils.decorators import admin_required, rate_limit, handle_db_errors, v
 from web.utils.helpers import (
     get_tweet_data, reanalyze_tweet_sync,
     handle_reanalyze_action, handle_refresh_action, handle_refresh_and_reanalyze_action,
-    handle_manual_update_action
+    handle_manual_update_action, handle_multi_model_action
 )
 import config
 
@@ -356,6 +356,8 @@ def admin_edit_analysis(tweet_id: str) -> str:
                 handle_refresh_action(tweet_id, referrer)
             elif action == 'refresh_and_reanalyze':
                 handle_refresh_and_reanalyze_action(tweet_id, referrer)
+            elif action == 'multi_model':
+                handle_multi_model_action(tweet_id, referrer)
             else:
                 # Manual update
                 handle_manual_update_action(tweet_id, new_category, new_explanation)

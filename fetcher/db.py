@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Optional, Dict, List
+from typing import Dict
 from datetime import datetime
 
 # Import path utilities for consistent database path resolution
@@ -66,10 +66,10 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
     try:
         if not tweet_data.get('tweet_id') or str(tweet_data.get('tweet_id')).lower() == 'analytics':
             return False
+        
         c.execute("SELECT id, post_type, content, original_author, original_tweet_id FROM tweets WHERE tweet_id = ?", (tweet_data['tweet_id'],))
         existing = c.fetchone()
         if existing:
-            existing_id = existing['id']
             existing_post_type = existing['post_type']
             existing_content = existing['content']
             existing_original_author = existing['original_author']
@@ -110,16 +110,20 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
             return True
         # insert
         c.execute("""INSERT INTO tweets (tweet_id, content, username, tweet_url, tweet_timestamp, post_type,
+                        original_author, original_tweet_id, reply_to_username,
                         media_links, media_count,
                         engagement_likes, engagement_retweets, engagement_replies,
                         external_links, original_content, is_pinned)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
             tweet_data['tweet_id'],
             tweet_data.get('content'),
             tweet_data.get('username'),
             tweet_data.get('tweet_url'),
             tweet_data.get('tweet_timestamp'),
             tweet_data.get('post_type', 'original'),
+            tweet_data.get('original_author'),
+            tweet_data.get('original_tweet_id'),
+            tweet_data.get('reply_to_username'),
             tweet_data.get('media_links'),
             tweet_data.get('media_count', 0),
             tweet_data.get('engagement_likes', 0),
@@ -234,6 +238,8 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
                 UPDATE tweets SET 
                     content = ?,
                     original_content = ?,
+                    original_author = ?,
+                    original_tweet_id = ?,
                     reply_to_username = ?,
                     media_links = ?,
                     media_count = ?,
@@ -244,6 +250,8 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
             """, (
                 tweet_data.get('content'),
                 tweet_data.get('original_content'),
+                tweet_data.get('original_author'),
+                tweet_data.get('original_tweet_id'),
                 tweet_data.get('reply_to_username'),
                 tweet_data.get('media_links'),
                 tweet_data.get('media_count', 0),

@@ -209,6 +209,17 @@ Clasifica este texto en UNA categoría: {categories}
 
 {PromptBuilder.build_category_definitions()}
 
+⚠️ REGLAS CRÍTICAS DE CLASIFICACIÓN:
+
+1. **ANTI_IMMIGRATION**: DEBE mencionar inmigración/inmigrantes EXPLÍCITAMENTE
+   - NO es anti_immigration solo porque mencione cultura o tradiciones españolas
+   - Hablar de tauromaquia, flamenco, cultura española SIN mencionar inmigración = general
+   - SOLO clasifica como anti_immigration si presenta inmigración como amenaza
+
+2. **DISINFORMATION**: Claims políticos verificables DEBEN tener fuente oficial
+   - Decreto/ley sin BOE = disinformation
+   - Renuncia sin confirmación oficial = disinformation
+
 {PromptBuilder.build_base_format_instructions()}
 """
 
@@ -374,6 +385,12 @@ DEFINICIONES CLAVE:
 
 ⚠️ CRÍTICO PARA DISINFORMATION:
 Si el texto presenta un HECHO POLÍTICO VERIFICABLE (decreto, ley, renuncia, nombramiento) SIN citar fuente oficial → disinformation
+
+⚠️ CRÍTICO PARA ANTI_IMMIGRATION:
+- NO es anti_immigration solo porque mencione cultura/tradiciones españolas
+- DEBE mencionar inmigración, inmigrantes, extranjeros EXPLÍCITAMENTE
+- Hablar de tauromaquia, cultura española, tradiciones SIN mencionar inmigración = general (NO anti_immigration)
+- SOLO clasifica como anti_immigration si el texto presenta inmigración como amenaza
 
 ANÁLISIS MULTIMODAL:
 - Examina TEXTO + IMÁGENES juntos

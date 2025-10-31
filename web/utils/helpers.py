@@ -248,6 +248,41 @@ def handle_manual_update_action(tweet_id, new_category, new_explanation) -> None
         flash('Error al actualizar el análisis', 'error')
 
 
+def handle_multi_model_action(tweet_id, referrer) -> None:
+    """Handle the multi-model analysis action for a tweet."""
+    from flask import flash
+    import subprocess
+    import sys
+    
+    print(f"🧠 Multi-model analysis action triggered for tweet_id: {tweet_id}")
+    
+    try:
+        # Run the multi-model analysis script
+        result = subprocess.run(
+            [sys.executable, 'scripts/analyze_multi_model.py', '--post-id', tweet_id],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        if result.returncode == 0:
+            print(f"✅ Multi-model analysis completed for {tweet_id}")
+            flash('Análisis multi-modelo completado exitosamente. Se analizó con 3 modelos diferentes.', 'success')
+        else:
+            print(f"❌ Multi-model analysis failed with exit code {result.returncode}")
+            print(f"stderr: {result.stderr}")
+            flash(f'Error en el análisis multi-modelo: {result.stderr[:200]}', 'error')
+            
+    except subprocess.TimeoutExpired:
+        print(f"❌ Multi-model analysis timed out for {tweet_id}")
+        flash('El análisis multi-modelo tardó demasiado y fue cancelado. Inténtalo de nuevo.', 'error')
+    except Exception as e:
+        print(f"❌ Error in multi-model analysis: {e}")
+        from flask import current_app
+        current_app.logger.error(f"Error in multi-model analysis for {tweet_id}: {str(e)}")
+        flash('Error interno durante el análisis multi-modelo. Inténtalo de nuevo.', 'error')
+
+
 def get_tweet_display_data(tweet_id, referrer) -> Any:
     """Get tweet data for display in the edit form."""
     from flask import flash, redirect, url_for
@@ -358,8 +393,8 @@ def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
             LIMIT ? OFFSET ?
         """, (per_page, (page - 1) * per_page)).fetchall()
         total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM accounts").fetchone()
-        # Handle different row types: tuples, MockRow with .get(), and sqlite3.Row with dict access
-        total_count = total_count_row['cnt'] if total_count_row and hasattr(total_count_row, '__getitem__') and 'cnt' in total_count_row else 0
+        # Use direct column access by name - simpler and more reliable
+        total_count = total_count_row['cnt'] if total_count_row else 0
 
         accounts_with_stats = []
         for r in rows:
@@ -369,7 +404,7 @@ def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
 
             # Get tweet count for this account
             tweet_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
-            tweet_count = tweet_count_row['cnt'] if tweet_count_row and hasattr(tweet_count_row, '__getitem__') and 'cnt' in tweet_count_row else 0
+            tweet_count = tweet_count_row['cnt'] if tweet_count_row else 0
 
             # Get analyzed posts count
             analyzed_count_row = conn.execute("""
@@ -377,7 +412,7 @@ def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
                 JOIN tweets t ON ca.post_id = t.tweet_id
                 WHERE t.username = ?
             """, (username,)).fetchone()
-            analyzed_posts = analyzed_count_row['cnt'] if analyzed_count_row and hasattr(analyzed_count_row, '__getitem__') and 'cnt' in analyzed_count_row else 0
+            analyzed_posts = analyzed_count_row['cnt'] if analyzed_count_row else 0
 
             # Get problematic posts count (non-general categories)
             problematic_count_row = conn.execute("""
@@ -385,7 +420,7 @@ def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
                 JOIN tweets t ON ca.post_id = t.tweet_id
                 WHERE t.username = ? AND ca.category != 'general'
             """, (username,)).fetchone()
-            problematic_posts = problematic_count_row['cnt'] if problematic_count_row and hasattr(problematic_count_row, '__getitem__') and 'cnt' in problematic_count_row else 0
+            problematic_posts = problematic_count_row['cnt'] if problematic_count_row else 0
 
             accounts_with_stats.append({
                 'username': username,

@@ -413,10 +413,6 @@ class PatternAnalyzer:
         # Determine primary category - first detected category (no scoring)
         primary_category = detected_categories[0] if detected_categories else "non_political"
         
-        # If no extremist patterns but has political context, mark as political_general
-        if not detected_categories and political_context:
-            primary_category = Categories.POLITICAL_GENERAL
-            detected_categories = [Categories.POLITICAL_GENERAL]
         
         return AnalysisResult(
             categories=detected_categories,

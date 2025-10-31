@@ -96,7 +96,7 @@ class AnalysisFlowManager:
         
         Args:
             content: Text content to analyze
-            media_urls: Optional media URLs (not used in local flow)
+            media_urls: Optional media URLs for multimodal analysis
         
         Returns:
             AnalysisResult with category, local_explanation, stages, pattern_data, and verification_data
@@ -106,19 +106,45 @@ class AnalysisFlowManager:
         if self.verbose:
             print("=" * 80)
             print("🔄 Starting LOCAL analysis flow")
-            print(f"📝 Content: {content[:100]}...")
+            print(f"📝 Content: {content[:100] if content else '(empty)'}...")
+            if media_urls:
+                print(f"🖼️  Media URLs: {len(media_urls)} items")
         
         # Handle empty content as special case
         if not content or len(content.strip()) < 3:
             if self.verbose:
                 print("⚠️  Empty or very short content detected")
-            return AnalysisResult(
-                category=Categories.GENERAL,
-                local_explanation="Contenido vacío o muy corto para analizar.",
-                stages=stages,
-                pattern_data={},
-                verification_data={}
-            )
+            
+            # If we have media URLs but no text, run multimodal analysis
+            if media_urls and len(media_urls) > 0:
+                if self.verbose:
+                    print("🖼️  Media-only post detected - running multimodal analysis")
+                
+                # Skip pattern detection (no text to analyze)
+                # Go directly to LLM multimodal analysis
+                primary_category, local_explanation = await self.local_llm.categorize_and_explain("", media_urls)
+                stages.local_llm = True
+                
+                if self.verbose:
+                    print(f"   ✅ Final category: {primary_category}")
+                    print(f"   ✅ Local explanation: {local_explanation[:100]}...")
+                
+                return AnalysisResult(
+                    category=primary_category,
+                    local_explanation=local_explanation,
+                    stages=stages,
+                    pattern_data={},
+                    verification_data={}
+                )
+            else:
+                # No text and no media - truly empty content
+                return AnalysisResult(
+                    category=Categories.GENERAL,
+                    local_explanation="Contenido vacío o muy corto para analizar.",
+                    stages=stages,
+                    pattern_data={},
+                    verification_data={}
+                )
         
         # Stage 1: Pattern Detection
         if self.verbose:

@@ -14,21 +14,57 @@ class TestTemplateRendering:
 
     def test_index_template_context(self, client, mock_database):
         """Test index template renders with correct context."""
-        # Mock the database connection used by the local functions in the index route
-        with patch('web.utils.helpers.get_db_connection') as mock_get_conn:
-            mock_conn = MagicMock()
-            mock_get_conn.return_value = mock_conn
+        mock_cursor = mock_database.cursor.return_value
+
+        # Set up mock to return different data for different queries
+        def mock_fetchall():
+            if not hasattr(mock_fetchall, 'call_count'):
+                mock_fetchall.call_count = 0
+            mock_fetchall.call_count += 1
             
-            # Mock the database queries used by get_all_accounts
-            mock_conn.execute.return_value.fetchall.return_value = [
-                {'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'}
-            ]
-            mock_conn.execute.return_value.fetchone.return_value = MockRow({'cnt': 1})  # Total count
+            if mock_fetchall.call_count == 1:
+                # get_all_accounts query
+                return [
+                    MockRow({'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'})
+                ]
+            elif mock_fetchall.call_count == 2:
+                # get_analysis_distribution_cached query
+                return [
+                    MockRow({'category': 'general', 'count': 30, 'percentage': 60.0})
+                ]
+            else:
+                return []
+
+        def mock_fetchone():
+            if not hasattr(mock_fetchone, 'call_count'):
+                mock_fetchone.call_count = 0
+            mock_fetchone.call_count += 1
             
-            # Mock the response for the template rendering
-            response = client.get('/')
-            assert response.status_code == 200
-            assert b'dimetuverdad' in response.data
+            if mock_fetchone.call_count == 1:
+                # get_all_accounts total count
+                return MockRow({'cnt': 1})
+            elif mock_fetchone.call_count == 2:
+                # tweet count for testuser
+                return MockRow({'cnt': 5})
+            elif mock_fetchone.call_count == 3:
+                # analyzed count for testuser
+                return MockRow({'cnt': 3})
+            elif mock_fetchone.call_count == 4:
+                # problematic count for testuser
+                return MockRow({'cnt': 2})
+            elif mock_fetchone.call_count == 5:
+                # get_overall_stats_cached
+                return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
+            else:
+                return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
+
+        mock_cursor.fetchone.side_effect = mock_fetchone
+        mock_cursor.fetchall.side_effect = mock_fetchall
+            
+        # Mock the response for the template rendering
+        response = client.get('/')
+        assert response.status_code == 200
+        assert b'dimetuverdad' in response.data
 
     def test_user_template_context(self, client, mock_database):
         """Test user template renders with correct context."""
@@ -176,21 +212,57 @@ class TestJavaScriptIntegration:
 
     def test_chart_js_integration(self, client, mock_database):
         """Test Chart.js integration in templates."""
-        # Mock the database connection used by the local functions in the index route
-        with patch('web.utils.helpers.get_db_connection') as mock_get_conn:
-            mock_conn = MagicMock()
-            mock_get_conn.return_value = mock_conn
+        mock_cursor = mock_database.cursor.return_value
+
+        # Set up mock to return different data for different queries
+        def mock_fetchall():
+            if not hasattr(mock_fetchall, 'call_count'):
+                mock_fetchall.call_count = 0
+            mock_fetchall.call_count += 1
             
-            # Mock the database queries used by get_all_accounts
-            mock_conn.execute.return_value.fetchall.return_value = [
-                {'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'}
-            ]
-            mock_conn.execute.return_value.fetchone.return_value = MockRow({'cnt': 1})  # Total count
+            if mock_fetchall.call_count == 1:
+                # get_all_accounts query
+                return [
+                    MockRow({'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'})
+                ]
+            elif mock_fetchall.call_count == 2:
+                # get_analysis_distribution_cached query
+                return [
+                    MockRow({'category': 'general', 'count': 30, 'percentage': 60.0})
+                ]
+            else:
+                return []
+
+        def mock_fetchone():
+            if not hasattr(mock_fetchone, 'call_count'):
+                mock_fetchone.call_count = 0
+            mock_fetchone.call_count += 1
             
-            response = client.get('/')
-            assert response.status_code == 200
-            # Check for Chart.js elements (basic check)
-            assert b'chart' in response.data.lower() or b'Chart' in response.data
+            if mock_fetchone.call_count == 1:
+                # get_all_accounts total count
+                return MockRow({'cnt': 1})
+            elif mock_fetchone.call_count == 2:
+                # tweet count for testuser
+                return MockRow({'cnt': 5})
+            elif mock_fetchone.call_count == 3:
+                # analyzed count for testuser
+                return MockRow({'cnt': 3})
+            elif mock_fetchone.call_count == 4:
+                # problematic count for testuser
+                return MockRow({'cnt': 2})
+            elif mock_fetchone.call_count == 5:
+                # get_overall_stats_cached
+                return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
+            else:
+                return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
+
+        mock_cursor.fetchone.side_effect = mock_fetchone
+        mock_cursor.fetchall.side_effect = mock_fetchall
+            
+        response = client.get('/')
+        assert response.status_code == 200
+        # Check for Chart.js elements (basic check)
+        assert b'chart' in response.data.lower() or b'Chart' in response.data
 
     def test_responsive_js_integration(self, client):
         """Test responsive JavaScript integration."""

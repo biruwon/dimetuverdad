@@ -255,6 +255,18 @@
                             </div>
                         </div>
                         
+                        <div class="alert alert-secondary mb-4">
+                            <h6><i class="fas fa-brain me-2"></i>Análisis Multi-Modelo</h6>
+                            <p class="mb-2">Ejecuta análisis con múltiples modelos LLM locales (phi4, llama3.2, qwen2.5) y compara resultados para mayor precisión.</p>
+                            <form method="POST" action="{{ url_for('admin.admin_edit_analysis', tweet_id=tweet_id) }}" style="display: inline;">
+                                <input type="hidden" name="action" value="multi_model">
+                                {% if referrer %}<input type="hidden" name="from" value="{{ referrer }}">{% endif %}
+                                <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('¿Ejecutar análisis multi-modelo?\n\nEsto ejecutará el análisis con 3 modelos diferentes y puede tardar 2-3 minutos.')">
+                                    <i class="fas fa-layer-group me-1"></i>Análisis Multi-Modelo
+                                </button>
+                            </form>
+                        </div>
+                        
                         <div class="mb-3 text-center">
                             <strong>— O —</strong>
                         </div>

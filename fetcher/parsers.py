@@ -396,7 +396,37 @@ def extract_full_tweet_content(article) -> str:
     """
     Extract full tweet text content using multiple selector strategies.
     Handles different tweet layouts and structures.
+    Returns empty string if no actual tweet text found (e.g., media-only posts).
     """
+    # First, try to expand truncated text by clicking "Show more" button
+    try:
+        show_more_selectors = [
+            '[data-testid="tweet-text-show-more-link"]',
+            'a:has-text("Show more")',
+            'a:has-text("Mostrar más")',
+            '[aria-label*="Show more"]',
+            '[aria-label*="Mostrar más"]',
+            'div[role="button"]:has-text("Show more")',
+            'div[role="button"]:has-text("Mostrar más")'
+        ]
+        
+        for selector in show_more_selectors:
+            try:
+                show_more_btn = article.query_selector(selector)
+                if show_more_btn:
+                    print(f"🔽 Found 'Show more' button, expanding text...")
+                    show_more_btn.click()
+                    # Wait a bit for the text to expand
+                    article.wait_for_timeout(500)
+                    print(f"✅ Text expanded successfully")
+                    break
+            except Exception as e:
+                # Button might not be clickable or already expanded
+                continue
+    except Exception as e:
+        # If expansion fails, continue with whatever text is visible
+        print(f"⚠️ Could not expand truncated text: {e}")
+    
     text_selectors = [
         # Primary: Standard tweet text
         '[data-testid="tweetText"]',
@@ -419,10 +449,6 @@ def extract_full_tweet_content(article) -> str:
         'span[data-testid="tweetText"]',
         'span[class*="tweet-text"]',
         'span[role="text"]',
-
-        # Fallback: Any text content in the article
-        'div[dir="ltr"]',       # Left-to-right text direction
-        'div[dir="auto"]',      # Auto text direction
     ]
 
     print(f"🔍 Extracting tweet text with {len(text_selectors)} selector strategies...")
@@ -546,33 +572,8 @@ def extract_full_tweet_content(article) -> str:
             print(f"⚠️ Selector failed {selector}: {e}")
             continue
 
-    # Ultimate fallback: Extract all text from the article
-    print(f"🔄 Using ultimate fallback: extracting all article text...")
-    try:
-        all_text = article.inner_text()
-        if all_text and len(all_text.strip()) > 20:
-            # Try to extract just the main content by splitting on common patterns
-            lines = all_text.split('\n')
-            # Look for lines that look like tweet content (not usernames, timestamps, etc.)
-            content_lines = []
-            for line in lines:
-                line = line.strip()
-                if (line and
-                    len(line) > 10 and
-                    not line.startswith('@') and
-                    not any(pattern in line.lower() for pattern in ['retweet', 'like', 'reply', 'follow', '·', '2024', '2025']) and
-                    not re.match(r'^\d+[hm]$', line)):  # Not "2h" style timestamps
-                    content_lines.append(line)
-
-            if content_lines:
-                combined_text = ' '.join(content_lines)
-                print(f"📝 Extracted fallback text ({len(combined_text)} chars): {combined_text[:100]}...")
-                return combined_text.strip()
-
-    except Exception as e:
-        print(f"⚠️ Ultimate fallback failed: {e}")
-
-    print(f"❌ Could not extract any text content from tweet")
+    # No text content found - this is likely a media-only post
+    print(f"� No text content found (media-only post)")
     return ''
 
 
@@ -665,15 +666,17 @@ def analyze_post_type(article, target_username: str) -> Dict[str, any]:
                         break
                 if quoted_author_link:
                     quoted_href = quoted_author_link.get_attribute('href')
-                    post_analysis['reply_to_username'] = quoted_href.replace('/', '') if quoted_href else None
+                    # For quote tweets, store in original_author (not reply_to_username)
+                    post_analysis['original_author'] = quoted_href.replace('/', '') if quoted_href else None
             except Exception:
-                post_analysis['reply_to_username'] = None
+                post_analysis['original_author'] = None
 
             try:
                 quoted_tweet_link = quoted_content.query_selector('a[href*="/status/"]')
                 if quoted_tweet_link:
                     quoted_tweet_href = quoted_tweet_link.get_attribute('href')
-                    post_analysis['reply_to_tweet_id'] = quoted_tweet_href.split('/')[-1] if quoted_tweet_href else None
+                    # For quote tweets, store in original_tweet_id (not reply_to_tweet_id)
+                    post_analysis['original_tweet_id'] = quoted_tweet_href.split('/')[-1] if quoted_tweet_href else None
             except Exception:
                 pass
 
@@ -1045,12 +1048,46 @@ def find_and_extract_quoted_tweet(page, main_article, post_analysis: dict) -> di
                         post_analysis['original_content'] = quoted_text
                         print(f"📎 Quoted content: {quoted_text[:150]}...")
                     
+                    # Extract metadata from the quoted tweet URL before navigating
+                    try:
+                        # Search the main article for all /status/ links
+                        all_links = main_article.query_selector_all('a[href*="/status/"]')
+                        quoted_link = None
+                        main_tweet_id = post_analysis.get('tweet_id', '')
+                        
+                        # Find a link that points to a different tweet (the quoted tweet)
+                        for link in all_links:
+                            href = link.get_attribute('href')
+                            if href and '/status/' in href and main_tweet_id not in href:
+                                quoted_link = link
+                                break
+                        
+                        if not quoted_link:
+                            print(f"⚠️ No quoted tweet link found in main article")
+                    except Exception as e:
+                        print(f"⚠️ Could not extract quoted tweet metadata: {e}")
+                    
                     # Now click on the quoted tweet to navigate to it for complete extraction
                     try:
                         print(f"🖱️ Clicking on quoted tweet to navigate to it...")
                         quoted_text_elem.click()
                         page.wait_for_load_state("domcontentloaded")
                         human_delay(5.0, 7.0)
+
+                        # Extract metadata from the URL after navigation
+                        current_url = page.url
+                        if '/status/' in current_url:
+                            try:
+                                parts = current_url.strip('/').split('/')
+                                status_index = parts.index('status') if 'status' in parts else -1
+                                if status_index >= 1:
+                                    quoted_author = parts[status_index - 1].split('?')[0]  # Remove query params
+                                    quoted_tweet_id = parts[status_index + 1].split('?')[0]  # Remove query params
+                                    post_analysis['original_author'] = quoted_author
+                                    post_analysis['original_tweet_id'] = quoted_tweet_id
+                                    print(f"📋 Extracted quoted tweet metadata: @{quoted_author}, ID: {quoted_tweet_id}")
+                            except Exception as e:
+                                print(f"⚠️ Could not parse quoted tweet URL: {e}")
 
                         # Try to dismiss overlays/popups
                         try:
@@ -1223,8 +1260,9 @@ def find_and_extract_quoted_tweet(page, main_article, post_analysis: dict) -> di
         quoted_tweet_id = parts[status_index + 1].split('?')[0]  # Remove query params
         quoted_tweet_url = f"https://x.com/{quoted_author}/status/{quoted_tweet_id}"
         
-        post_analysis['reply_to_username'] = quoted_author
-        post_analysis['reply_to_tweet_id'] = quoted_tweet_id
+        # Store in original_author/original_tweet_id for quote tweets (not reply_to_*)
+        post_analysis['original_author'] = quoted_author
+        post_analysis['original_tweet_id'] = quoted_tweet_id
         
         print(f"🔗 Found quoted tweet by @{quoted_author}: {quoted_tweet_url}")
         

@@ -40,18 +40,28 @@ class TestMainRoutes:
                 return []
 
         def mock_fetchone():
-            # This will be called multiple times
+            # This will be called multiple times for different queries
             if not hasattr(mock_fetchone, 'call_count'):
                 mock_fetchone.call_count = 0
             mock_fetchone.call_count += 1
             
             if mock_fetchone.call_count == 1:
-                # get_all_accounts total count query
+                # get_all_accounts total count query: SELECT COUNT(*) AS cnt FROM accounts
                 return MockRow({'cnt': 1})
             elif mock_fetchone.call_count == 2:
+                # get_all_accounts tweet count: SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?
+                return MockRow({'cnt': 5})
+            elif mock_fetchone.call_count == 3:
+                # get_all_accounts analyzed count: SELECT COUNT(DISTINCT ca.post_id) AS cnt ...
+                return MockRow({'cnt': 3})
+            elif mock_fetchone.call_count == 4:
+                # get_all_accounts problematic count: SELECT COUNT(DISTINCT ca.post_id) AS cnt ...
+                return MockRow({'cnt': 2})
+            elif mock_fetchone.call_count == 5:
                 # get_overall_stats_cached query
                 return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
             else:
+                # Default for any additional calls
                 return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
 
         mock_cursor.fetchone.side_effect = mock_fetchone
@@ -63,33 +73,109 @@ class TestMainRoutes:
 
     def test_index_template_context(self, client, mock_database):
         """Test index template renders with correct context."""
-        # Mock the database connection used by the local functions in the index route
-        with patch('web.utils.helpers.get_db_connection') as mock_get_conn:
-            mock_conn = MagicMock()
-            mock_get_conn.return_value = mock_conn
+        mock_cursor = mock_database.cursor.return_value
+
+        # Set up mock to return different data for different queries
+        def mock_fetchall():
+            if not hasattr(mock_fetchall, 'call_count'):
+                mock_fetchall.call_count = 0
+            mock_fetchall.call_count += 1
             
-            # Mock the database queries used by get_all_accounts
-            mock_conn.execute.return_value.fetchall.return_value = [
-                {'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'}
-            ]
-            mock_conn.execute.return_value.fetchone.return_value = MockRow({'cnt': 1})  # Total count
+            if mock_fetchall.call_count == 1:
+                # get_all_accounts query
+                return [
+                    MockRow({'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'})
+                ]
+            elif mock_fetchall.call_count == 2:
+                # get_analysis_distribution_cached query
+                return [
+                    MockRow({'category': 'general', 'count': 30, 'percentage': 60.0})
+                ]
+            else:
+                return []
+
+        def mock_fetchone():
+            if not hasattr(mock_fetchone, 'call_count'):
+                mock_fetchone.call_count = 0
+            mock_fetchone.call_count += 1
             
-            response = client.get('/')
-            assert response.status_code == 200
-            assert b'analysisChart' in response.data  # Chart should be rendered
-            assert b'Cuentas Monitoreadas' in response.data  # Accounts section should be present
+            if mock_fetchone.call_count == 1:
+                # get_all_accounts total count
+                return MockRow({'cnt': 1})
+            elif mock_fetchone.call_count == 2:
+                # tweet count for testuser
+                return MockRow({'cnt': 5})
+            elif mock_fetchone.call_count == 3:
+                # analyzed count for testuser
+                return MockRow({'cnt': 3})
+            elif mock_fetchone.call_count == 4:
+                # problematic count for testuser
+                return MockRow({'cnt': 2})
+            elif mock_fetchone.call_count == 5:
+                # get_overall_stats_cached
+                return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
+            else:
+                return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
+
+        mock_cursor.fetchone.side_effect = mock_fetchone
+        mock_cursor.fetchall.side_effect = mock_fetchall
+            
+        response = client.get('/')
+        assert response.status_code == 200
+        assert b'analysisChart' in response.data  # Chart should be rendered
+        assert b'Cuentas Monitoreadas' in response.data  # Accounts section should be present
 
     def test_index_with_category_filter(self, client, mock_database):
         """Test index route with category filtering."""
-        # Mock the connection's execute method
-        mock_connection = mock_database.return_value
-        mock_connection.execute.side_effect = [
-            Mock(fetchone=Mock(return_value=MockRow({'total_accounts': 10, 'analyzed_tweets': 50}))),
-            Mock(fetchall=Mock(return_value=[
-                MockRow({'category': 'hate_speech', 'count': 10, 'percentage': 100.0})
-            ])),
-            Mock(fetchall=Mock(return_value=[]))  # filtered accounts
-        ]
+        mock_cursor = mock_database.cursor.return_value
+
+        # Set up mock to return different data for different queries
+        def mock_fetchall():
+            if not hasattr(mock_fetchall, 'call_count'):
+                mock_fetchall.call_count = 0
+            mock_fetchall.call_count += 1
+            
+            if mock_fetchall.call_count == 1:
+                # get_all_accounts query
+                return [
+                    MockRow({'username': 'testuser', 'profile_pic_url': 'http://example.com/pic.jpg', 'last_scraped': '2023-01-01'})
+                ]
+            elif mock_fetchall.call_count == 2:
+                # get_analysis_distribution_cached query
+                return [
+                    MockRow({'category': 'hate_speech', 'count': 10, 'percentage': 100.0})
+                ]
+            else:
+                return []
+
+        def mock_fetchone():
+            if not hasattr(mock_fetchone, 'call_count'):
+                mock_fetchone.call_count = 0
+            mock_fetchone.call_count += 1
+            
+            if mock_fetchone.call_count == 1:
+                # get_all_accounts total count
+                return MockRow({'cnt': 1})
+            elif mock_fetchone.call_count == 2:
+                # tweet count for testuser
+                return MockRow({'cnt': 5})
+            elif mock_fetchone.call_count == 3:
+                # analyzed count for testuser
+                return MockRow({'cnt': 3})
+            elif mock_fetchone.call_count == 4:
+                # problematic count for testuser
+                return MockRow({'cnt': 2})
+            elif mock_fetchone.call_count == 5:
+                # Filter check (category filter query in main.py)
+                return (1,)  # has_category > 0
+            elif mock_fetchone.call_count == 6:
+                # get_overall_stats_cached
+                return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
+            else:
+                return MockRow({'total_accounts': 10, 'analyzed_tweets': 50})
+
+        mock_cursor.fetchone.side_effect = mock_fetchone
+        mock_cursor.fetchall.side_effect = mock_fetchall
 
         response = client.get('/?category=hate_speech')
         assert response.status_code == 200

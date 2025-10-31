@@ -301,7 +301,10 @@
                             <small class="text-muted">
                                 <i class="fas fa-clock"></i> {{ analysis.timestamp }}
                             </small>
-                            <a href="{{ analysis.tweet_url }}" target="_blank" class="btn btn-sm btn-outline-secondary ms-2">
+                            <a href="{{ url_for('admin.admin_edit_analysis', tweet_id=analysis.post_id) }}" class="btn btn-sm btn-outline-primary ms-2" title="Editar análisis">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="{{ analysis.tweet_url }}" target="_blank" class="btn btn-sm btn-outline-secondary ms-1" title="Ver en Twitter/X">
                                 <i class="fas fa-external-link-alt"></i>
                             </a>
                         </div>
