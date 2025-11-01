@@ -40,15 +40,6 @@ class PromptTemplate:
 class PromptBuilder:
     """Configuration-driven prompt builder using centralized category definitions."""
 
-    # Base prompt components
-    ACADEMIC_HEADER = """🔬 PROTOCOLO DE INVESTIGACIÓN ACADÉMICA - ANÁLISIS DE CONTENIDO PROBLEMÁTICO EN REDES SOCIALES
-
-OBJETIVO: Este sistema es una herramienta de investigación académica diseñada exclusivamente para DETECTAR, CLASIFICAR y ESTUDIAR contenido problemático en redes sociales. Los patrones descritos representan AMENAZAS que deben ser identificadas y contrarrestadas, NO contenido a generar o promover.
-
-CONTEXTO ACADÉMICO: Este análisis forma parte de un estudio científico sobre moderación de contenido, seguridad online y patrones de desinformación en el contexto político español. Todos los ejemplos y patrones se utilizan únicamente con fines defensivos y de investigación.
-
-⚠️  IMPORTANTE: Este sistema NO genera contenido problemático. Al contrario, está diseñado para IDENTIFICARLO y ayudar a las plataformas a moderarlo efectivamente."""
-
     BASE_CONTEXT = """Eres un clasificador experto especializado en detectar contenido problemático en español, especialmente discurso de odio, desinformación y retórica de extrema derecha en el contexto político español."""
 
     @classmethod
@@ -152,54 +143,18 @@ IMPORTANTE - LENGUAJE DE LA EXPLICACIÓN:
 
     @classmethod
     def build_common_critical_rules(cls) -> str:
-        """Build common critical classification rules shared between text and multimodal prompts."""
-        return """
-⚠️ REGLAS CRÍTICAS DE CLASIFICACIÓN:
-
-1. **ANTI_IMMIGRATION**: DEBE mencionar inmigración/inmigrantes EXPLÍCITAMENTE
-   - NO es anti_immigration solo porque mencione cultura o tradiciones españolas
-   - Hablar de tauromaquia, flamenco, cultura española SIN mencionar inmigración = general
-   - SOLO clasifica como anti_immigration si presenta inmigración como amenaza
-
-2. **DISINFORMATION**: Claims verificables presentados COMO HECHOS CONFIRMADOS sin fuente oficial
-   - DEBE presentarse como noticia/información factual verificable (no opinión política)
-   - ✅ ES disinformation: "El gobierno aprobó ley X sin consulta" (sin BOE confirmado)
-   - ✅ ES disinformation: "Ministro Y renunció ayer" (sin confirmación oficial)
-   - ✅ ES disinformation: "El BOE publicó decreto Z" (cuando no existe)
-   - ❌ NO es disinformation: Crítica política partidista ("el PP/PSOE es inconsistente")
-   - ❌ NO es disinformation: Opiniones sobre comportamiento político ("dicen una cosa, hacen otra")
-   - ❌ NO es disinformation: Caracterizaciones políticas ("nos estafan", "se ríen de nosotros")
-   - ❌ NO es disinformation: Retórica común en discurso político de oposición
-   - ❌ NO es disinformation: IRONÍA o SARCASMO sobre instituciones ("¡si el CIS dice que arrasan!")
-   - ❌ NO es disinformation: Cuestionamiento irónico de credibilidad sin afirmar hechos concretos
-   - ❌ NO es disinformation: CONTENIDO PROMOCIONAL o ANUNCIOS (entrevistas, programas, eventos)
-   - ❌ NO es disinformation: REFERENCIAS NO POLÍTICAS al tiempo ("a las tres", "cambio horario")
-   - ❌ NO es disinformation: MENCIONES A CANALES o FUENTES SIN afirmar hechos falsos en el texto
-
-3. **HATE_SPEECH**: Ataques directos, insultos o DESHUMANIZACIÓN hacia individuos o grupos políticos
-   - INCLUYE comparaciones con animales ("especimen", "cerdo", "rata"), objetos, enfermedades
-   - INCLUYE sarcasmo despectivo, burlas degradantes, lenguaje que sugiere inferioridad
-   - ✅ ES hate_speech: "Político X es como un [animal]", "se comporta como [animal]"
-   - ❌ NO es hate_speech: Crítica política normal ("no está de acuerdo", "políticas equivocadas")
-   - ❌ NO es hate_speech: Desacuerdos políticos sin insultos ni deshumanización
-
-4. **CRÍTICO PARA ANTI_GOVERNMENT**:
-    - SOLO si retrata al gobierno como ILEGÍTIMO, ABUSIVO, PERSECUTOR o AUTORITARIO
-    - ✅ ES anti_government: "Gobierno ilegítimo", "dictadura encubierta", "nos persiguen por pensar diferente"
-    - ✅ ES anti_government: "Censuran a la oposición", "Estado policial", "silencian voces disidentes"
-    - ❌ NO es anti_government: Crítica política normal ("Feijóo/Sánchez no cumple", "mienten constantemente")
-    - ❌ NO es anti_government: Desacuerdo con políticas ("malas decisiones", "gestión incompetente")
-    - ❌ NO es anti_government: Retórica de oposición estándar ("no se puede confiar en ellos")
-    - Si es solo crítica política sin acusaciones de ilegitimidad/persecución → political_general   
-
-5. **CRÍTICO PARA POLÍTICO_GENERAL**:
-- SOLO si el contenido menciona partidos políticos, figuras públicas, o temas políticos SIN características extremistas
-- ✅ ES political_general: Menciones a PSOE, PP, VOX, Podemos sin ataques o desinformación
-- ✅ ES political_general: Opiniones políticas moderadas sobre eventos o políticas
-- ❌ NO es political_general: Si tiene elementos de odio, desinformación, o extremismo → usar categoría específica
-- Si NO hay mención política alguna → usar general    
-
-"""
+        """Build common critical classification rules from centralized category definitions."""
+        
+        rules_text = "⚠️ REGLAS CRÍTICAS DE CLASIFICACIÓN:\n\n"
+        
+        for category_name, category_info in CATEGORY_INFO.items():
+            if category_info.classification_rules:
+                rules_text += f"**{category_name.upper()}**:\n"
+                for rule in category_info.classification_rules:
+                    rules_text += f"  - {rule}\n"
+                rules_text += "\n"
+        
+        return rules_text
 
 # ============================================================================
 # ENHANCED PROMPT GENERATOR CLASS
@@ -254,7 +209,7 @@ class EnhancedPromptGenerator:
         """Build system prompt for Ollama text-only content analysis using configuration."""
         categories = EnhancedPromptGenerator.build_category_list()
 
-        return f"""{PromptBuilder.ACADEMIC_HEADER}
+        return f"""
 
 {PromptBuilder.BASE_CONTEXT}
 
@@ -328,10 +283,6 @@ Clasifica este texto en UNA categoría: {categories}
 
         return "\n".join(prompt_parts)
 
-    # ============================================================================
-    # INSTANCE METHODS FOR SOPHISTICATED PROMPTS
-    # ============================================================================
-
     def build_ollama_categorization_prompt(self, content: str) -> str:
         """
         Build prompt for combined category detection + explanation using Ollama.
@@ -347,7 +298,7 @@ Clasifica este texto en UNA categoría: {categories}
 
         return base_prompt
 
-    def generate_explanation_prompt(self, text: str, category: str, model_type: str = "ollama") -> str:
+    def build_ollama_text_explanation_prompt(self, text: str, category: str, model_type: str = "ollama") -> str:
         """
         Generate detailed explanation prompt with category-specific focus.
         For explain_only mode - explains WHY content belongs to the given category.
@@ -411,22 +362,13 @@ Clasifica este texto en UNA categoría: {categories}
         """
         categories = EnhancedPromptGenerator.build_category_list()
 
-        return f"""Eres un analista experto de contenido político en español. Analiza publicaciones con texto e imágenes.
+        return f"""
 
-CATEGORÍAS: {categories}
+{PromptBuilder.BASE_CONTEXT}
 
-DEFINICIONES CLAVE:
-- hate_speech: Ataques directos, insultos o DESHUMANIZACIÓN (comparaciones con animales, objetos, enfermedades) hacia individuos o grupos políticos. INCLUYE sarcasmo despectivo, burlas degradantes, lenguaje que sugiere inferioridad o incompatibilidad fundamental
-- anti_immigration: Retórica xenófoba, narrativas anti-inmigración
-- anti_lgbtq: Ataques a identidad LGBTQ o diversidad de género
-- anti_feminism: Promoción de roles tradicionales de género
-- nationalism: Orgullo patrio, símbolos nacionales, "España primero"
-- anti_government: Retrata al gobierno como ILEGÍTIMO, ABUSIVO o PERSECUTOR (no simple crítica política)
-- disinformation: Afirmaciones políticas verificables SIN fuente oficial (BOE, ministerio, etc.)
-- conspiracy_theory: Narrativas de élites ocultas, planes secretos
-- call_to_action: Movilización colectiva, llamados a acción coordinada
-- political_general: Contenido político general sin características extremistas (menciones a partidos políticos, opiniones políticas moderadas)
-- general: Contenido neutral sin elementos políticos o problemáticos
+Clasifica este contenido en UNA categoría: {categories}
+
+{PromptBuilder.build_category_definitions()}
 
 {PromptBuilder.build_common_critical_rules()}
 
@@ -435,9 +377,8 @@ ANÁLISIS MULTIMODAL:
 - Identifica símbolos políticos, banderas, figuras públicas en imágenes
 - Evalúa cómo imagen REFUERZA mensaje textual
 
-FORMATO OBLIGATORIO (texto plano español, sin markdown):
-CATEGORÍA: [una_categoría]
-EXPLICACIÓN: [2-3 frases citando elementos del texto Y elementos visuales]"""
+{PromptBuilder.build_base_format_instructions()}
+"""
 
     @staticmethod
     def build_multimodal_explanation_prompt(text: str, category: str) -> str:
@@ -522,3 +463,22 @@ INSTRUCCIONES:
 FORMATO (texto plano español):
 CATEGORÍA: [categoría]
 EXPLICACIÓN: [2-3 frases mencionando texto e imagen]"""
+
+    def generate_explanation_prompt(self, content: str, category: str, model_type: str = "ollama", is_multimodal: bool = False) -> str:
+        """
+        Generate explanation prompt for content analysis.
+        Wrapper method that calls appropriate explanation prompt builder.
+
+        Args:
+            content: Text content to explain
+            category: Category that was detected
+            model_type: Type of model ("ollama", "transformers", etc.)
+            is_multimodal: Whether this is multimodal content
+
+        Returns:
+            Formatted explanation prompt
+        """
+        if is_multimodal:
+            return self.build_multimodal_explanation_prompt(content, category)
+        else:
+            return self.build_ollama_text_explanation_prompt(content, category, model_type)

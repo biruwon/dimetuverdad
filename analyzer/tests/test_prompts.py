@@ -166,8 +166,8 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         
         # Should have the category-specific explanation structure
         self.assertIn("discurso de odio", result.lower())
-        # Check for key detection criteria (after prompt simplification)
-        self.assertIn("lenguaje discriminatorio", result.lower())
+        # Check for key detection criteria from category questions
+        self.assertIn("ataques directos", result.lower())
 
     def test_generate_explanation_prompt_disinformation(self):
         """Test explanation prompt for disinformation category."""
@@ -403,8 +403,8 @@ class TestCrossCategoryPromptGeneration(unittest.TestCase):
         
         # Should have the category-specific explanation structure for hate speech
         self.assertIn("discurso de odio", explanation_prompt.lower())
-        # Check for key detection criteria (after prompt simplification)
-        self.assertIn("lenguaje discriminatorio", explanation_prompt.lower())
+        # Check for key detection criteria from category questions
+        self.assertIn("ataques directos", explanation_prompt.lower())
         
     def test_anti_government_political_rhetoric(self):
         """Test prompt generation for anti-government political rhetoric."""

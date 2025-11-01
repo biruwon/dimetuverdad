@@ -148,7 +148,7 @@ class OllamaAnalyzer:
                 prompt = self.prompt_generator.build_multimodal_explanation_prompt(content, category)
                 system_prompt = self.prompt_generator.build_ollama_multimodal_system_prompt()
             else:
-                prompt = self.prompt_generator.generate_explanation_prompt(content, category, model_type="ollama")
+                prompt = self.prompt_generator.build_ollama_text_explanation_prompt(content, category, model_type="ollama")
                 system_prompt = self.prompt_generator.build_ollama_text_analysis_system_prompt()
             
             # Generate response

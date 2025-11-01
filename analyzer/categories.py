@@ -64,6 +64,7 @@ class CategoryInfo:
     description: str
     focus_area: str
     analysis_questions: List[str]
+    classification_rules: List[str]
     system_prompt: str
 
 # Base system context for all categories
@@ -74,14 +75,23 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
     Categories.HATE_SPEECH: CategoryInfo(
         name=Categories.HATE_SPEECH,
         display_name="Discurso de Odio",
-        description="Comunicación que establece jerarquías entre grupos sociales, expresa incompatibilidad cultural fundamental, o emplea lenguaje despectivo/deshumanizante hacia grupos. INCLUYE: retórica sarcástica/burlona que menosprecia a ciudadanos por sus posturas políticas o solidaridad, uso de insultos colectivos (ej: '#paisdeborregos'), lenguaje divisivo 'nosotros vs ellos' con tono agresivo. Características: lenguaje que sugiere diferencias irreconciliables, expresiones de superioridad/inferioridad grupal, narrativas de amenaza identitaria, SARCASMO DESPECTIVO que ridiculiza/insulta a grupos por sus valores o acciones, emojis agresivos (🖕, 🤦) que refuerzan el desprecio.",
+        description="Comunicación que ataca DIRECTAMENTE a figuras políticas, partidos o instituciones por sus acciones políticas, decisiones o ideología. INCLUYE: comparaciones despectivas con animales ('cerdo', 'rata'), objetos o enfermedades cuando dirigidas a políticos; sarcasmo agresivo sobre comportamientos políticos; lenguaje que sugiere inferioridad política o corrupción. EXCLUYE: ataques basados en identidad personal (género, orientación sexual, etnia, nacionalidad) - usar categorías específicas. EXCLUYE: crítica política normal sin deshumanización.",
         focus_area="detección de discurso de odio y retórica despectiva",
         analysis_questions=[
-            "¿Hay lenguaje discriminatorio, deshumanizante, o despectivo hacia grupos?",
-            "¿Se usa sarcasmo o burla para menospreciar a ciudadanos por sus valores políticos?",
-            "¿Contiene insultos colectivos o lenguaje divisivo agresivo?"
+            "¿Hay ataques directos o insultos hacia figuras políticas específicas?",
+            "¿Se deshumaniza a partidos políticos o instituciones?",
+            "¿Contiene comparaciones degradantes hacia líderes políticos?"
         ],
-        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente discurso de odio, discriminación, y retórica despectiva/sarcástica que ataca a grupos."
+        classification_rules=[
+            "REQUIERE ataque DIRECTO a figura política, partido o institución por acciones políticas",
+            "INCLUYE deshumanización de políticos ('cerdo', 'rata', 'especimen') por corrupción o decisiones",
+            "INCLUYE sarcasmo despectivo sobre comportamiento político específico",
+            "EXCLUYE ataques basados en identidad personal (género, etnia, nacionalidad)",
+            "EXCLUYE crítica política normal sin insultos deshumanizantes",
+            "SI el ataque se basa en identidad LGBTQ+ → usar anti_lgbtq",
+            "SI el ataque se basa en origen étnico → usar anti_immigration"
+        ],
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente ataques directos a figuras políticas, partidos e instituciones."
     ),
     
     Categories.ANTI_IMMIGRATION: CategoryInfo(
@@ -94,20 +104,33 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Hay narrativas de invasión o sustitución cultural?",
             "¿Se cuestiona la compatibilidad cultural de inmigrantes?"
         ],
+        classification_rules=[
+            "DEBE mencionar inmigración/inmigrantes EXPLÍCITAMENTE",
+            "NO es anti_immigration solo porque mencione cultura o tradiciones españolas",
+            "Hablar de tauromaquia, flamenco, cultura española SIN mencionar inmigración = general",
+            "SOLO clasifica como anti_immigration si presenta inmigración como amenaza"
+        ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-inmigración y narrativas xenófobas."
     ),
     
     Categories.ANTI_LGBTQ: CategoryInfo(
         name=Categories.ANTI_LGBTQ,
         display_name="Anti-LGBTQ",
-        description="Comunicación que ataca la identidad y derechos LGBTQ presentándolos como amenaza a valores tradicionales. Características: retórica de 'ideología de género', acusaciones de pedofilia, defensa de roles de género tradicionales, narrativas de 'amenaza a los niños'.",
-        focus_area="análisis de retórica anti-LGBTQ",
+        description="Comunicación que ataca la identidad, existencia o derechos LGBTQ presentándolos como amenaza o inválidos. INCLUYE: negación de identidad trans ('no somos mujeres'), retórica anti-género, defensa de roles tradicionales vs diversidad, ataques a personas trans específicamente, cuestionamiento de baños o espacios según identidad de género, lenguaje despectivo hacia comunidad LGBTQ+. Características: retórica de 'ideología de género', acusaciones infundadas, promoción de estereotipos de género binarios, rechazo de diversidad de género.",
+        focus_area="análisis de ataques a identidad y derechos LGBTQ",
         analysis_questions=[
-            "¿Se ataca la identidad o derechos LGBTQ?",
-            "¿Hay retórica de ideología de género?",
-            "¿Se presentan acusaciones infundadas contra la comunidad LGBTQ?"
+            "¿Se ataca o niega la identidad LGBTQ, especialmente trans?",
+            "¿Hay retórica que rechaza la diversidad de género?",
+            "¿Se cuestionan derechos o espacios de personas LGBTQ+?"
         ],
-        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-LGBTQ y retórica homofóbica/transfóbica."
+        classification_rules=[
+            "INCLUYE ataques a identidad trans, negación de género, cuestionamiento de espacios/baños",
+            "INCLUYE retórica anti-género y defensa de roles tradicionales",
+            "INCLUYE lenguaje despectivo hacia comunidad LGBTQ+",
+            "EXCLUYE ataques a figuras políticas sin componente de identidad de género",
+            "TIENE PRIORIDAD sobre hate_speech cuando el ataque se basa en identidad LGBTQ+"
+        ],
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido que ataca identidad LGBTQ, niega derechos trans, o rechaza diversidad de género."
     ),
     
     Categories.ANTI_FEMINISM: CategoryInfo(
@@ -120,6 +143,7 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Hay retórica de feminazis o anti-igualdad?",
             "¿Se promueven roles de género tradicionales como superiores?"
         ],
+        classification_rules=[],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-feminista y retórica misógina."
     ),
     
@@ -132,6 +156,16 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Se presentan afirmaciones sin fuentes verificables?",
             "¿Hay manipulación de datos o estadísticas?",
             "¿Se descontextualizan hechos para crear narrativas falsas?"
+        ],
+        classification_rules=[
+            "Claims verificables presentados COMO HECHOS CONFIRMADOS sin fuente oficial",
+            "DEBE presentarse como noticia/información factual verificable (no opinión política)",
+            "SI presenta HECHO POLÍTICO ESPECÍFICO VERIFICABLE sin FUENTE OFICIAL → disinformation",
+            "NO es disinformation: crítica política partidista sin afirmar hechos concretos",
+            "NO es disinformation: opiniones sobre comportamiento político",
+            "NO es disinformation: ironía o sarcasmo sobre instituciones",
+            "NO es disinformation: contenido promocional o anuncios",
+            "NO es disinformation: referencias no políticas al tiempo"
         ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido con información falsa o manipulada."
     ),
@@ -146,6 +180,7 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Hay narrativas de control oculto sin evidencia?",
             "¿Se fomenta desconfianza infundada en instituciones?"
         ],
+        classification_rules=[],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza teorías conspiratorias y narrativas no fundamentadas."
     ),
     
@@ -159,6 +194,7 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Se incita a movilización o activismo?",
             "¿Cuál es el nivel de urgencia de la llamada?"
         ],
+        classification_rules=[],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Evalúa específicamente llamadas a la acción y movilización."
     ),
     
@@ -172,6 +208,7 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Hay exaltación de símbolos o valores nacionales?",
             "¿Se presenta la identidad nacional como amenazada?"
         ],
+        classification_rules=[],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido nacionalista y de identidad nacional."
     ),
     
@@ -184,6 +221,14 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿El mensaje describe al gobierno como ilegítimo, autoritario o represivo?",
             "¿Acusa a instituciones estatales o medios oficiales de perseguir, censurar o manipular a la ciudadanía o la oposición?",
             "¿Promueve resistir, desacreditar o desobedecer directamente al gobierno en turno?"
+        ],
+        classification_rules=[
+            "SOLO si retrata al gobierno como ILEGÍTIMO, ABUSIVO, PERSECUTOR o AUTORITARIO",
+            "INCLUYE: 'Gobierno ilegítimo', 'dictadura encubierta', 'nos persiguen por pensar diferente'",
+            "INCLUYE: 'Censuran a la oposición', 'Estado policial', 'silencian voces disidentes'",
+            "EXCLUYE: crítica política normal ('Feijóo/Sánchez no cumple', 'mienten constantemente')",
+            "EXCLUYE: desacuerdo con políticas ('malas decisiones', 'gestión incompetente')",
+            "Si solo crítica política sin acusaciones de ilegitimidad/persecución → political_general"
         ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-gubernamental, denuncias de persecución del Estado, acusaciones de censura o manipulación institucional."
     ),
@@ -198,6 +243,7 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Hay rehabilitación de figuras o regímenes autoritarios?",
             "¿Se minimizan eventos históricos problemáticos?"
         ],
+        classification_rules=[],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente revisionismo histórico y narrativas nostálgicas."
     ),
     
@@ -210,6 +256,13 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Cuáles son los temas políticos tratados?",
             "¿Qué perspectiva política se presenta?",
             "¿Hay elementos de debate político constructivo?"
+        ],
+        classification_rules=[
+            "SOLO si menciona partidos políticos, figuras públicas, o temas políticos SIN características extremistas",
+            "INCLUYE: menciones a PSOE, PP, VOX, Podemos sin ataques o desinformación",
+            "INCLUYE: opiniones políticas moderadas sobre eventos o políticas",
+            "EXCLUYE: si tiene elementos de odio, desinformación, o extremismo → usar categoría específica",
+            "Si NO hay mención política alguna → usar general"
         ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza contenido político general y opiniones políticas convencionales."
     ),
@@ -224,6 +277,7 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Cuál es el tono y la intención del mensaje?",
             "¿Hay algún aspecto que requiera atención?"
         ],
+        classification_rules=[],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza el siguiente contenido de forma integral."
     )
 }
@@ -255,6 +309,11 @@ def get_category_questions(category: str) -> List[str]:
     """Get analysis questions for a category."""
     info = get_category_info(category)
     return info.analysis_questions if info else []
+
+def get_category_rules(category: str) -> List[str]:
+    """Get classification rules for a category."""
+    info = get_category_info(category)
+    return info.classification_rules if info else []
 
 def get_category_system_prompt(category: str) -> str:
     """Get the system prompt for a category."""

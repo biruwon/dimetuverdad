@@ -203,16 +203,16 @@ class PatternAnalyzer:
             
             Categories.ANTI_LGBTQ: {
                 'patterns': [
-                    # Gender ideology attacks
+                    # Gender ideology attacks - clear, obvious patterns
                     re.compile(r'\b(?:ideología\s+de\s+género|doctrina\s+de\s+género)\b', re.IGNORECASE),
                     re.compile(r'\b(?:agenda\s+lgbt|LGBT\s+nos\s+quiere|quieren\s+adoctrinar)\b', re.IGNORECASE),
                     re.compile(r'\b(?:quieren\s+convertir\s+a\s+nuestros?\s+hijos?|adoctrinamiento\s+infantil)\b', re.IGNORECASE),
                     re.compile(r'\b(?:van\s+a\s+por\s+los\s+niños?|van\s+a\s+por\s+nuestros?\s+hijos?)\b', re.IGNORECASE),
-                    # Traditional family defense
+                    # Traditional family defense - clear patterns
                     re.compile(r'\b(?:defensa\s+de\s+la\s+familia\s+tradicional)\b', re.IGNORECASE),
                     re.compile(r'\b(?:familia\s+tradicional\s+en\s+peligro|amenaza\s+a\s+la\s+familia)\b', re.IGNORECASE),
                     re.compile(r'\b(?:valores\s+cristianos?\s+atacados?|tradiciones\s+familiares)\b', re.IGNORECASE),
-                    # Anti-trans rhetoric
+                    # Only the most obvious anti-trans patterns
                     re.compile(r'\b(?:hombres\s+con\s+vestidos?|mujeres\s+con\s+pantalones?)\b', re.IGNORECASE),
                     re.compile(r'\b(?:biología\s+binaria|hay\s+solo\s+dos\s+géneros)\b', re.IGNORECASE),
                     re.compile(r'\b(?:deporte\s+femenino\s+contaminado|deporte\s+femenino\s+invadido)\b', re.IGNORECASE),

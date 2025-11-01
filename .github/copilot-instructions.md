@@ -376,7 +376,7 @@ When working on this codebase, prioritize understanding the multi-stage analysis
    - Multi-step enhancement is done
    - Documentation updates are complete
 3. **NOT triggered by**: Single file edits, partial implementations, or intermediate steps
-4. **Coverage Verification Required**: Before committing, verify test coverage is 70% or higher using `./run_in_venv.sh test-coverage`
+4. **Coverage Verification Required**: Before committing, verify test coverage is 80% or higher using `./run_in_venv.sh test-coverage`
 5. **Ask for Confirmation**: Prompt user before committing with suggested commit message
 6. **User Response Required**: Wait for explicit "yes" or "go ahead" before proceeding
 7. **Automatic Commit**: Stage all changes and create a descriptive commit message (after confirmation)
@@ -387,8 +387,8 @@ When working on this codebase, prioritize understanding the multi-stage analysis
 
 **EXECUTION STEPS**:
 1. Verify the complete feature/fix/refactor is finished
-3. If coverage is below 70%: add tests to reach threshold before proceeding
-4. Ask user: "This feature/fix/refactor appears complete and test coverage is 70%+. Would you like me to commit and push these changes with message: '[proposed commit message]'?"
+3. If coverage is below 80%: add tests to reach threshold before proceeding
+4. Ask user: "This feature/fix/refactor appears complete and test coverage is 80%+. Would you like me to commit and push these changes with message: '[proposed commit message]'?"
 5. **WAIT FOR USER RESPONSE** - Do not proceed without explicit confirmation
 6. If confirmed: `git add .` to stage all changes
 7. `git commit -m "descriptive message"`
