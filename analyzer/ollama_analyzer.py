@@ -19,12 +19,13 @@ class OllamaAnalyzer:
     """
     
     # Default generation parameters
-    DEFAULT_TEMPERATURE_TEXT = 0.3
-    DEFAULT_MAX_TOKENS = 512
+    DEFAULT_TEMPERATURE_TEXT = 0.2 # the lower, the less creativity
+    DEFAULT_MAX_TOKENS = 200 # less token, less time to generate a longer response
     DEFAULT_TEMPERATURE_MULTIMODAL = 0.2
-    DEFAULT_TOP_P_MULTIMODAL = 0.7
+    DEFAULT_TOP_P = 0.7 # reduces token examples so reduces probability
     DEFAULT_NUM_PREDICT_MULTIMODAL = 250
-    DEFAULT_KEEP_ALIVE = "24h"
+    DEFAULT_KEEP_ALIVE = "72h"
+    DETAULT_SEED = 42 # just a fixed number to force determinist responses
     
     # Media handling settings
     DEFAULT_MEDIA_TIMEOUT = 5.0
@@ -184,6 +185,7 @@ class OllamaAnalyzer:
                 options={
                     "temperature": self.DEFAULT_TEMPERATURE_TEXT,
                     "num_predict": self.DEFAULT_MAX_TOKENS,
+                    "top_p": self.DEFAULT_TOP_P
                 }
             )
         except OllamaRetryError as e:
@@ -210,9 +212,9 @@ class OllamaAnalyzer:
                 model=self.model,
                 system_prompt=system_prompt,
                 options={
-                    "temperature": self.DEFAULT_TEMPERATURE_MULTIMODAL,
-                    "top_p": self.DEFAULT_TOP_P_MULTIMODAL,
-                    "num_predict": self.DEFAULT_NUM_PREDICT_MULTIMODAL,
+                    "temperature": self.DEFAULT_TEMPERATURE_TEXT,
+                    "num_predict": self.DEFAULT_MAX_TOKENS,
+                    "top_p": self.DEFAULT_TOP_P
                 },
                 keep_alive=self.DEFAULT_KEEP_ALIVE
             )

@@ -22,21 +22,21 @@ class MultiModelAnalyzer:
             "multimodal": True,
             "description": "Fast 4B parameter model"
         },
-        "gemma3:12b": {
-            "type": "fast",
-            "multimodal": True,
-            "description": "Fast 12B parameter model"
-        },
+#        "gemma3:12b": {
+#            "type": "fast",
+#            "multimodal": True,
+#            "description": "Fast 12B parameter model"
+#        },
         "gemma3:27b-it-qat": {
             "type": "accurate",
             "multimodal": True,
             "description": "Large 27B parameter model with quantization"
         },
-        "gpt-oss:20b": {
-            "type": "balanced",
-            "multimodal": False,
-            "description": "Balanced 20B parameter text-only model"
-        }
+#        "gpt-oss:20b": {
+#            "type": "balanced",
+#            "multimodal": False,
+#            "description": "Balanced 20B parameter text-only model"
+#        }
     }
     
     def __init__(self, verbose: bool = False):

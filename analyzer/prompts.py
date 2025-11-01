@@ -123,10 +123,12 @@ Ejemplos de disinformation política:
 - "CONFIRMADO: El Gobierno ha aprobado un decreto que prohíbe las manifestaciones públicas. Ya está firmado y entra en vigor mañana." (NO fuente oficial - decreto sin BOE)
 - "El Gobierno ha decidido obligar a todos los ciudadanos a..." (NO fuente oficial - medida restrictiva sin confirmación)
 
-Ejemplos de political_general (con fuente):
+Ejemplos de political_general (NO disinformation):
 - "Según BOE, el Gobierno aprueba nuevo decreto" (SÍ fuente: BOE)
 - "El PSOE confirma la dimisión de X, informa Europa Press" (SÍ fuente)
-- "Moncloa anuncia cese de ministra por motivos personales" (SÍ fuente oficial)"""
+- "Moncloa anuncia cese de ministra por motivos personales" (SÍ fuente oficial)
+- "¡Si el CIS dice que arrasan!" (IRONÍA - cuestionamiento sarcástico)
+"""
 
     @classmethod
     def build_base_format_instructions(cls) -> str:
@@ -147,6 +149,57 @@ IMPORTANTE - LENGUAJE DE LA EXPLICACIÓN:
   * nationalism → "nacionalismo"
   * anti_government → "retórica anti-gubernamental"
 - La explicación debe ser natural y fluida en español, sin términos técnicos en inglés"""
+
+    @classmethod
+    def build_common_critical_rules(cls) -> str:
+        """Build common critical classification rules shared between text and multimodal prompts."""
+        return """
+⚠️ REGLAS CRÍTICAS DE CLASIFICACIÓN:
+
+1. **ANTI_IMMIGRATION**: DEBE mencionar inmigración/inmigrantes EXPLÍCITAMENTE
+   - NO es anti_immigration solo porque mencione cultura o tradiciones españolas
+   - Hablar de tauromaquia, flamenco, cultura española SIN mencionar inmigración = general
+   - SOLO clasifica como anti_immigration si presenta inmigración como amenaza
+
+2. **DISINFORMATION**: Claims verificables presentados COMO HECHOS CONFIRMADOS sin fuente oficial
+   - DEBE presentarse como noticia/información factual verificable (no opinión política)
+   - ✅ ES disinformation: "El gobierno aprobó ley X sin consulta" (sin BOE confirmado)
+   - ✅ ES disinformation: "Ministro Y renunció ayer" (sin confirmación oficial)
+   - ✅ ES disinformation: "El BOE publicó decreto Z" (cuando no existe)
+   - ❌ NO es disinformation: Crítica política partidista ("el PP/PSOE es inconsistente")
+   - ❌ NO es disinformation: Opiniones sobre comportamiento político ("dicen una cosa, hacen otra")
+   - ❌ NO es disinformation: Caracterizaciones políticas ("nos estafan", "se ríen de nosotros")
+   - ❌ NO es disinformation: Retórica común en discurso político de oposición
+   - ❌ NO es disinformation: IRONÍA o SARCASMO sobre instituciones ("¡si el CIS dice que arrasan!")
+   - ❌ NO es disinformation: Cuestionamiento irónico de credibilidad sin afirmar hechos concretos
+   - ❌ NO es disinformation: CONTENIDO PROMOCIONAL o ANUNCIOS (entrevistas, programas, eventos)
+   - ❌ NO es disinformation: REFERENCIAS NO POLÍTICAS al tiempo ("a las tres", "cambio horario")
+   - ❌ NO es disinformation: MENCIONES A CANALES o FUENTES SIN afirmar hechos falsos en el texto
+
+3. **HATE_SPEECH**: Ataques directos, insultos o DESHUMANIZACIÓN hacia individuos o grupos políticos
+   - INCLUYE comparaciones con animales ("especimen", "cerdo", "rata"), objetos, enfermedades
+   - INCLUYE sarcasmo despectivo, burlas degradantes, lenguaje que sugiere inferioridad
+   - ✅ ES hate_speech: "Político X es como un [animal]", "se comporta como [animal]"
+   - ❌ NO es hate_speech: Crítica política normal ("no está de acuerdo", "políticas equivocadas")
+   - ❌ NO es hate_speech: Desacuerdos políticos sin insultos ni deshumanización
+
+4. **CRÍTICO PARA ANTI_GOVERNMENT**:
+    - SOLO si retrata al gobierno como ILEGÍTIMO, ABUSIVO, PERSECUTOR o AUTORITARIO
+    - ✅ ES anti_government: "Gobierno ilegítimo", "dictadura encubierta", "nos persiguen por pensar diferente"
+    - ✅ ES anti_government: "Censuran a la oposición", "Estado policial", "silencian voces disidentes"
+    - ❌ NO es anti_government: Crítica política normal ("Feijóo/Sánchez no cumple", "mienten constantemente")
+    - ❌ NO es anti_government: Desacuerdo con políticas ("malas decisiones", "gestión incompetente")
+    - ❌ NO es anti_government: Retórica de oposición estándar ("no se puede confiar en ellos")
+    - Si es solo crítica política sin acusaciones de ilegitimidad/persecución → political_general   
+
+5. **CRÍTICO PARA POLÍTICO_GENERAL**:
+- SOLO si el contenido menciona partidos políticos, figuras públicas, o temas políticos SIN características extremistas
+- ✅ ES political_general: Menciones a PSOE, PP, VOX, Podemos sin ataques o desinformación
+- ✅ ES political_general: Opiniones políticas moderadas sobre eventos o políticas
+- ❌ NO es political_general: Si tiene elementos de odio, desinformación, o extremismo → usar categoría específica
+- Si NO hay mención política alguna → usar general    
+
+"""
 
 # ============================================================================
 # ENHANCED PROMPT GENERATOR CLASS
@@ -209,22 +262,7 @@ Clasifica este texto en UNA categoría: {categories}
 
 {PromptBuilder.build_category_definitions()}
 
-⚠️ REGLAS CRÍTICAS DE CLASIFICACIÓN:
-
-1. **ANTI_IMMIGRATION**: DEBE mencionar inmigración/inmigrantes EXPLÍCITAMENTE
-   - NO es anti_immigration solo porque mencione cultura o tradiciones españolas
-   - Hablar de tauromaquia, flamenco, cultura española SIN mencionar inmigración = general
-   - SOLO clasifica como anti_immigration si presenta inmigración como amenaza
-
-2. **DISINFORMATION**: Claims verificables presentados COMO HECHOS CONFIRMADOS sin fuente oficial
-   - DEBE presentarse como noticia/información factual verificable (no opinión política)
-   - ✅ ES disinformation: "El gobierno aprobó ley X sin consulta" (sin BOE confirmado)
-   - ✅ ES disinformation: "Ministro Y renunció ayer" (sin confirmación oficial)
-   - ✅ ES disinformation: "El BOE publicó decreto Z" (cuando no existe)
-   - ❌ NO es disinformation: Crítica política partidista ("el PP/PSOE es inconsistente")
-   - ❌ NO es disinformation: Opiniones sobre comportamiento político ("dicen una cosa, hacen otra")
-   - ❌ NO es disinformation: Caracterizaciones políticas ("nos estafan", "se ríen de nosotros")
-   - ❌ NO es disinformation: Retórica común en discurso político de oposición
+{PromptBuilder.build_common_critical_rules()}
 
 {PromptBuilder.build_base_format_instructions()}
 """
@@ -264,12 +302,12 @@ Clasifica este texto en UNA categoría: {categories}
             f"CATEGORÍAS DISPONIBLES: {categories}",
             "",
             "🎯 DIRECTRICES PARA CLASIFICACIÓN EN INVESTIGACIÓN:",
-            "- hate_speech: Ataques visuales/textuales directos a grupos étnicos específicos O grupos políticos presentados como amenaza existencial",
+            "- hate_speech: Ataques directos, insultos o DESHUMANIZACIÓN (comparaciones con animales, objetos, enfermedades) hacia individuos o grupos políticos. INCLUYE sarcasmo despectivo, burlas degradantes, lenguaje que sugiere inferioridad o incompatibilidad fundamental",
             "- anti_immigration: Elementos visuales de retórica anti-inmigración o xenofobia",
             "- anti_lgbtq: Contenido visual que ataca identidad LGBTQ o diversidad de género",
             "- anti_feminism: Elementos visuales que promueven roles tradicionales de género",
             "- nationalism: Símbolos patrios y expresiones de orgullo nacional",
-            "- anti_government: Contenido visual que cuestiona legitimidad institucional",
+            "- anti_government: Retrata al gobierno como ILEGÍTIMO, ABUSIVO o PERSECUTOR (no simple crítica política)",
             "- disinformation: Imágenes manipuladas o texto con datos falsos no políticos",
             "- conspiracy_theory: Símbolos de teorías conspirativas o élites ocultas",
             "- call_to_action: Elementos visuales que incitan a movilización colectiva",
@@ -378,30 +416,19 @@ Clasifica este texto en UNA categoría: {categories}
 CATEGORÍAS: {categories}
 
 DEFINICIONES CLAVE:
-- hate_speech: Ataques directos, insultos o deshumanización a grupos étnicos/políticos
+- hate_speech: Ataques directos, insultos o DESHUMANIZACIÓN (comparaciones con animales, objetos, enfermedades) hacia individuos o grupos políticos. INCLUYE sarcasmo despectivo, burlas degradantes, lenguaje que sugiere inferioridad o incompatibilidad fundamental
 - anti_immigration: Retórica xenófoba, narrativas anti-inmigración
 - anti_lgbtq: Ataques a identidad LGBTQ o diversidad de género
 - anti_feminism: Promoción de roles tradicionales de género
 - nationalism: Orgullo patrio, símbolos nacionales, "España primero"
-- anti_government: Cuestionamiento de legitimidad institucional
+- anti_government: Retrata al gobierno como ILEGÍTIMO, ABUSIVO o PERSECUTOR (no simple crítica política)
 - disinformation: Afirmaciones políticas verificables SIN fuente oficial (BOE, ministerio, etc.)
 - conspiracy_theory: Narrativas de élites ocultas, planes secretos
 - call_to_action: Movilización colectiva, llamados a acción coordinada
-- general: Contenido político neutral sin elementos problemáticos
+- political_general: Contenido político general sin características extremistas (menciones a partidos políticos, opiniones políticas moderadas)
+- general: Contenido neutral sin elementos políticos o problemáticos
 
-⚠️ CRÍTICO PARA DISINFORMATION:
-- SOLO si presenta HECHO VERIFICABLE como noticia/información confirmada SIN fuente oficial
-- ✅ ES disinformation: "El BOE publicó decreto X", "El gobierno aprobó ley Y", "Ministro Z renunció"
-- ❌ NO es disinformation: Crítica política partidista ("el PP/PSOE miente", "son inconsistentes")
-- ❌ NO es disinformation: Opinión sobre comportamiento político ("dicen una cosa, hacen otra")
-- ❌ NO es disinformation: Caracterizaciones políticas ("nos estafan", "se ríen de nosotros")
-- ❌ NO es disinformation: Retórica común en discurso político de oposición
-
-⚠️ CRÍTICO PARA ANTI_IMMIGRATION:
-- NO es anti_immigration solo porque mencione cultura/tradiciones españolas
-- DEBE mencionar inmigración, inmigrantes, extranjeros EXPLÍCITAMENTE
-- Hablar de tauromaquia, cultura española, tradiciones SIN mencionar inmigración = general (NO anti_immigration)
-- SOLO clasifica como anti_immigration si el texto presenta inmigración como amenaza
+{PromptBuilder.build_common_critical_rules()}
 
 ANÁLISIS MULTIMODAL:
 - Examina TEXTO + IMÁGENES juntos
