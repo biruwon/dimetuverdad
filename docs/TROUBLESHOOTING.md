@@ -449,7 +449,7 @@ ollama ps
 curl http://localhost:5000
 
 # Verify database connectivity
-python -c "from utils.database import get_db_connection; conn = get_db_connection(); print('Database connected')"
+python -c "from database import get_db_connection; conn = get_db_connection(); print('Database connected')"
 
 # Check system resources
 df -h  # Disk space

@@ -10,7 +10,7 @@ from analyzer.repository import ContentAnalysisRepository
 from analyzer.models import ContentAnalysis
 from analyzer.categories import Categories
 from analyzer.constants import DatabaseConstants
-from utils.database import get_db_connection_context
+from database import get_db_connection_context
 
 class TestContentAnalysisRepository:
     """Test the ContentAnalysisRepository class."""

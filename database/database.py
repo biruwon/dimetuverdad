@@ -6,9 +6,7 @@ Provides environment-isolated database connections and configuration.
 import sqlite3
 import os
 import threading
-import fcntl
 import glob
-import tempfile
 import uuid
 import atexit
 import stat

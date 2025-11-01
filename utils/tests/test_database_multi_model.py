@@ -7,8 +7,8 @@ import pytest
 import sqlite3
 from datetime import datetime
 from unittest.mock import Mock, patch
-from utils import database_multi_model
-from utils.database import get_db_connection_context
+from database import database_multi_model
+from database import get_db_connection_context
 
 
 @pytest.fixture

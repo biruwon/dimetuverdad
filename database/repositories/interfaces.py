@@ -3,7 +3,7 @@ Repository pattern interfaces for database abstraction.
 Provides platform-agnostic data access interfaces.
 """
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Optional, Dict, List, Any, Protocol
 from datetime import datetime
 

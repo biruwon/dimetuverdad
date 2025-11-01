@@ -8,7 +8,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 from utils import paths
-from repositories import get_tweet_repository
+from database.repositories import get_tweet_repository
 
 DB_PATH = str(paths.get_db_path())
 
@@ -28,7 +28,7 @@ def delete_account_data(username: str) -> Dict[str, int]:
         
         # For analyses count, we need to use direct access since content analysis repo might not have username filtering
         # This is a specialized operation that may need to stay direct for now
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) AS analyses_count FROM content_analyses WHERE author_username = ?", (username,))
@@ -36,7 +36,7 @@ def delete_account_data(username: str) -> Dict[str, int]:
             analyses_count = row['analyses_count'] if row else 0
 
         # Delete tweets using direct access (for now, since repository doesn't have delete method)
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,))
@@ -46,7 +46,7 @@ def delete_account_data(username: str) -> Dict[str, int]:
             conn.commit()
 
         # Delete analyses using direct access (for now)
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             cur = conn.cursor()
             cur.execute("DELETE FROM content_analyses WHERE author_username = ?", (username,))
@@ -141,18 +141,10 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
 def check_if_tweet_exists(username: str, tweet_id: str) -> bool:
     """Check if a tweet already exists in the database."""
     try:
-        from utils.database import get_db_connection_context
-        with get_db_connection_context() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                SELECT 1 FROM tweets 
-                WHERE username = ? AND tweet_id = ?
-            """, (username, tweet_id))
-
-            result = cursor.fetchone()
-
-            return result is not None
+        # Use repository pattern
+        tweet_repo = get_tweet_repository()
+        tweet = tweet_repo.get_tweet_by_id(tweet_id)
+        return tweet is not None and tweet.get('username') == username
 
     except Exception as e:
         print(f"  ⚠️ Error checking if tweet exists: {e}")
@@ -190,7 +182,7 @@ def save_account_profile_info(conn, username: str, profile_pic_url: str = None):
 
 def init_db():
     """Initialize database with schema."""
-    from utils.database import get_db_connection
+    from database import get_db_connection
     conn = get_db_connection()
     c = conn.cursor()
     
@@ -229,7 +221,7 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
         bool: True if successful
     """
     try:
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             c = conn.cursor()
                         

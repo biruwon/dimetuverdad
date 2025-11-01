@@ -4,7 +4,7 @@ import tempfile
 import pytest
 from datetime import datetime
 from fetcher import db
-from utils.database import init_test_database, cleanup_test_database, _create_test_database_schema
+from database import init_test_database, cleanup_test_database, create_fresh_database_schema
 from utils.paths import get_db_path
 
 
@@ -22,7 +22,7 @@ def test_db(tmp_path):
     
     # Ensure database exists and has schema
     if not os.path.exists(unique_db_path):
-        _create_test_database_schema(unique_db_path)
+        create_fresh_database_schema(unique_db_path)
     
     yield unique_db_path
     

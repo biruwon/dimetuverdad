@@ -35,10 +35,10 @@ from fetcher.media_monitor import MediaMonitor
 from fetcher.resume_manager import ResumeManager
 from fetcher.refetch_manager import RefetchManager
 from utils import paths
-from repositories import get_tweet_repository
+from database.repositories import get_tweet_repository
 from playwright.sync_api import sync_playwright, TimeoutError
 from datetime import datetime
-from utils.database import get_db_connection_context
+from database import get_db_connection_context
 
 # Import performance tracking utility
 from utils.performance import start_tracking, stop_tracking, print_performance_summary

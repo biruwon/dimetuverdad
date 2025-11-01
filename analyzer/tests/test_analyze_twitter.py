@@ -24,7 +24,7 @@ from analyzer.models import ContentAnalysis
 from analyzer.repository import ContentAnalysisRepository
 from analyzer.categories import Categories
 from analyzer.external_analyzer import ExternalAnalysisResult
-from utils.database import get_db_connection_context
+from database import get_db_connection_context
 
 class TestContentAnalysis(unittest.TestCase):
     """Test the ContentAnalysis dataclass."""

@@ -9,7 +9,7 @@ import os
 from typing import Dict, Any
 from analyzer.models import ContentAnalysis
 from analyzer.categories import Categories
-from utils.database import init_test_database, cleanup_test_database, _create_test_database_schema
+from database import init_test_database, cleanup_test_database, create_fresh_database_schema
 from utils import paths
 
 
@@ -53,7 +53,7 @@ def setup_test_database(test_db_path):
 
     # Ensure database exists and has schema
     if not os.path.exists(test_db_path):
-        _create_test_database_schema(test_db_path)
+        create_fresh_database_schema(test_db_path)
 
     yield
 

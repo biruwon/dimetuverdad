@@ -27,7 +27,7 @@ def index() -> str:
     # Filter accounts by category if specified
     if category_filter and category_filter != 'all':
         filtered_accounts = []
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             for account in accounts_data['accounts']:
                 # Check if account has posts in this category
@@ -52,7 +52,7 @@ def index() -> str:
 
     @cache.memoize(timeout=600)
     def get_overall_stats_cached():
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             overall_stats = conn.execute("""
             SELECT
@@ -65,7 +65,7 @@ def index() -> str:
 
     @cache.memoize(timeout=600)
     def get_analysis_distribution_cached():
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             analysis_distribution = conn.execute("""
             SELECT

@@ -20,8 +20,8 @@ from typing import Optional, List, Dict
 from datetime import datetime
 from analyzer.multi_model_analyzer import MultiModelAnalyzer
 from analyzer.categories import Categories
-from utils.database import get_db_connection_context
-from utils import database_multi_model
+from database import get_db_connection_context
+from database import database_multi_model
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")

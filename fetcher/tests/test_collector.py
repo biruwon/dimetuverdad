@@ -164,7 +164,7 @@ class TestTweetCollector:
 
         assert result is False
 
-    @patch('utils.database.get_db_connection_context')
+    @patch('database.get_db_connection_context')
     def test_log_processing_error(self, mock_get_conn, collector):
         """Test processing error logging."""
         mock_conn = Mock()
@@ -179,7 +179,7 @@ class TestTweetCollector:
         mock_cur.execute.assert_called_once()
         mock_conn.commit.assert_called_once()
 
-    @patch('utils.database.get_db_connection_context')
+    @patch('database.get_db_connection_context')
     def test_log_processing_error_no_tweet_id(self, mock_context, collector, mock_config):
         """Test processing error logging without tweet ID."""
         mock_conn = Mock()
@@ -194,7 +194,7 @@ class TestTweetCollector:
         call_args = mock_cur.execute.call_args[0]
         assert call_args[1][1] is None  # tweet_id parameter
 
-    @patch('utils.database.get_db_connection_context')
+    @patch('database.get_db_connection_context')
     def test_log_processing_error_db_failure(self, mock_context, collector):
         """Test processing error logging when DB fails."""
         mock_context.side_effect = Exception("Connection failed")

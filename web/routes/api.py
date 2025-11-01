@@ -5,7 +5,7 @@ Contains REST API endpoints for external integrations.
 
 from flask import Blueprint, request, jsonify
 from web.utils.decorators import rate_limit
-from utils import database
+from database import get_db_connection
 import config
 import logging
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -13,7 +13,7 @@ api_bp.logger = logging.getLogger('web.routes.api')
 
 def get_db_connection():
     """Get database connection with row factory for easier access."""
-    return database.get_db_connection()
+    return get_db_connection()
 
 @api_bp.route('/feedback', methods=['POST'])
 @rate_limit(**config.get_rate_limit('api_endpoints'))
@@ -42,14 +42,12 @@ def submit_feedback() -> str:
         user_ip = request.remote_addr
 
         # Check if tweet exists
-        from utils.database import get_db_connection_context
-        with get_db_connection_context() as conn:
-            tweet_exists = conn.execute("""
-                SELECT tweet_id FROM tweets WHERE tweet_id = ?
-            """, (tweet_id,)).fetchone()
+        from database.repositories import get_tweet_repository
+        tweet_repo = get_tweet_repository()
+        tweet_exists = tweet_repo.get_tweet_by_id(tweet_id)
 
-            if not tweet_exists:
-                return jsonify({'error': 'Tweet not found'}), 404
+        if not tweet_exists:
+            return jsonify({'error': 'Tweet not found'}), 404
 
             # Check for recent feedback from this IP for this tweet (rate limiting)
             recent_feedback = conn.execute("""
@@ -84,7 +82,7 @@ def submit_feedback() -> str:
 def get_tweet_versions(tweet_id: str) -> str:
     """API endpoint to get version history for edited tweets."""
     try:
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             # Get current tweet data
             current_tweet = conn.execute("""
@@ -152,27 +150,25 @@ def get_tweet_versions(tweet_id: str) -> str:
 def get_tweet_status(tweet_id: str) -> str:
     """API endpoint to check if a tweet exists and get basic status."""
     try:
-        from utils.database import get_db_connection_context
-        with get_db_connection_context() as conn:
-            # Check if tweet exists
-            tweet = conn.execute("""
-                SELECT 
-                    t.tweet_id, t.username, t.content,
-                    ca.category, ca.analysis_stages, ca.external_analysis_used
-                FROM tweets t
-                LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
-                WHERE t.tweet_id = ?
-            """, (tweet_id,)).fetchone()
+        from database.repositories import get_tweet_repository, get_content_analysis_repository
+        tweet_repo = get_tweet_repository()
+        analysis_repo = get_content_analysis_repository()
+        
+        # Check if tweet exists
+        tweet = tweet_repo.get_tweet_by_id(tweet_id)
         
         if tweet:
+            # Get analysis data
+            analysis = analysis_repo.get_analysis_by_post_id(tweet_id)
+            
             return jsonify({
                 'exists': True,
                 'tweet_id': tweet['tweet_id'],
                 'username': tweet['username'],
-                'analyzed': tweet['category'] is not None,
-                'category': tweet['category'],
-                'analysis_stages': tweet['analysis_stages'],
-                'external_analysis_used': tweet['external_analysis_used']
+                'analyzed': analysis is not None,
+                'category': analysis.get('category') if analysis else None,
+                'analysis_stages': analysis.get('analysis_stages') if analysis else None,
+                'external_analysis_used': analysis.get('external_analysis_used') if analysis else False
             })
         else:
             return jsonify({'exists': False}), 404
@@ -192,14 +188,12 @@ def reanalyze_multi_model(post_id: str) -> str:
         import os
         
         # Check if post exists
-        from utils.database import get_db_connection_context
-        with get_db_connection_context() as conn:
-            tweet_exists = conn.execute("""
-                SELECT tweet_id FROM tweets WHERE tweet_id = ?
-            """, (post_id,)).fetchone()
+        from database.repositories import get_tweet_repository
+        tweet_repo = get_tweet_repository()
+        tweet_exists = tweet_repo.get_tweet_by_id(post_id)
 
-            if not tweet_exists:
-                return jsonify({'error': 'Post not found'}), 404
+        if not tweet_exists:
+            return jsonify({'error': 'Post not found'}), 404
 
         # Run the multi-model analysis script
         try:

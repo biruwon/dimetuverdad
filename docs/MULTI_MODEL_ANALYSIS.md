@@ -8,7 +8,7 @@ The multi-model analysis system enables parallel analysis of content using multi
 
 ### Components
 
-1. **Database Layer** (`utils/database_multi_model.py`)
+1. **Database Layer** (`database/database_multi_model.py`)
    - `model_analyses` table: Stores individual model results
    - `content_analyses` extensions: Tracks multi-model consensus
    - Functions for saving, retrieving, and analyzing model comparisons
@@ -237,7 +237,7 @@ results = await analyzer.analyze_with_multiple_models(
 
 ```python
 from utils import database_multi_model
-from utils.database import get_db_connection_context
+from database import get_db_connection_context
 
 with get_db_connection_context() as conn:
     # Save model analysis

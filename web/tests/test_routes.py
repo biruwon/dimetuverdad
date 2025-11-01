@@ -8,7 +8,7 @@ import sqlite3
 import os
 from unittest.mock import Mock, patch, MagicMock
 from web.tests.conftest import TestHelpers, MockRow
-from utils.database import get_db_connection_context
+from database import get_db_connection_context
 
 
 class TestMainRoutes:
@@ -457,7 +457,7 @@ class TestErrorHandlers:
     def test_500_error(self, client):
         """Test 500 error handler."""
         # Mock get_db_connection_context to raise a database error
-        with patch('utils.database.get_db_connection_context') as mock_get_db:
+        with patch('database.get_db_connection_context') as mock_get_db:
             mock_get_db.side_effect = sqlite3.OperationalError("database is locked")
 
             response = client.get('/')

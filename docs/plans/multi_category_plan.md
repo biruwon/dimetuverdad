@@ -370,7 +370,7 @@ def get_category_combinations(self) -> Dict[str, int]:
 
 #### 5.3 Files to Modify
 - `analyzer/repository.py` - Update save/retrieve methods
-- `repositories/interfaces.py` - Update interface definitions
+- `database/repositories/interfaces.py` - Update interface definitions
 - `analyzer/tests/test_repository.py` - Add multi-category storage tests
 
 **Estimated time:** 1 day
@@ -618,7 +618,7 @@ In `web/templates/models_dashboard.html`:
 
 #### 7.4 Files to Modify
 - `scripts/analyze_multi_model.py` - Update to handle multi-categories
-- `utils/database_multi_model.py` - Update consensus logic
+- `database/database_multi_model.py` - Update consensus logic
 - `web/templates/models_dashboard.html` - Update display
 - `web/routes/models.py` - Update data processing
 
@@ -724,7 +724,7 @@ def bulk_add_category():
 #### 8.4 Files to Modify
 - `web/templates/admin/edit_analysis.html` - Multi-select interface
 - `web/routes/admin.py` - Update handlers
-- `repositories/content_analysis_repository.py` - Add update_categories method
+- `database/repositories/sqlite_impl.py` - Add update_categories method
 
 **Estimated time:** 1 day
 

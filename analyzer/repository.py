@@ -7,11 +7,10 @@ import sqlite3
 import json
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
-from contextlib import contextmanager
 from .models import ContentAnalysis
 from .constants import DatabaseConstants
-from repositories import get_tweet_repository, get_content_analysis_repository
-from utils.database import get_db_connection_context
+from database.repositories import get_tweet_repository, get_content_analysis_repository
+from database import get_db_connection_context
 
 class ContentAnalysisRepository:
     """

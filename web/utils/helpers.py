@@ -15,7 +15,7 @@ import math
 from datetime import datetime
 
 # Import repository interfaces
-from repositories import (
+from database.repositories import (
     get_tweet_repository,
     get_content_analysis_repository,
     get_account_repository
@@ -26,7 +26,7 @@ def get_db_connection():
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
-    from utils.database import get_db_connection as db_get_connection
+    from database import get_db_connection as db_get_connection
     return db_get_connection()
 
 
@@ -220,27 +220,36 @@ def handle_manual_update_action(tweet_id, new_category, new_explanation) -> None
         flash('Categoría y explicación son requeridas', 'error')
         return
 
-    from utils.database import get_db_connection_context
-    with get_db_connection_context() as conn:
-        # Check if analysis exists
-        row = conn.execute("SELECT post_id FROM content_analyses WHERE post_id = ?", (tweet_id,)).fetchone()
-        if row:
-            # Update existing analysis (manual override)
-            conn.execute("UPDATE content_analyses SET category = ?, local_explanation = ?, analysis_stages = 'manual', analysis_timestamp = CURRENT_TIMESTAMP WHERE post_id = ?", (new_category, new_explanation, tweet_id))
-            conn.commit()
-            success = True
+    tweet_repo = get_tweet_repository()
+    content_analysis_repo = get_content_analysis_repository()
+
+    # Check if analysis exists
+    existing_analysis = content_analysis_repo.get_analysis_by_post_id(tweet_id)
+
+    if existing_analysis:
+        # Update existing analysis (manual override)
+        update_data = {
+            'category': new_category,
+            'local_explanation': new_explanation,
+            'analysis_stages': 'manual'
+        }
+        success = content_analysis_repo.update_analysis(tweet_id, update_data)
+    else:
+        # Create new analysis entry
+        tweet_data = tweet_repo.get_tweet_by_id(tweet_id)
+        if tweet_data:
+            analysis_data = {
+                'post_id': tweet_id,
+                'category': new_category,
+                'local_explanation': new_explanation,
+                'analysis_stages': 'manual',
+                'author_username': tweet_data.get('username'),
+                'post_content': tweet_data.get('content'),
+                'post_url': tweet_data.get('tweet_url')
+            }
+            success = content_analysis_repo.save_analysis(analysis_data)
         else:
-            # Create new analysis entry
-            tweet_row = conn.execute("SELECT username, content, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,)).fetchone()
-            if tweet_row:
-                conn.execute("""
-                    INSERT INTO content_analyses (post_id, category, local_explanation, analysis_stages, author_username, post_content, post_url, analysis_timestamp)
-                    VALUES (?, ?, ?, 'manual', ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (tweet_id, new_category, new_explanation, tweet_row['username'], tweet_row['content'], tweet_row['tweet_url']))
-                conn.commit()
-                success = True
-            else:
-                success = False
+            success = False
 
     if success:
         flash('Análisis actualizado correctamente', 'success')
@@ -384,52 +393,34 @@ def get_account_statistics(username) -> Dict[str, Any]:
 
 def get_all_accounts(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
     """Get list of all accounts with basic stats, paginated and sorted by non-general posts."""
-    from utils.database import get_db_connection_context
-    with get_db_connection_context() as conn:
-        rows = conn.execute("""
-            SELECT username, profile_pic_url, last_scraped
-            FROM accounts
-            ORDER BY last_scraped DESC
-            LIMIT ? OFFSET ?
-        """, (per_page, (page - 1) * per_page)).fetchall()
-        total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM accounts").fetchone()
-        # Use direct column access by name - simpler and more reliable
-        total_count = total_count_row['cnt'] if total_count_row else 0
+    account_repo = get_account_repository()
+    tweet_repo = get_tweet_repository()
+    content_analysis_repo = get_content_analysis_repository()
 
-        accounts_with_stats = []
-        for r in rows:
-            username = r['username']
-            profile_pic_url = r['profile_pic_url']
-            last_scraped = r['last_scraped']
+    # Get accounts with stats
+    accounts_data = account_repo.get_accounts_with_stats(limit=per_page, offset=(page - 1) * per_page)
 
-            # Get tweet count for this account
-            tweet_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
-            tweet_count = tweet_count_row['cnt'] if tweet_count_row else 0
+    # Get total count
+    all_accounts = account_repo.get_all_accounts()
+    total_count = len(all_accounts)
 
-            # Get analyzed posts count
-            analyzed_count_row = conn.execute("""
-                SELECT COUNT(*) AS cnt FROM content_analyses ca
-                JOIN tweets t ON ca.post_id = t.tweet_id
-                WHERE t.username = ?
-            """, (username,)).fetchone()
-            analyzed_posts = analyzed_count_row['cnt'] if analyzed_count_row else 0
+    accounts_with_stats = []
+    for account in accounts_data:
+        username = account['username']
 
-            # Get problematic posts count (non-general categories)
-            problematic_count_row = conn.execute("""
-                SELECT COUNT(*) AS cnt FROM content_analyses ca
-                JOIN tweets t ON ca.post_id = t.tweet_id
-                WHERE t.username = ? AND ca.category != 'general'
-            """, (username,)).fetchone()
-            problematic_posts = problematic_count_row['cnt'] if problematic_count_row else 0
+        # Get additional stats if needed
+        tweet_count = account.get('tweet_count', tweet_repo.get_tweet_count_by_username(username))
+        analyzed_posts = account.get('analyzed_posts', 0)
+        problematic_posts = account.get('problematic_posts', 0)
 
-            accounts_with_stats.append({
-                'username': username,
-                'profile_pic_url': profile_pic_url,
-                'last_activity': last_scraped,
-                'tweet_count': tweet_count,
-                'analyzed_posts': analyzed_posts,
-                'problematic_posts': problematic_posts
-            })
+        accounts_with_stats.append({
+            'username': username,
+            'profile_pic_url': account.get('profile_pic_url'),
+            'last_activity': account.get('last_scraped') or account.get('last_activity'),
+            'tweet_count': tweet_count,
+            'analyzed_posts': analyzed_posts,
+            'problematic_posts': problematic_posts
+        })
 
     return {
         'accounts': accounts_with_stats,

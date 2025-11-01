@@ -3,8 +3,8 @@ Multi-Model Analysis Routes: Web interface for viewing and comparing multi-model
 """
 
 from flask import Blueprint, render_template, jsonify, request
-from utils.database import get_db_connection_context
-from utils import database_multi_model
+from database import get_db_connection_context
+from database import database_multi_model
 from analyzer.categories import Categories
 
 models_bp = Blueprint('models', __name__, url_prefix='/models')

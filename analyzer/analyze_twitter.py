@@ -16,7 +16,7 @@ from .metrics import MetricsCollector
 from .repository import ContentAnalysisRepository
 from .flow_manager import AnalysisFlowManager
 from .models import ContentAnalysis
-from utils.database import get_db_connection_context
+from database import get_db_connection_context
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
 
-from utils.database import get_db_connection
+from database import get_db_connection
 from ..core.models import VerificationResult, VerificationVerdict, EvidenceSource
 from .claim_verifier import VerificationContext
 

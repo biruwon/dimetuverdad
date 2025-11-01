@@ -3,18 +3,16 @@ SQLite implementations of repository interfaces.
 Concrete implementations using SQLite database.
 """
 
-import sqlite3
 from typing import Optional, Dict, List, Any
 from datetime import datetime
 from contextlib import contextmanager
-
+from ..database import get_db_connection
 from .interfaces import (
     TweetRepositoryInterface,
     ContentAnalysisRepositoryInterface,
     AccountRepositoryInterface,
     PostEditRepositoryInterface
 )
-
 
 class SQLiteRepositoryBase:
     """Base class for SQLite repositories."""
@@ -24,8 +22,7 @@ class SQLiteRepositoryBase:
         self._connection_factory = connection_factory or self._default_connection_factory
 
     def _default_connection_factory(self):
-        """Default connection factory - import utils.database."""
-        from utils.database import get_db_connection
+        """Default connection factory - import database."""
         return get_db_connection()
 
     @contextmanager

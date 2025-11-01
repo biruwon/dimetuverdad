@@ -261,7 +261,7 @@ def verify_schema():
     print("🔍 Verifying database schema...")
     
     # Import get_db_connection lazily to avoid circular imports
-    from utils.database import get_db_connection_context
+    from database import get_db_connection_context
     with get_db_connection_context() as conn:
         c = conn.cursor()
         

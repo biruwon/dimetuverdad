@@ -200,7 +200,7 @@ Edit `analyzer/pattern_analyzer.py` to add detection patterns:
 
 ### Database Operations
 
-- **Standardized Connections**: Use `from utils.database import get_db_connection`
+- **Standardized Connections**: Use `from database import get_db_connection`
 - **Environment Isolation**: Automatic database path selection by environment
 - **Connection Pooling**: Optimized SQLite connections with environment-specific settings
 - **Schema Management**: Centralized schema creation from `scripts/init_database.py`

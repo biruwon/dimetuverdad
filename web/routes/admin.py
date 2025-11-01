@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any
 
 from analyzer.external_analyzer import ExternalAnalyzer
-from utils.database import get_db_connection_context
+from database import get_db_connection_context
 from web.utils.decorators import admin_required, rate_limit, handle_db_errors, validate_input, ANALYSIS_CATEGORIES
 from web.utils.helpers import (
     get_tweet_data, reanalyze_tweet_sync,
@@ -62,7 +62,7 @@ def admin_logout() -> str:
 @admin_required
 def admin_dashboard() -> str:
     """Admin dashboard with reanalysis and management options."""
-    from utils.database import get_db_connection_context
+    from database import get_db_connection_context
     with get_db_connection_context() as conn:
         # Basic stats for dashboard
         stats_row = conn.execute("""
@@ -199,7 +199,7 @@ def admin_fetch() -> str:
     def run_user_fetch():
         try:
             # Check if user exists in database
-            from utils.database import get_db_connection_context
+            from database import get_db_connection_context
             with get_db_connection_context() as conn:
                 user_exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
                 user_exists = user_exists_row['cnt'] if user_exists_row else 0
@@ -274,7 +274,7 @@ def admin_reanalyze() -> str:
         def reanalyze_category():
             try:
                 # Get tweets from specific category
-                from utils.database import get_db_connection_context
+                from database import get_db_connection_context
                 with get_db_connection_context() as conn:
                     rows = conn.execute("SELECT post_id FROM content_analyses WHERE category = ? LIMIT 20", (category,)).fetchall()
 
@@ -380,7 +380,7 @@ def admin_edit_analysis(tweet_id: str) -> str:
             return redirect(redirect_url)
 
     # GET request - show edit form (use direct SQL to align with tests)
-    from utils.database import get_db_connection_context
+    from database import get_db_connection_context
     with get_db_connection_context() as conn:
         row = conn.execute("""
             SELECT 
@@ -541,7 +541,7 @@ def admin_view_category(category_name: str) -> str:
     per_page = config.get_pagination_limit('admin_category')
 
     try:
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             # 1) Check if category exists
             exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM content_analyses WHERE category = ?", (category_name,)).fetchone()
@@ -683,7 +683,7 @@ def admin_quick_edit_category(tweet_id: str) -> str:
         return redirect(request.referrer or url_for('main.index'))
 
     # Use direct SQL for quick edit
-    from utils.database import get_db_connection_context
+    from database import get_db_connection_context
     with get_db_connection_context() as conn:
         # Check if analysis exists
         row = conn.execute("SELECT post_id FROM content_analyses WHERE post_id = ?", (tweet_id,)).fetchone()
@@ -733,7 +733,7 @@ def admin_quick_edit_category(tweet_id: str) -> str:
 def export_csv() -> str:
     """Export analysis results as CSV."""
     try:
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -800,7 +800,7 @@ def export_csv() -> str:
 def export_json() -> str:
     """Export analysis results as JSON."""
     try:
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -876,7 +876,7 @@ def admin_view_feedback() -> str:
     per_page = config.get_pagination_limit('admin_category')
 
     try:
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             # Total count
             total_count_row = conn.execute("SELECT COUNT(*) AS cnt FROM user_feedback").fetchone()

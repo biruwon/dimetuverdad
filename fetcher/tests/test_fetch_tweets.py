@@ -16,7 +16,7 @@ if PROJECT_ROOT not in sys.path:
 from fetcher import fetch_tweets
 from fetcher import parsers as fetcher_parsers
 from fetcher import db as fetcher_db
-from utils.database import get_db_connection, init_test_database, cleanup_test_database
+from database import get_db_connection, init_test_database, cleanup_test_database
 
 
 # ===== TEST FIXTURES =====
@@ -472,7 +472,7 @@ def test_save_and_update_tweet(test_db):
 
 def test_collect_tweets_from_page_immediate_save():
     """Test that collect_tweets_from_page saves tweets immediately"""
-    from utils.database import get_db_connection_context
+    from database import get_db_connection_context
     with get_db_connection_context() as conn:
         # Mock the collector's collect_tweets_from_page method
         with patch.object(fetch_tweets.collector, 'collect_tweets_from_page') as mock_collect:

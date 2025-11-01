@@ -209,7 +209,7 @@ pattern_analyzer = PatternAnalyzer()
 ```
 
 ### Database Operations
-- **ALWAYS USE STANDARDIZED CONNECTION**: Use `from utils.database import get_db_connection; conn = get_db_connection()` for all database connections
+- **ALWAYS USE STANDARDIZED CONNECTION**: Use `from database import get_db_connection; conn = get_db_connection()` for all database connections
 - **NEVER USE DIRECT sqlite3.connect**: Except for repository classes that work with specific database paths
 - **ENVIRONMENT-AWARE**: `get_db_connection()` automatically uses the correct database path based on environment (development/testing/production)
 - **ROW FACTORY ENABLED**: All connections automatically have `row_factory = sqlite3.Row` for named column access

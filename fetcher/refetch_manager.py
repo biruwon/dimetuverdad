@@ -36,7 +36,7 @@ class RefetchManager:
         Raises:
             Exception: If database error occurs
         """
-        from utils.database import get_db_connection_context
+        from database import get_db_connection_context
         with get_db_connection_context() as conn:
             cur = conn.cursor()
             cur.execute("SELECT username, tweet_url FROM tweets WHERE tweet_id = ?", (tweet_id,))

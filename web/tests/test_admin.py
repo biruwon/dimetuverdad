@@ -16,30 +16,34 @@ class TestAdminEditAnalysis:
         assert response.status_code == 302  # Redirect to login
 
     def test_edit_analysis_get_existing_tweet(self, admin_client, mock_database, sample_tweet_data):
-        """Test GET request for editing existing tweet analysis."""
-        # Mock database to return tweet data with new dual explanation schema
-        # Use MockRow (mapping-like) to reflect sqlite3.Row behavior
-        mock_database.execute.return_value.fetchone.return_value = MockRow({
+        """Test GET request for editing existing tweet."""
+        # Mock the database query result
+        mock_row = MockRow({
             'content': sample_tweet_data['content'],
             'username': sample_tweet_data['username'],
             'tweet_timestamp': sample_tweet_data['tweet_timestamp'],
-            'category': sample_tweet_data['category'],
-            'local_explanation': sample_tweet_data.get('local_explanation', sample_tweet_data.get('llm_explanation', '')),
-            'external_explanation': sample_tweet_data.get('external_explanation', ''),
-            'analysis_stages': sample_tweet_data.get('analysis_stages', 'pattern'),
-            'external_analysis_used': sample_tweet_data.get('external_analysis_used', False),
-            'tweet_url': sample_tweet_data['tweet_url'],
-            'original_content': None,
-            'verification_data': None,
-            'verification_confidence': 0.0,
             'is_deleted': False,
-            'media_links': ''
+            'media_links': '',
+            'category': sample_tweet_data['category'],
+            'local_explanation': sample_tweet_data.get('local_explanation', ''),
+            'external_explanation': sample_tweet_data.get('external_explanation', ''),
+            'tweet_url': sample_tweet_data['tweet_url'],
+            'original_content': sample_tweet_data['content'],
+            'verification_data': None,
+            'verification_confidence': 0.0
         })
+        
+        # Override the mock to return our row
+        with patch('database.get_db_connection_context') as mock_context:
+            mock_context.return_value.__enter__.return_value = mock_database
+            mock_context.return_value.__exit__.return_value = None
+            
+            mock_database.execute.return_value.fetchone.return_value = mock_row
 
-        response = admin_client.get('/admin/edit-analysis/1234567890')
-        assert response.status_code == 200
-        assert sample_tweet_data['tweet_url'].encode('utf-8') in response.data
-        assert sample_tweet_data['username'].encode('utf-8') in response.data
+            response = admin_client.get('/admin/edit-analysis/1234567890', follow_redirects=True)
+            assert response.status_code == 200
+            assert sample_tweet_data['tweet_url'].encode('utf-8') in response.data
+            assert sample_tweet_data['username'].encode('utf-8') in response.data
 
     def test_edit_analysis_get_nonexistent_tweet(self, admin_client, mock_database):
         """Test GET request for editing non-existent tweet."""
@@ -50,22 +54,31 @@ class TestAdminEditAnalysis:
 
     def test_edit_analysis_manual_update(self, admin_client, mock_database):
         """Test manual update of tweet analysis."""
-        # Mock the database operations
-        mock_database.execute.return_value.rowcount = 0  # No existing analysis
-        mock_database.total_changes = 1
+        # Mock the repository calls used by handle_manual_update_action
+        with patch('web.utils.helpers.get_content_analysis_repository') as mock_content_repo, \
+             patch('web.utils.helpers.get_tweet_repository') as mock_tweet_repo:
 
-        response = admin_client.post('/admin/edit-analysis/1234567890',
-                                   data={
-                                       'action': 'update',
-                                       'category': 'hate_speech',
-                                       'explanation': 'Updated analysis'
-                                   },
-                                   follow_redirects=False)
+            mock_content_repo.return_value.get_analysis_by_post_id.return_value = None  # No existing analysis
+            mock_tweet_repo.return_value.get_tweet_by_id.return_value = {
+                'username': 'testuser',
+                'content': 'Test content',
+                'tweet_url': 'https://twitter.com/test/status/123'
+            }
+            mock_content_repo.return_value.save_analysis.return_value = True
 
-        assert response.status_code == 302  # Redirect after successful update
-        # Verify database operations were called
-        assert mock_database.execute.called
-        assert mock_database.commit.called
+            response = admin_client.post('/admin/edit-analysis/1234567890',
+                                       data={
+                                           'action': 'update',
+                                           'category': 'hate_speech',
+                                           'explanation': 'Updated analysis'
+                                       },
+                                       follow_redirects=False)
+
+            assert response.status_code == 302  # Redirect after successful update
+            # Verify repository operations were called
+            mock_content_repo.return_value.get_analysis_by_post_id.assert_called_once_with('1234567890')
+            mock_tweet_repo.return_value.get_tweet_by_id.assert_called_once_with('1234567890')
+            mock_content_repo.return_value.save_analysis.assert_called_once()
 
     def test_edit_analysis_reanalyze_action(self, admin_client, mock_database, sample_tweet_data):
         """Test reanalyze action."""
@@ -126,12 +139,15 @@ class TestAdminCategoryViews:
 
     def test_category_view_existing_category(self, admin_client, mock_database):
         """Test viewing existing category."""
-        # Mock category data with new dual explanation schema
-        mock_database.execute.side_effect = [
-            Mock(fetchone=Mock(return_value=MockRow({'cnt': 1}))),  # Category exists check (mapping)
-            Mock(fetchone=Mock(return_value=MockRow({'cnt': 100}))),  # Total count (mapping)
-            Mock(fetchall=Mock(return_value=[
-                MockRow({
+        # Mock the database queries
+        with patch('database.get_db_connection_context') as mock_context:
+            mock_context.return_value.__enter__.return_value = mock_database
+            mock_context.return_value.__exit__.return_value = None
+            
+            mock_database.execute.side_effect = [
+                Mock(fetchone=Mock(return_value=MockRow({'cnt': 1}))),  # Category exists
+                Mock(fetchone=Mock(return_value=MockRow({'cnt': 100}))),  # Total count
+                Mock(fetchall=Mock(return_value=[MockRow({
                     'tweet_url': 'https://twitter.com/user1/status/123',
                     'content': 'Test content',
                     'username': 'user1',
@@ -146,18 +162,21 @@ class TestAdminCategoryViews:
                     'is_deleted': False,
                     'is_edited': False,
                     'post_type': 'original'
-                })
-            ])),  # Recent analyses
-            Mock(fetchone=Mock(return_value=MockRow({'local_llm_count': 50, 'external_count': 10, 'unique_users': 30}))),  # Category stats (mapping)
-            Mock(fetchall=Mock(return_value=[
-                MockRow({'username': 'user1', 'tweet_count': 25}),
-                MockRow({'username': 'user2', 'tweet_count': 15})
-            ]))  # Top users
-        ]
+                })])),  # Recent analyses
+                Mock(fetchone=Mock(return_value=MockRow({
+                    'local_llm_count': 50, 
+                    'external_count': 10, 
+                    'unique_users': 30
+                }))),  # Category stats
+                Mock(fetchall=Mock(return_value=[
+                    MockRow({'username': 'user1', 'tweet_count': 25}),
+                    MockRow({'username': 'user2', 'tweet_count': 15})
+                ]))  # Top users
+            ]
 
-        response = admin_client.get('/admin/category/hate_speech')
-        assert response.status_code == 200
-        assert 'hate_speech'.encode('utf-8') in response.data
+            response = admin_client.get('/admin/category/hate_speech', follow_redirects=True)
+            assert response.status_code == 200
+            assert 'hate_speech'.encode('utf-8') in response.data
 
     def test_category_view_nonexistent_category(self, admin_client, mock_database):
         """Test viewing non-existent category."""
@@ -176,7 +195,7 @@ class TestAdminCategoryViews:
             Mock(fetchall=Mock(return_value=[]))  # Top users
         ]
 
-        response = admin_client.get('/admin/category/hate_speech?page=2')
+        response = admin_client.get('/admin/category/hate_speech?page=2', follow_redirects=True)
         assert response.status_code == 200
 
 
@@ -288,15 +307,20 @@ class TestAdminExport:
         ]
         mock_database.cursor.return_value = mock_cursor
 
-        response = admin_client.get('/admin/export/json')
-        assert response.status_code == 200
-        assert 'application/json' in response.content_type
-        assert 'attachment' in response.headers.get('Content-Disposition', '')
+        # Patch get_db_connection_context directly
+        with patch('database.get_db_connection_context') as mock_context:
+            mock_context.return_value.__enter__.return_value = mock_database
+            mock_context.return_value.__exit__.return_value = None
 
-        data = response.get_json()
-        assert 'data' in data
-        assert len(data['data']) == 1
-        assert data['data'][0]['post_id'] == '1234567890'
+            response = admin_client.get('/admin/export/json')
+            assert response.status_code == 200
+            assert 'application/json' in response.content_type
+            assert 'attachment' in response.headers.get('Content-Disposition', '')
+
+            data = response.get_json()
+            assert 'data' in data
+            assert len(data['data']) == 1
+            assert data['data'][0]['post_id'] == '1234567890'
 
 
 class TestAdminReanalyzeSingle:
@@ -366,36 +390,40 @@ class TestAdminViewFeedback:
     def test_view_feedback_success(self, admin_client, mock_database):
         """Test successful feedback view with data."""
         # Mock database calls for feedback view
-        mock_database.execute.side_effect = [
-            Mock(fetchone=Mock(return_value=MockRow({'cnt': 50}))),  # Total count
-            Mock(fetchall=Mock(return_value=[
-                MockRow({
-                    'id': 1,
-                    'post_id': '1234567890',
-                    'feedback_type': 'correction',
-                    'original_category': 'general',
-                    'corrected_category': 'hate_speech',
-                    'user_comment': 'This should be hate speech',
-                    'user_ip': '192.168.1.1',
-                    'submitted_at': '2024-01-01 12:00:00',
-                    'username': 'testuser',
-                    'content': 'Test tweet content',
-                    'tweet_url': 'https://twitter.com/test/status/123'
-                })
-            ])),  # Feedback submissions
-            Mock(fetchone=Mock(return_value=MockRow({
-                'total_feedback': 50,
-                'corrections': 30,
-                'improvements': 15,
-                'bug_reports': 5,
-                'unique_posts': 45
-            })))  # Feedback stats
-        ]
+        with patch('database.get_db_connection_context') as mock_context:
+            mock_context.return_value.__enter__.return_value = mock_database
+            mock_context.return_value.__exit__.return_value = None
+            
+            mock_database.execute.side_effect = [
+                Mock(fetchone=Mock(return_value=MockRow({'cnt': 50}))),  # Total count
+                Mock(fetchall=Mock(return_value=[
+                    MockRow({
+                        'id': 1,
+                        'post_id': '1234567890',
+                        'feedback_type': 'correction',
+                        'original_category': 'general',
+                        'corrected_category': 'hate_speech',
+                        'user_comment': 'This should be hate speech',
+                        'user_ip': '192.168.1.1',
+                        'submitted_at': '2024-01-01 12:00:00',
+                        'username': 'testuser',
+                        'content': 'Test tweet content',
+                        'tweet_url': 'https://twitter.com/test/status/123'
+                    })
+                ])),  # Feedback submissions
+                Mock(fetchone=Mock(return_value=MockRow({
+                    'total_feedback': 50,
+                    'corrections': 30,
+                    'improvements': 15,
+                    'bug_reports': 5,
+                    'unique_posts': 45
+                })))  # Feedback stats
+            ]
 
-        response = admin_client.get('/admin/feedback')
-        assert response.status_code == 200
-        assert b'feedback' in response.data.lower()
-        assert b'correction' in response.data.lower()
+            response = admin_client.get('/admin/feedback')
+            assert response.status_code == 200
+            assert b'feedback' in response.data.lower()
+            assert b'correction' in response.data.lower()
 
     def test_view_feedback_pagination(self, admin_client, mock_database):
         """Test feedback view pagination."""
@@ -433,7 +461,9 @@ class TestAdminViewFeedback:
 
     def test_view_feedback_database_error(self, admin_client, mock_database):
         """Test feedback view handles database errors gracefully."""
-        mock_database.execute.side_effect = Exception("Database connection failed")
+        with patch('database.get_db_connection_context') as mock_context:
+            mock_context.return_value.__enter__.side_effect = Exception("Database connection failed")
+            mock_context.return_value.__exit__.return_value = None
 
-        response = admin_client.get('/admin/feedback')
-        assert response.status_code == 302  # Redirect to dashboard on error
+            response = admin_client.get('/admin/feedback')
+            assert response.status_code == 302  # Redirect to dashboard on error

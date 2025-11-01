@@ -17,7 +17,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from web.app import create_app
-from utils.database import _create_test_database_schema
+from database import create_fresh_database_schema
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -50,7 +50,7 @@ def session_test_db_path():
         os.remove(test_db_path)
 
     # Create fresh schema using the same initialization function
-    _create_test_database_schema(test_db_path)
+    create_fresh_database_schema(test_db_path)
 
     yield test_db_path
 
@@ -108,10 +108,9 @@ def runner(app):
 @pytest.fixture
 def admin_client(client):
     """A test client with admin authentication."""
-    with client:
-        with client.session_transaction() as sess:
-            sess['admin_authenticated'] = True
-        return client
+    with client.session_transaction() as sess:
+        sess['admin_authenticated'] = True
+    return client
 
 
 @pytest.fixture
@@ -194,7 +193,7 @@ def tuple_to_mockrow(seq: tuple, fields: list) -> MockRow:
 @pytest.fixture
 def mock_database():
     """Mock database operations."""
-    with patch('utils.database.get_db_connection') as mock_conn:
+    with patch('database.get_db_connection') as mock_conn:
         mock_cursor = Mock()
         mock_connection = Mock()
 

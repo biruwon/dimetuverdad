@@ -4,10 +4,8 @@ Handles storage and retrieval of individual model analysis results.
 """
 
 import sqlite3
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from datetime import datetime
-from collections import Counter
-
 
 def save_model_analysis(
     conn: sqlite3.Connection,

@@ -14,7 +14,7 @@ class TestOllamaAnalyzerInitialization:
     def test_default_initialization(self):
         """Test analyzer initializes with default model."""
         analyzer = OllamaAnalyzer()
-        assert analyzer.model == "gemma3:4b"
+        assert analyzer.model == "gemma3:27b-it-q4_K_M"
         assert analyzer.verbose is False
         assert analyzer.client is not None
     

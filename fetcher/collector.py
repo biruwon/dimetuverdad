@@ -13,7 +13,7 @@ from .scroller import get_scroller
 from .media_monitor import get_media_monitor
 from . import db as fetcher_db
 from . import parsers as fetcher_parsers
-from repositories import get_tweet_repository
+from database.repositories import get_tweet_repository
 
 logger = get_logger('collector')
 
@@ -156,7 +156,7 @@ class TweetCollector:
             error: Exception that occurred
         """
         try:
-            from utils.database import get_db_connection_context
+            from database import get_db_connection_context
             with get_db_connection_context() as conn:
                 cur = conn.cursor()
                 cur.execute("INSERT INTO scrape_errors (username, tweet_id, error, context, timestamp) VALUES (?, ?, ?, ?, ?)", (

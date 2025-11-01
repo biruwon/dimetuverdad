@@ -16,25 +16,21 @@ class TestMultiModelConfiguration:
         analyzer = MultiModelAnalyzer(verbose=False)
         
         # Check that all expected models are present
-        expected_models = ["gemma3:4b", "gemma3:12b", "gemma3:27b-it-qat", "gpt-oss:20b"]
+        expected_models = ["gemma3:4b", "gemma3:27b-it-q4_K_M", "gemma3:27b-it-qat"]
         for model in expected_models:
             assert model in MultiModelAnalyzer.AVAILABLE_MODELS
         
         # Check model configurations
         assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:4b"]["type"] == "fast"
-        assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:12b"]["type"] == "fast"
+        assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:27b-it-q4_K_M"]["type"] == "accurate"
         assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:27b-it-qat"]["type"] == "accurate"
-        assert MultiModelAnalyzer.AVAILABLE_MODELS["gpt-oss:20b"]["type"] == "balanced"
     
     def test_multimodal_capabilities(self):
         """Test multimodal capability flags."""
-        # Gemma models support multimodal
+        # All current Gemma models support multimodal
         assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:4b"]["multimodal"] is True
-        assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:12b"]["multimodal"] is True
+        assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:27b-it-q4_K_M"]["multimodal"] is True
         assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:27b-it-qat"]["multimodal"] is True
-        
-        # GPT-OSS is text-only
-        assert MultiModelAnalyzer.AVAILABLE_MODELS["gpt-oss:20b"]["multimodal"] is False
 
 
 class TestAnalyzeWithMultipleModels:
@@ -50,10 +46,10 @@ class TestAnalyzeWithMultipleModels:
             
             results = await analyzer.analyze_with_multiple_models("Test content")
             
-            # Should analyze with all 4 default models
-            assert len(results) == 4
+            # Should analyze with all 3 default models
+            assert len(results) == 3
             assert "gemma3:4b" in results
-            assert "gpt-oss:20b" in results
+            assert "gemma3:27b-it-q4_K_M" in results
     
     @pytest.mark.asyncio
     async def test_analyze_with_specific_models(self):
@@ -65,12 +61,12 @@ class TestAnalyzeWithMultipleModels:
             
             results = await analyzer.analyze_with_multiple_models(
                 "Test content",
-                models=["gemma3:4b", "gpt-oss:20b"]
+                models=["gemma3:4b", "gemma3:27b-it-q4_K_M"]
             )
             
             assert len(results) == 2
             assert "gemma3:4b" in results
-            assert "gpt-oss:20b" in results
+            assert "gemma3:27b-it-q4_K_M" in results
     
     @pytest.mark.asyncio
     async def test_analyze_handles_model_failure(self):
@@ -87,14 +83,14 @@ class TestAnalyzeWithMultipleModels:
             
             results = await analyzer.analyze_with_multiple_models(
                 "Test content",
-                models=["gemma3:4b", "gpt-oss:20b"]
+                models=["gemma3:4b", "gemma3:27b-it-q4_K_M"]
             )
             
             # Should have results for both models (failed one has error message)
             assert len(results) == 2
             assert results["gemma3:4b"][0] == Categories.GENERAL  # Error fallback
             assert "Error" in results["gemma3:4b"][1]
-            assert results["gpt-oss:20b"][0] == Categories.GENERAL
+            assert results["gemma3:27b-it-q4_K_M"][0] == Categories.GENERAL
 
 
 class TestAnalyzeWithSpecificModel:
@@ -187,9 +183,9 @@ class TestGetAnalyzer:
         multi_analyzer = MultiModelAnalyzer(verbose=False)
         
         analyzer1 = multi_analyzer._get_analyzer("gemma3:4b")
-        analyzer2 = multi_analyzer._get_analyzer("gpt-oss:20b")
+        analyzer2 = multi_analyzer._get_analyzer("gemma3:27b-it-q4_K_M")
         
         # Should be different instances
         assert analyzer1 is not analyzer2
         assert analyzer1.model == "gemma3:4b"
-        assert analyzer2.model == "gpt-oss:20b"
+        assert analyzer2.model == "gemma3:27b-it-q4_K_M"

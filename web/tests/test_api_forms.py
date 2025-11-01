@@ -69,9 +69,9 @@ class TestTemplateRendering:
     def test_user_template_context(self, client, mock_database):
         """Test user template renders with correct context."""
         # Mock the functions called by the user page
-        with patch('web.app.get_user_profile_data') as mock_get_profile, \
-             patch('web.app.get_user_tweets_data') as mock_get_tweets, \
-             patch('web.app.get_user_analysis_stats') as mock_get_stats:
+        with patch('web.routes.main.get_user_profile_data') as mock_get_profile, \
+             patch('web.routes.main.get_user_tweets_data') as mock_get_tweets, \
+             patch('web.routes.main.get_user_analysis_stats') as mock_get_stats:
 
             mock_get_profile.return_value = {
                 'profile_pic_url': 'https://example.com/avatar.jpg',
@@ -134,9 +134,9 @@ class TestTemplateRendering:
     def test_user_template_with_category_filter(self, client, mock_database):
         """Test user template with category filter."""
         # Mock the functions called by the user page with category filter
-        with patch('web.app.get_user_profile_data') as mock_get_profile, \
-             patch('web.app.get_user_tweets_data') as mock_get_tweets, \
-             patch('web.app.get_user_analysis_stats') as mock_get_stats:
+        with patch('web.routes.main.get_user_profile_data') as mock_get_profile, \
+             patch('web.routes.main.get_user_tweets_data') as mock_get_tweets, \
+             patch('web.routes.main.get_user_analysis_stats') as mock_get_stats:
 
             mock_get_profile.return_value = {
                 'profile_pic_url': 'https://example.com/avatar.jpg',
