@@ -23,7 +23,7 @@ class OllamaAnalyzer:
     DEFAULT_MAX_TOKENS = 200 # less token, less time to generate a longer response
     DEFAULT_TEMPERATURE_MULTIMODAL = 0.2
     DEFAULT_TOP_P = 0.7 # reduces token examples so reduces probability
-    DEFAULT_NUM_PREDICT_MULTIMODAL = 250
+    DEFAULT_NUM_PREDICT_MULTIMODAL = 150
     DEFAULT_KEEP_ALIVE = "72h"
     DETAULT_SEED = 42 # just a fixed number to force determinist responses
     
@@ -32,7 +32,7 @@ class OllamaAnalyzer:
     DEFAULT_MAX_MEDIA_SIZE = 10 * 1024 * 1024  # 10MB
     MAX_MEDIA_ITEMS = 3  # Process up to 3 media files
     
-    def __init__(self, model: str = "gemma3:4b", verbose: bool = False):
+    def __init__(self, model: str = "gemma3:27b-it-q4_K_M", verbose: bool = False):
         """
         Initialize Ollama analyzer.
         

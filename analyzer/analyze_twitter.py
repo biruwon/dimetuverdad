@@ -55,7 +55,7 @@ class Analyzer:
             print("🚀 Iniciando Analyzer con arquitectura dual-flow...")
             print("Componentes cargados:")
             print("- ✓ Flow Manager (pattern → local LLM → external)")
-            print("- ✓ Local LLM: gemma3:4b (Ollama)")
+            print("- ✓ Local LLM: gemma3 (Ollama)")
             print("- ✓ External LLM: Gemini 2.5 Flash (multimodal)")
             print("- ✓ Recolector de métricas de rendimiento")
             print("- ✓ Repositorio de análisis de contenido")
@@ -220,9 +220,9 @@ class Analyzer:
         """Get the model name based on analysis result."""
         if result.external_analysis_used:
             if result.multimodal_analysis:
-                return "gemma3:4b+gemini-2.5-flash (multimodal)"
-            return "gemma3:4b+gemini-2.5-flash"
-        return "gemma3:4b"
+                return "gemma3+gemini-2.5-flash (multimodal)"
+            return "gemma3+gemini-2.5-flash"
+        return "gemma3"
 
     def get_metrics_report(self) -> str:
         """Generate comprehensive metrics report."""

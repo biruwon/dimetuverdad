@@ -17,26 +17,21 @@ class MultiModelAnalyzer:
     
     # Available models for multi-model analysis
     AVAILABLE_MODELS = {
-        "gemma3:4b": {
-            "type": "fast",
+        "gemma3:27b-it-q4_K_M": {
+            "type": "accurate",
             "multimodal": True,
-            "description": "Fast 4B parameter model"
-        },
-        "gemma3:12b": {
-            "type": "fast",
-            "multimodal": True,
-            "description": "Fast 12B parameter model"
+            "description": "Large 27B parameter model with quantization"
         },
         "gemma3:27b-it-qat": {
             "type": "accurate",
             "multimodal": True,
             "description": "Large 27B parameter model with quantization"
         },
-        "gpt-oss:20b": {
-            "type": "balanced",
-            "multimodal": False,
-            "description": "Balanced 20B parameter text-only model"
-        }
+        "gemma3:4b": {
+            "type": "fast",
+            "multimodal": True,
+            "description": "Fast 4B parameter model"
+        },
     }
     
     def __init__(self, verbose: bool = False):
@@ -221,7 +216,7 @@ class MultiModelAnalyzer:
                     system_prompt=system_prompt,
                     options={
                         "temperature": analyzer.DEFAULT_TEMPERATURE_MULTIMODAL,
-                        "top_p": analyzer.DEFAULT_TOP_P_MULTIMODAL,
+                        "top_p": analyzer.DEFAULT_TOP_P,
                         "num_predict": analyzer.DEFAULT_NUM_PREDICT_MULTIMODAL,
                     },
                     keep_alive=analyzer.DEFAULT_KEEP_ALIVE
@@ -235,8 +230,9 @@ class MultiModelAnalyzer:
                     model=model,
                     system_prompt=system_prompt,
                     options={
-                        "temperature": analyzer.DEFAULT_TEMPERATURE_TEXT,
-                        "num_predict": analyzer.DEFAULT_MAX_TOKENS,
+                        "temperature": analyzer.DEFAULT_TEMPERATURE_MULTIMODAL,
+                        "top_p": analyzer.DEFAULT_TOP_P,
+                        "num_predict": analyzer.DEFAULT_NUM_PREDICT_MULTIMODAL,
                     }
                 )
             
