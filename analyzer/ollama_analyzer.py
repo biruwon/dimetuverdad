@@ -164,7 +164,12 @@ class OllamaAnalyzer:
             
             # Extract explanation from response
             explanation = response.strip()
-            if not explanation or len(explanation) < 10:
+            
+            # Clean up any format prefixes that the LLM might have added
+            explanation = re.sub(r'^CATEGORÍA:\s*[^\n]*\n?', '', explanation, flags=re.IGNORECASE | re.MULTILINE)
+            explanation = re.sub(r'^EXPLICACIÓN:\s*', '', explanation, flags=re.IGNORECASE | re.MULTILINE)
+            
+            if not explanation or len(explanation.strip()) < 10:
                 explanation = f"Contenido clasificado como {category}."
             
             if self.verbose:

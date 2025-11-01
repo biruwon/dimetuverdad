@@ -144,8 +144,8 @@ ollama pull gpt-oss:20b
 # Analyze all unanalyzed tweets (LLM always enabled)
 ./run_in_venv.sh analyze-twitter
 
-# Force reanalyze when prompts change
-./run_in_venv.sh analyze-twitter --force-reanalyze --limit 10
+# Force reanalyze on post ID when prompts change
+./run_in_venv.sh analyze-twitter --force-reanalyze --tweet-id 123435
 
 # Analyze specific user
 ./run_in_venv.sh analyze-twitter --username Santi_ABASCAL

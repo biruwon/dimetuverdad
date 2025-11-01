@@ -293,12 +293,12 @@ def create_analyzer(config: Optional[AnalyzerConfig] = None, verbose: bool = Fal
     return Analyzer(config=config, verbose=verbose)
 
 
-async def reanalyze_tweet(tweet_id: str, analyzer: Optional[Analyzer] = None) -> Optional[ContentAnalysis]:
+async def reanalyze_tweet(tweet_id: str, verbose: bool = False, analyzer: Optional[Analyzer] = None) -> Optional[ContentAnalysis]:
     """Reanalyze a single tweet and return the result."""
 
     # Use provided analyzer or create default one
     if analyzer is None:
-        analyzer = create_analyzer()
+        analyzer = create_analyzer(verbose=verbose)
 
     # Get tweet data
     tweet_data = analyzer.repository.get_tweet_data(tweet_id)

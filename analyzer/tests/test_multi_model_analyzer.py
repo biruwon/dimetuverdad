@@ -16,21 +16,19 @@ class TestMultiModelConfiguration:
         analyzer = MultiModelAnalyzer(verbose=False)
         
         # Check that all expected models are present
-        expected_models = ["gemma3:4b", "gemma3:27b-it-q4_K_M", "gemma3:27b-it-qat"]
+        expected_models = ["gemma3:4b", "gemma3:27b-it-q4_K_M"]
         for model in expected_models:
             assert model in MultiModelAnalyzer.AVAILABLE_MODELS
         
         # Check model configurations
         assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:4b"]["type"] == "fast"
         assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:27b-it-q4_K_M"]["type"] == "accurate"
-        assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:27b-it-qat"]["type"] == "accurate"
     
     def test_multimodal_capabilities(self):
         """Test multimodal capability flags."""
         # All current Gemma models support multimodal
         assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:4b"]["multimodal"] is True
         assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:27b-it-q4_K_M"]["multimodal"] is True
-        assert MultiModelAnalyzer.AVAILABLE_MODELS["gemma3:27b-it-qat"]["multimodal"] is True
 
 
 class TestAnalyzeWithMultipleModels:
@@ -46,8 +44,8 @@ class TestAnalyzeWithMultipleModels:
             
             results = await analyzer.analyze_with_multiple_models("Test content")
             
-            # Should analyze with all 3 default models
-            assert len(results) == 3
+            # Should analyze with all 2 default models
+            assert len(results) == 2
             assert "gemma3:4b" in results
             assert "gemma3:27b-it-q4_K_M" in results
     

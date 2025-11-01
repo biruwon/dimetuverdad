@@ -22,11 +22,6 @@ class MultiModelAnalyzer:
             "multimodal": True,
             "description": "Large 27B parameter model with quantization"
         },
-        "gemma3:27b-it-qat": {
-            "type": "accurate",
-            "multimodal": True,
-            "description": "Large 27B parameter model with quantization"
-        },
         "gemma3:4b": {
             "type": "fast",
             "multimodal": True,

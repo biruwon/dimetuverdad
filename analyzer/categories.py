@@ -76,22 +76,25 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
         name=Categories.HATE_SPEECH,
         display_name="Discurso de Odio",
         description="Comunicación que ataca DIRECTAMENTE a figuras políticas, partidos o instituciones por sus acciones políticas, decisiones o ideología. INCLUYE: comparaciones despectivas con animales ('cerdo', 'rata'), objetos o enfermedades cuando dirigidas a políticos; sarcasmo agresivo sobre comportamientos políticos; lenguaje que sugiere inferioridad política o corrupción. EXCLUYE: ataques basados en identidad personal (género, orientación sexual, etnia, nacionalidad) - usar categorías específicas. EXCLUYE: crítica política normal sin deshumanización.",
-        focus_area="detección de discurso de odio y retórica despectiva",
+        focus_area="detección de discurso de odio, ataques políticos y ataques a identidad",
         analysis_questions=[
             "¿Hay ataques directos o insultos hacia figuras políticas específicas?",
             "¿Se deshumaniza a partidos políticos o instituciones?",
-            "¿Contiene comparaciones degradantes hacia líderes políticos?"
+            "¿Contiene comparaciones degradantes hacia líderes políticos?",
+            "¿Se generaliza un grupo religioso, étnico o identitario como amenaza monolítica?",
+            "¿Se usan incidentes violentos para construir narrativas de confrontación a gran escala?",
+            "¿Se crea victimismo y animosidad hacia grupos identitarios?"
         ],
         classification_rules=[
             "REQUIERE ataque DIRECTO a figura política, partido o institución por acciones políticas",
             "INCLUYE deshumanización de políticos ('cerdo', 'rata', 'especimen') por corrupción o decisiones",
             "INCLUYE sarcasmo despectivo sobre comportamiento político específico",
-            "EXCLUYE ataques basados en identidad personal (género, etnia, nacionalidad)",
+            "INCLUYE ataques a grupos religiosos/étnicos presentados como amenaza existencial",
             "EXCLUYE crítica política normal sin insultos deshumanizantes",
             "SI el ataque se basa en identidad LGBTQ+ → usar anti_lgbtq",
             "SI el ataque se basa en origen étnico → usar anti_immigration"
         ],
-        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente ataques directos a figuras políticas, partidos e instituciones."
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente ataques directos a figuras políticas, partidos e instituciones, así como ataques a identidad y narrativas de confrontación religiosa/étnica."
     ),
     
     Categories.ANTI_IMMIGRATION: CategoryInfo(
@@ -108,7 +111,7 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "DEBE mencionar inmigración/inmigrantes EXPLÍCITAMENTE",
             "NO es anti_immigration solo porque mencione cultura o tradiciones españolas",
             "Hablar de tauromaquia, flamenco, cultura española SIN mencionar inmigración = general",
-            "SOLO clasifica como anti_immigration si presenta inmigración como amenaza"
+            "SOLO clasifica como anti_immigration si presenta inmigración como amenaza",
         ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-inmigración y narrativas xenófobas."
     ),
@@ -143,7 +146,15 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Hay retórica de feminazis o anti-igualdad?",
             "¿Se promueven roles de género tradicionales como superiores?"
         ],
-        classification_rules=[],
+        classification_rules=[
+            "REQUIERE ataque al feminismo o igualdad de género presentados como amenaza",
+            "INCLUYE: retórica de 'feminazis', 'feminismo radical', 'feminismo destruye'",
+            "INCLUYE: promoción de roles tradicionales ('mujeres en casa', 'machismo inverso')",
+            "INCLUYE: narrativas de 'falsas acusaciones' de violación o violencia de género",
+            "INCLUYE: oposición a leyes de igualdad, violencia de género, o derechos reproductivos",
+            "EXCLUYE: crítica moderada a políticas específicas sin atacar el movimiento feminista",
+            "EXCLUYE: defensa de derechos masculinos sin retórica anti-feminista"
+        ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-feminista y retórica misógina."
     ),
     
@@ -161,11 +172,11 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "Claims verificables presentados COMO HECHOS CONFIRMADOS sin fuente oficial",
             "DEBE presentarse como noticia/información factual verificable (no opinión política)",
             "SI presenta HECHO POLÍTICO ESPECÍFICO VERIFICABLE sin FUENTE OFICIAL → disinformation",
-            "NO es disinformation: crítica política partidista sin afirmar hechos concretos",
-            "NO es disinformation: opiniones sobre comportamiento político",
+            "NO es disinformation: citas o declaraciones DIRECTAS de figuras políticas públicas",
+            "NO es disinformation: declaraciones políticas presentadas como tales (incluso sin fuente)",
             "NO es disinformation: ironía o sarcasmo sobre instituciones",
             "NO es disinformation: contenido promocional o anuncios",
-            "NO es disinformation: referencias no políticas al tiempo"
+            "NO es disinformation: referencias no políticas al tiempo",
         ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido con información falsa o manipulada."
     ),
@@ -180,7 +191,15 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Hay narrativas de control oculto sin evidencia?",
             "¿Se fomenta desconfianza infundada en instituciones?"
         ],
-        classification_rules=[],
+        classification_rules=[
+            "REQUIERE explicación no evidenciada de eventos complejos con intencionalidad coordinada",
+            "INCLUYE: control oculto por élites, masonería, illuminati, Soros, globalistas",
+            "INCLUYE: 'plan kalergi', 'gran reemplazo', 'nuevo orden mundial'",
+            "INCLUYE: manipulación de medios, censura coordinada, conspiraciones gubernamentales",
+            "INCLUYE: atribución de eventos a 'ellos' sin evidencia específica",
+            "EXCLUYE: crítica fundamentada a instituciones con evidencia",
+            "EXCLUYE: teorías políticas normales sin componente conspirativo oculto"
+        ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza teorías conspiratorias y narrativas no fundamentadas."
     ),
     
@@ -194,22 +213,39 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Se incita a movilización o activismo?",
             "¿Cuál es el nivel de urgencia de la llamada?"
         ],
-        classification_rules=[],
+        classification_rules=[
+            "REQUIERE incitación a acción colectiva inmediata o movilización",
+            "INCLUYE: 'movilizaos', 'salid a la calle', 'organizaos', 'actuad ya'",
+            "INCLUYE: convocatorias a manifestaciones, protestas, concentraciones",
+            "INCLUYE: 'boicots', 'firmas', 'peticiones' con urgencia temporal",
+            "INCLUYE: lenguaje de responsabilidad cívica que requiere acción inmediata",
+            "EXCLUYE: opiniones políticas sin llamada específica a acción",
+            "EXCLUYE: información factual sobre eventos sin incitación a participar"
+        ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Evalúa específicamente llamadas a la acción y movilización."
     ),
     
     Categories.NATIONALISM: CategoryInfo(
         name=Categories.NATIONALISM,
         display_name="Nacionalismo",
-        description="Comunicación que enfatiza la identidad nacional como valor primordial y marco interpretativo. Características: exaltación de símbolos patrios, narrativas de identidad nacional amenazada, retórica de soberanía y tradición.",
-        focus_area="análisis de retórica nacionalista",
+        description="Comunicación que promueve una ideología nacionalista excluyente que prioriza la identidad nacional sobre valores universales. Características: retórica de superioridad nacional, rechazo a influencias extranjeras, exaltación de símbolos patrios como expresión de supremacía, narrativas de identidad nacional 'amenazada' por inmigración/globalización/diversidad, retórica de soberanía como aislamiento, promoción de tradiciones como superiores a valores modernos.",
+        focus_area="análisis de retórica nacionalista excluyente",
         analysis_questions=[
-            "¿Se manifiesta retórica nacionalista excluyente?",
-            "¿Hay exaltación de símbolos o valores nacionales?",
-            "¿Se presenta la identidad nacional como amenazada?"
+            "¿Promueve superioridad nacional o identidad nacional como valor primordial sobre otros?",
+            "¿Rechaza influencias extranjeras o globalización como amenaza a la identidad nacional?",
+            "¿Exalta símbolos patrios como expresión de supremacía nacional?",
+            "¿Presenta la identidad nacional como amenazada por inmigración, diversidad o globalización?",
+            "¿Promueve soberanía como aislamiento o rechazo a instituciones internacionales?"
         ],
-        classification_rules=[],
-        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido nacionalista y de identidad nacional."
+        classification_rules=[
+            "REQUIERE retórica nacionalista EXCLUYENTE - superioridad nacional, rechazo a lo extranjero",
+            "INCLUYE: 'nuestra nación es superior', 'rechazamos influencias extranjeras', 'soberanía significa aislamiento'",
+            "INCLUYE: exaltación de símbolos patrios como expresión de supremacía ('nuestra bandera es la mejor')",
+            "INCLUYE: identidad nacional amenazada por inmigración/globalización/diversidad",
+            "EXCLUYE: orgullo nacional moderado sin supremacía o exclusión",
+            "EXCLUYE: menciones de soberanía en contextos políticos normales",
+        ],
+        system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido nacionalista excluyente que promueve superioridad nacional, rechaza influencias extranjeras, o presenta la identidad nacional como amenazada por diversidad/globalización. NO clasifiques menciones neutrales de patriotismo como nacionalismo."
     ),
     
     Categories.ANTI_GOVERNMENT: CategoryInfo(
@@ -243,7 +279,15 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Hay rehabilitación de figuras o regímenes autoritarios?",
             "¿Se minimizan eventos históricos problemáticos?"
         ],
-        classification_rules=[],
+        classification_rules=[
+            "REQUIERE reinterpretación histórica para justificar narrativas políticas actuales",
+            "INCLUYE: rehabilitación de Franco, dictadura franquista presentada como positiva",
+            "INCLUYE: minimización de víctimas del franquismo o represión histórica",
+            "INCLUYE: nostalgia por regímenes autoritarios ('con Franco vivíamos mejor')",
+            "INCLUYE: reinterpretación de guerra civil o república como 'necesaria' o 'positiva'",
+            "EXCLUYE: discusión histórica académica sin sesgo político actual",
+            "EXCLUYE: crítica histórica fundamentada sin minimización de víctimas"
+        ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente revisionismo histórico y narrativas nostálgicas."
     ),
     
@@ -261,8 +305,9 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "SOLO si menciona partidos políticos, figuras públicas, o temas políticos SIN características extremistas",
             "INCLUYE: menciones a PSOE, PP, VOX, Podemos sin ataques o desinformación",
             "INCLUYE: opiniones políticas moderadas sobre eventos o políticas",
+            "INCLUYE: CITAS DIRECTAS de figuras políticas públicas sobre temas políticos",
             "EXCLUYE: si tiene elementos de odio, desinformación, o extremismo → usar categoría específica",
-            "Si NO hay mención política alguna → usar general"
+            "Si NO hay mención política alguna → usar general",
         ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza contenido político general y opiniones políticas convencionales."
     ),
@@ -277,7 +322,15 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
             "¿Cuál es el tono y la intención del mensaje?",
             "¿Hay algún aspecto que requiera atención?"
         ],
-        classification_rules=[],
+        classification_rules=[
+            "SOLO si NO presenta características de otras categorías específicas",
+            "INCLUYE: contenido informativo neutral, conversaciones cotidianas",
+            "INCLUYE: temas no políticos o sin elementos extremistas",
+            "INCLUYE: menciones casuales a política sin retórica problemática",
+            "EXCLUYE: cualquier elemento de odio, desinformación, o extremismo",
+            "EXCLUYE: contenido político con características identificables → usar categoría específica",
+            "CATEGORÍA FALLBACK: usar solo cuando no aplica ninguna otra categoría"
+        ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza el siguiente contenido de forma integral."
     )
 }

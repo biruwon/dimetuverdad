@@ -257,7 +257,6 @@ class PatternAnalyzer:
                     # Additional patterns from former secondary
                     re.compile(r'\b(?:activismo|militancia|compromiso)\b', re.IGNORECASE),
                     re.compile(r'\b(?:organización|coordinación|planificación)\b', re.IGNORECASE),
-                    re.compile(r'\b(?:solidaridad|apoyo|respaldo)\b', re.IGNORECASE),
                 ],
                 'keywords': ['movilización', 'protesta', 'manifestación', 'boicot'],
                 'description': 'Calls to action and mobilization'
@@ -265,22 +264,24 @@ class PatternAnalyzer:
             
             Categories.NATIONALISM: {
                 'patterns': [
-                    # Spanish nationalism
-                    re.compile(r'\b(?:españa|europa)\s+primero\b', re.IGNORECASE),
-                    re.compile(r'\b(?:españa|europa)\s+para\s+(?:los\s+)?españoles?\b', re.IGNORECASE),
-                    re.compile(r'\b(?:patria|patriotas?|patriot(?:a|ismo)|nación|nacional)\b', re.IGNORECASE),
-                    re.compile(r'\b(?:identidad|esencia)\s+(?:española|nacional)\s+(?:amenazada|en\s+peligro)\b', re.IGNORECASE),
-                    re.compile(r'\b(?:pureza|autenticidad)\s+(?:española|nacional|racial)\b', re.IGNORECASE),
-                    # Nationalist language
-                    re.compile(r'\b(?:soberan[íi]a|independencia)\b', re.IGNORECASE),
-                    re.compile(r'\b(?:hispanidad|españolidad)\b', re.IGNORECASE),
-                    re.compile(r'\b(?:bandera|himno|símbolos?\s+nacional(?:es)?)\b', re.IGNORECASE),
-                    # Additional patterns from former secondary
-                    re.compile(r'\b(?:reconquista|recuperar\s+españa)\b', re.IGNORECASE),
-                    re.compile(r'\b(?:tradición|tradiciones|ancestr(?:al|os))\b', re.IGNORECASE),
+                    # Spanish nationalism - more specific patterns to avoid false positives
+                    re.compile(r'\b(?:españa|europa)\s+(?:primero|por\s+encima\s+de\s+todo|antes\s+que\s+nada)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:españa|europa)\s+(?:para\s+los?\s+)?(?:españoles?|europeos?|autóctonos?|nativos?)\s+(?:solamente|sólo|únicamente)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:patria|patriotas?|patriot(?:a|ismo)|nación|nacional)\s+(?:verdader[ao]|auténtic[ao]|puri?[ao])\b', re.IGNORECASE),
+                    re.compile(r'\b(?:identidad|esencia|raíces?|origen(?:es)?)\s+(?:española|nacional|racial)\s+(?:amenazada|en\s+peligro|atacada)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:pureza|autenticidad)\s+(?:española|nacional|racial|cultural)\b', re.IGNORECASE),
+                    # Nationalist rhetoric - requires context of superiority or exclusion
+                    re.compile(r'\b(?:nosotros?\s+los?\s+)?(?:españoles?|autóctonos?|nativos?)\s+(?:somos\s+)?(?:superiores?|mejores?)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:soberan[íi]a|independencia)\s+(?:nacional|española)\s+(?:amenazada|en\s+peligro)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:hispanidad|españolidad)\s+(?:amenazada|perdida|recuperar)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:bandera|himno|símbolos?\s+nacional(?:es)?)\s+(?:españoles?|auténticos?|verdaderos?)\b', re.IGNORECASE),
+                    # Nationalist calls to action or superiority
+                    re.compile(r'\b(?:reconquista|recuperar)\s+(?:españa|nuestra\s+patria|nuestro\s+país)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:tradición|tradiciones|ancestr(?:al|os))\s+(?:españoles?|auténtic[ao]s?|puri?[ao]s?)\b', re.IGNORECASE),
+                    # Avoid single words like "patriota" without nationalist context
                 ],
-                'keywords': ['nacionalismo', 'patria', 'identidad', 'soberanía'],
-                'description': 'Nationalist rhetoric and identity politics'
+                'keywords': ['nacionalismo', 'patria', 'identidad', 'soberanía', 'españoles superiores'],
+                'description': 'Nationalist rhetoric emphasizing national superiority or identity threats'
             },
 
             

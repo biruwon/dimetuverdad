@@ -46,13 +46,13 @@ def get_tweet_data(tweet_id) -> Optional[Dict[str, Any]]:
     return None
 
 
-async def reanalyze_tweet(tweet_id) -> Any:
+async def reanalyze_tweet(tweet_id, verbose: bool = False) -> Any:
     """Reanalyze a single tweet and return the result."""
     from analyzer.analyze_twitter import reanalyze_tweet as analyzer_reanalyze_tweet  # Local import
-    return await analyzer_reanalyze_tweet(tweet_id)
+    return await analyzer_reanalyze_tweet(tweet_id, verbose=verbose)
 
 
-def reanalyze_tweet_sync(tweet_id) -> Any:
+def reanalyze_tweet_sync(tweet_id, verbose: bool = False) -> Any:
     """Synchronous wrapper for reanalyze_tweet that can be called from Flask routes."""
     try:
         # Check if there's already a running event loop
@@ -60,11 +60,11 @@ def reanalyze_tweet_sync(tweet_id) -> Any:
             loop = asyncio.get_running_loop()
             # If loop is already running, we need to use a different approach
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, reanalyze_tweet(tweet_id))
+                future = executor.submit(asyncio.run, reanalyze_tweet(tweet_id, verbose=verbose))
                 return future.result(timeout=30)  # 30 second timeout
         except RuntimeError:
             # No event loop running, create a new one
-            return asyncio.run(reanalyze_tweet(tweet_id))
+            return asyncio.run(reanalyze_tweet(tweet_id, verbose=verbose))
     except Exception as e:
         print(f"❌ Error in reanalyze_tweet_sync: {e}")
         raise
@@ -99,7 +99,7 @@ def handle_reanalyze_action(tweet_id, referrer) -> None:
 
     # Reanalyze the content
     try:
-        analysis_result = reanalyze_tweet_sync(tweet_id)
+        analysis_result = reanalyze_tweet_sync(tweet_id, verbose=True)
         print(f"🔍 Reanalyze result type: {type(analysis_result)}")
         print(f"🔍 Reanalyze result: {analysis_result is not None}")
     except Exception as reanalyze_e:
@@ -183,7 +183,7 @@ def handle_refresh_and_reanalyze_action(tweet_id, referrer) -> None:
 
     # Then reanalyze the content
     try:
-        analysis_result = reanalyze_tweet_sync(tweet_id)
+        analysis_result = reanalyze_tweet_sync(tweet_id, verbose=True)
         print(f"🔍 Reanalyze result type: {type(analysis_result)}")
         print(f"🔍 Reanalyze result: {analysis_result is not None}")
     except Exception as reanalyze_e:
@@ -268,7 +268,7 @@ def handle_multi_model_action(tweet_id, referrer) -> None:
     try:
         # Run the multi-model analysis script
         result = subprocess.run(
-            [sys.executable, 'scripts/analyze_multi_model.py', '--post-id', tweet_id],
+            [sys.executable, 'scripts/analyze_multi_model.py', '--post-id', tweet_id, '--verbose'],
             capture_output=True,
             text=True,
             timeout=300  # 5 minute timeout
