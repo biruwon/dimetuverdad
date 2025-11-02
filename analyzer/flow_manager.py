@@ -6,9 +6,9 @@ Stage 2: Local LLM Analysis
 Stage 3: External Analysis (Gemini, admin-triggered only)
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from dataclasses import dataclass
-
+import time
 from .pattern_analyzer import PatternAnalyzer
 from .ollama_analyzer import OllamaAnalyzer
 from .external_analyzer import ExternalAnalyzer, ExternalAnalysisResult
@@ -101,7 +101,10 @@ class AnalysisFlowManager:
         Returns:
             AnalysisResult with category, local_explanation, stages, pattern_data, and verification_data
         """
+        import time
+        
         stages = AnalysisStages()
+        stage_timings = {}  # Track timing for each stage
         
         if self.verbose:
             print("=" * 80)
@@ -122,7 +125,9 @@ class AnalysisFlowManager:
                 
                 # Skip pattern detection (no text to analyze)
                 # Go directly to LLM multimodal analysis
+                start_time = time.time()
                 primary_category, local_explanation = await self.local_llm.categorize_and_explain("", media_urls)
+                stage_timings['llm_multimodal'] = time.time() - start_time
                 stages.local_llm = True
                 
                 if self.verbose:
@@ -134,7 +139,7 @@ class AnalysisFlowManager:
                     local_explanation=local_explanation,
                     stages=stages,
                     pattern_data={},
-                    verification_data={}
+                    verification_data={'stage_timings': stage_timings}
                 )
             else:
                 # No text and no media - truly empty content
@@ -143,19 +148,22 @@ class AnalysisFlowManager:
                     local_explanation="Contenido vacío o muy corto para analizar.",
                     stages=stages,
                     pattern_data={},
-                    verification_data={}
+                    verification_data={'stage_timings': stage_timings}
                 )
         
         # Stage 1: Pattern Detection
         if self.verbose:
             print("\n📊 Stage 1: Pattern Detection")
         
+        start_time = time.time()
         pattern_result = self.pattern_analyzer.analyze_content(content)
+        stage_timings['pattern_detection'] = time.time() - start_time
         stages.pattern = True
         
         if self.verbose:
             print(f"   Categories found: {pattern_result.categories}")
             print(f"   Pattern matches: {len(pattern_result.pattern_matches)}")
+            print(f"   ⏱️  Pattern detection: {stage_timings['pattern_detection']:.3f}s")
         
         # Stage 2: Local LLM Analysis (always run)
         if self.verbose:
@@ -167,6 +175,7 @@ class AnalysisFlowManager:
             Categories.GENERAL not in pattern_result.categories
         )
         
+        start_time = time.time()
         if patterns_found_specific_category:
             # Patterns found a specific category - use LLM for explanation only
             primary_category = pattern_result.categories[0]
@@ -181,11 +190,13 @@ class AnalysisFlowManager:
             
             primary_category, local_explanation = await self.local_llm.categorize_and_explain(content, media_urls)
         
+        stage_timings['llm_analysis'] = time.time() - start_time
         stages.local_llm = True
         
         if self.verbose:
             print(f"   ✅ Final category: {primary_category}")
             print(f"   ✅ Local explanation: {local_explanation[:100]}...")
+            print(f"   ⏱️  LLM analysis: {stage_timings['llm_analysis']:.3f}s")
         
         # Check if LLM explanation indicates this should be disinformation
         if self.analyzer_hooks.explanation_indicates_disinformation(local_explanation):
@@ -197,8 +208,8 @@ class AnalysisFlowManager:
         if self.verbose:
             print("\n🔍 Phase 2: Verification Feedback Enhancement")
         
-        # Skip verification for categories that don't need it
-        if primary_category not in [Categories.GENERAL]:
+        # Run verification only for disinformation category (most critical for fact-checking)
+        if primary_category == Categories.DISINFORMATION:
             # Check if verification should be triggered
             analyzer_result = {'category': primary_category, 'confidence': 0.8}
             should_trigger, reason = self.analyzer_hooks.should_trigger_verification(content, analyzer_result)
@@ -207,12 +218,15 @@ class AnalysisFlowManager:
                 if self.verbose:
                     print(f"🔍 Verification triggered: {reason}")
                 
+                start_time = time.time()
                 try:
                     # Run verification
                     analysis_result = await self.analyzer_hooks.analyze_with_verification(
                         content, 
                         original_result=analyzer_result
                     )
+                    
+                    stage_timings['verification'] = time.time() - start_time
                     
                     verification_data = analysis_result.verification_data
                     
@@ -231,6 +245,7 @@ class AnalysisFlowManager:
                         verification_data = analysis_result.verification_data
                     
                 except Exception as e:
+                    stage_timings['verification'] = time.time() - start_time
                     if self.verbose:
                         print(f"⚠️  Verification failed: {e}")
                     verification_data = {}
@@ -242,6 +257,10 @@ class AnalysisFlowManager:
         if self.verbose:
             print(f"   ✅ Final category after verification: {primary_category}")
             print(f"   ✅ Enhanced explanation: {local_explanation[:100]}...")
+            if 'verification' in stage_timings:
+                print(f"   ⏱️  Verification: {stage_timings['verification']:.3f}s")
+            else:
+                print("   ⏱️  Verification: skipped")
         
         # Return pattern data
         pattern_data = {
@@ -253,6 +272,12 @@ class AnalysisFlowManager:
                 'keywords': pattern_result.keywords
             }
         }
+        
+        # Add stage timings to verification data
+        if verification_data:
+            verification_data['stage_timings'] = stage_timings
+        else:
+            verification_data = {'stage_timings': stage_timings}
         
         return AnalysisResult(
             category=primary_category,
@@ -279,7 +304,7 @@ class AnalysisFlowManager:
         
         Returns:
             ExternalAnalysisResult with category and explanation (independent from local)
-        """
+        """        
         if self.verbose:
             print("=" * 80)
             print("🌐 Starting EXTERNAL analysis flow")
@@ -287,11 +312,20 @@ class AnalysisFlowManager:
             if media_urls:
                 print(f"🖼️  Media: {len(media_urls)} URLs")
         
+        start_time = time.time()
         # Run independent external analysis
         external_result = await self.external.analyze(content, media_urls)
+        external_timing = time.time() - start_time
         
         if self.verbose:
             print(f"✅ External analysis complete: {external_result.category} - {external_result.explanation[:300]}...")
+            print(f"   ⏱️  External analysis: {external_timing:.3f}s")
+        
+        # Add timing to the result if it has a dict structure
+        if hasattr(external_result, 'timing'):
+            external_result.timing = external_timing
+        elif hasattr(external_result, '__dict__'):
+            external_result.__dict__['timing'] = external_timing
         
         return external_result
     

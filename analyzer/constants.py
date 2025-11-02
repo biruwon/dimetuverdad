@@ -64,7 +64,7 @@ class ConfigDefaults:
     DOWNLOAD_TIMEOUT: Final[float] = 120.0
     REQUEST_TIMEOUT: Final[float] = 30.0
     MAX_CONCURRENCY: Final[int] = 4
-    MAX_LLM_CONCURRENCY: Final[int] = 2
+    MAX_LLM_CONCURRENCY: Final[int] = 6  # Increased from 2 to 6 for better parallel processing
 
 
 class MetricsKeys:

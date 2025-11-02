@@ -72,6 +72,12 @@ class OllamaClient:
         if timeout is None:
             timeout = self.DEFAULT_TEXT_TIMEOUT
         
+        if self.verbose:
+            print(f"🔄 Starting Ollama text generation (timeout: {timeout}s)")
+            print(f"📝 Prompt length: {len(prompt)} chars")
+            if system_prompt:
+                print(f"📋 System prompt length: {len(system_prompt)} chars")
+        
         return await self._retry_ollama_call(
             operation="Ollama text generation",
             call_func=self.client.generate,
@@ -151,58 +157,96 @@ class OllamaClient:
         Raises:
             OllamaRetryError: When all retries are exhausted or non-retryable error occurs
         """
+        import time
+        
         for attempt in range(self.MAX_RETRIES):
+            attempt_start = time.time()
+            
+            if self.verbose:
+                print(f"🔄 Attempt {attempt + 1}/{self.MAX_RETRIES} for {operation}")
+                if attempt > 0:
+                    print(f"⏱️  Starting attempt {attempt + 1} at {time.strftime('%H:%M:%S')}")
+            
             try:
-                if self.verbose and attempt > 0:
-                    print(f"   🔄 Retry attempt {attempt + 1}/{self.MAX_RETRIES} for {operation}")
+                if self.verbose:
+                    print(f"📡 Calling Ollama API with {timeout}s timeout...")
                 
                 # Make the Ollama API call with timeout
+                api_call_start = time.time()
                 response = await asyncio.wait_for(
                     call_func(*args, **kwargs),
                     timeout=timeout
                 )
+                api_call_duration = time.time() - api_call_start
+                
+                if self.verbose:
+                    print(f"✅ Ollama API call completed in {api_call_duration:.2f}s")
                 
                 # Extract and validate response
+                response_extraction_start = time.time()
                 generated_text = response.get("response", "").strip()
+                
+                if self.verbose:
+                    print(f"📄 Response extracted in {time.time() - response_extraction_start:.3f}s")
+                    print(f"📏 Response length: {len(generated_text)} chars")
+                
                 if not generated_text:
                     raise OllamaEmptyResponseError("Model returned empty response")
+                
+                total_attempt_duration = time.time() - attempt_start
+                if self.verbose:
+                    print(f"🎯 Attempt {attempt + 1} succeeded in {total_attempt_duration:.2f}s")
                 
                 return generated_text
                 
             except asyncio.TimeoutError:
-                error_msg = f"{operation} timed out after {timeout}s"
+                attempt_duration = time.time() - attempt_start
+                error_msg = f"{operation} timed out after {timeout}s (attempt took {attempt_duration:.2f}s)"
+                if self.verbose:
+                    print(f"⏰ {error_msg}")
+                
                 if attempt < self.MAX_RETRIES - 1:
                     delay = self.BASE_RETRY_DELAY * (2 ** attempt)
                     if self.verbose:
-                        print(f"   ⏱️  {error_msg}, retrying in {delay}s...")
+                        print(f"⏳ Waiting {delay}s before retry...")
                     await asyncio.sleep(delay)
                     continue
                 else:
                     raise OllamaRetryError(f"{error_msg} after {self.MAX_RETRIES} attempts")
                 
             except OllamaEmptyResponseError as e:
+                attempt_duration = time.time() - attempt_start
+                if self.verbose:
+                    print(f"📭 Empty response in {attempt_duration:.2f}s")
+                
                 if attempt < self.MAX_RETRIES - 1:
                     delay = self.BASE_RETRY_DELAY * (2 ** attempt)
                     if self.verbose:
-                        print(f"   ⚠️  {operation} returned empty response, retrying in {delay}s...")
+                        print(f"⏳ Waiting {delay}s before retry...")
                     await asyncio.sleep(delay)
                     continue
                 else:
                     raise OllamaRetryError(f"{operation} returned empty response after {self.MAX_RETRIES} attempts")
                     
             except Exception as e:
+                attempt_duration = time.time() - attempt_start
+                if self.verbose:
+                    print(f"💥 Exception in attempt {attempt + 1} after {attempt_duration:.2f}s: {type(e).__name__}: {str(e)}")
+                
                 # Check if it's a retryable error
                 if self._is_retryable_error(e):
                     if attempt < self.MAX_RETRIES - 1:
                         delay = self.BASE_RETRY_DELAY * (2 ** attempt)
                         if self.verbose:
-                            print(f"   ⚠️  {operation} failed with retryable error: {str(e)}, retrying in {delay}s...")
+                            print(f"🔄 Retryable error, waiting {delay}s...")
                         await asyncio.sleep(delay)
                         continue
                     else:
                         raise OllamaRetryError(f"{operation} failed after {self.MAX_RETRIES} attempts: {str(e)}")
                 else:
                     # Non-retryable error - fail immediately
+                    if self.verbose:
+                        print(f"❌ Non-retryable error: {type(e).__name__}: {str(e)}")
                     raise e
     
     def _is_retryable_error(self, error: Exception) -> bool:

@@ -7,10 +7,9 @@ import base64
 import re
 import requests
 from typing import Tuple, Optional, List
-from .ollama_client import OllamaClient, OllamaRetryError
+from .ollama_client import OllamaClient
 from .categories import Categories
 from .prompts import EnhancedPromptGenerator
-
 
 class OllamaAnalyzer:
     """
@@ -20,7 +19,7 @@ class OllamaAnalyzer:
     
     # Default generation parameters
     DEFAULT_TEMPERATURE_TEXT = 0.2 # the lower, the less creativity
-    DEFAULT_MAX_TOKENS = 200 # less token, less time to generate a longer response
+    DEFAULT_MAX_TOKENS = 150 # Reduced from 200 for faster responses
     DEFAULT_TEMPERATURE_MULTIMODAL = 0.2
     DEFAULT_TOP_P = 0.7 # reduces token examples so reduces probability
     DEFAULT_NUM_PREDICT_MULTIMODAL = 150
@@ -67,6 +66,9 @@ class OllamaAnalyzer:
         Raises:
             RuntimeError: If analysis fails
         """
+        import time
+        total_start = time.time()
+        
         if self.verbose:
             print(f"🔍 Running {'multimodal' if media_urls else 'text'} categorization + explanation")
             print(f"📝 Content: {content[:100]}...")
@@ -80,37 +82,57 @@ class OllamaAnalyzer:
             media_urls = None
         
         try:
-            # Build prompt
+            # Phase 1: Build prompts
+            prompt_start = time.time()
             if media_urls:
                 prompt = self.prompt_generator.build_multimodal_categorization_prompt(content)
                 system_prompt = self.prompt_generator.build_ollama_multimodal_system_prompt()
             else:
                 prompt = self.prompt_generator.build_ollama_categorization_prompt(content)
                 system_prompt = self.prompt_generator.build_ollama_text_analysis_system_prompt()
+            prompt_time = time.time() - prompt_start
             
-            # Generate response
+            # Phase 2: Prepare media (if needed)
+            media_prep_start = time.time()
+            media_content = None
             if media_urls:
-                # Prepare media for multimodal analysis
                 media_content = await self._prepare_media_content(media_urls)
                 if not media_content:
                     if self.verbose:
                         print("⚠️  No valid media found, falling back to text-only")
-                    response = await self._generate_text(prompt, system_prompt)
-                else:
-                    response = await self._generate_multimodal(prompt, media_content, system_prompt)
+            media_prep_time = time.time() - media_prep_start
+            
+            # Phase 3: Generate LLM response
+            llm_start = time.time()
+            if media_urls and media_content:
+                response = await self._generate_multimodal(prompt, media_content, system_prompt)
             else:
                 response = await self._generate_text(prompt, system_prompt)
+            llm_time = time.time() - llm_start
             
-            # Parse response
+            # Phase 4: Parse response
+            parse_start = time.time()
             category, explanation = self._parse_category_and_explanation(response)
+            parse_time = time.time() - parse_start
+            
+            total_time = time.time() - total_start
             
             if self.verbose:
                 print(f"✅ Category: {category}")
                 print(f"💭 Explanation: {explanation[:100]}...")
+                print(f"⏱️  Timing breakdown:")
+                print(f"   📝 Prompt building: {prompt_time:.3f}s")
+                print(f"   🖼️  Media preparation: {media_prep_time:.3f}s")
+                print(f"   🤖 LLM generation: {llm_time:.3f}s")
+                print(f"   🔍 Response parsing: {parse_time:.3f}s")
+                print(f"   📊 Total analysis: {total_time:.3f}s")
             
             return category, explanation
             
         except Exception as e:
+            total_time = time.time() - total_start
+            if self.verbose:
+                print(f"❌ Analysis failed after {total_time:.3f}s: {type(e).__name__}: {str(e)}")
             raise RuntimeError(f"Analysis failed: {str(e)}") from e
     
     async def explain_only(
@@ -133,6 +155,9 @@ class OllamaAnalyzer:
         Raises:
             RuntimeError: If explanation generation fails
         """
+        import time
+        total_start = time.time()
+        
         if self.verbose:
             print(f"🔍 Generating {'multimodal' if media_urls else 'text'} explanation for: {category}")
         
@@ -143,26 +168,36 @@ class OllamaAnalyzer:
             media_urls = None
         
         try:
-            # Build prompt
+            # Phase 1: Build prompts
+            prompt_start = time.time()
             if media_urls:
                 prompt = self.prompt_generator.build_multimodal_explanation_prompt(content, category)
                 system_prompt = self.prompt_generator.build_ollama_multimodal_system_prompt()
             else:
                 prompt = self.prompt_generator.build_ollama_text_explanation_prompt(content, category, model_type="ollama")
                 system_prompt = self.prompt_generator.build_ollama_text_analysis_system_prompt()
+            prompt_time = time.time() - prompt_start
             
-            # Generate response
+            # Phase 2: Prepare media (if needed)
+            media_prep_start = time.time()
+            media_content = None
             if media_urls:
                 media_content = await self._prepare_media_content(media_urls)
                 if not media_content:
-                    response = await self._generate_text(prompt, system_prompt)
-                else:
-                    # For explanation-only, we just need the explanation text
-                    response = await self._generate_multimodal(prompt, media_content, system_prompt)
+                    if self.verbose:
+                        print("⚠️  No valid media found, falling back to text-only")
+            media_prep_time = time.time() - media_prep_start
+            
+            # Phase 3: Generate LLM response
+            llm_start = time.time()
+            if media_urls and media_content:
+                response = await self._generate_multimodal(prompt, media_content, system_prompt)
             else:
                 response = await self._generate_text(prompt, system_prompt)
+            llm_time = time.time() - llm_start
             
-            # Extract explanation from response
+            # Phase 4: Parse response
+            parse_start = time.time()
             explanation = response.strip()
             
             # Clean up any format prefixes that the LLM might have added
@@ -171,19 +206,37 @@ class OllamaAnalyzer:
             
             if not explanation or len(explanation.strip()) < 10:
                 explanation = f"Contenido clasificado como {category}."
+            parse_time = time.time() - parse_start
+            
+            total_time = time.time() - total_start
             
             if self.verbose:
                 print(f"💭 Explanation: {explanation[:100]}...")
+                print(f"⏱️  Timing breakdown:")
+                print(f"   📝 Prompt building: {prompt_time:.3f}s")
+                print(f"   🖼️  Media preparation: {media_prep_time:.3f}s")
+                print(f"   🤖 LLM generation: {llm_time:.3f}s")
+                print(f"   🔍 Response parsing: {parse_time:.3f}s")
+                print(f"   📊 Total analysis: {total_time:.3f}s")
             
             return explanation
             
         except Exception as e:
+            total_time = time.time() - total_start
+            if self.verbose:
+                print(f"❌ Explanation generation failed after {total_time:.3f}s: {type(e).__name__}: {str(e)}")
             raise RuntimeError(f"Explanation generation failed: {str(e)}") from e
     
     async def _generate_text(self, prompt: str, system_prompt: str) -> str:
         """Generate text-only response."""
+        import time
+        start_time = time.time()
+        
+        if self.verbose:
+            print(f"📝 Starting text generation at {time.strftime('%H:%M:%S')}")
+        
         try:
-            return await self.client.generate_text(
+            result = await self.client.generate_text(
                 prompt=prompt,
                 model=self.model,
                 system_prompt=system_prompt,
@@ -193,8 +246,17 @@ class OllamaAnalyzer:
                     "top_p": self.DEFAULT_TOP_P
                 }
             )
-        except OllamaRetryError as e:
-            raise RuntimeError(f"Text generation failed: {str(e)}") from e
+            
+            duration = time.time() - start_time
+            if self.verbose:
+                print(f"✅ Text generation completed in {duration:.2f}s")
+            
+            return result
+        except Exception as e:
+            duration = time.time() - start_time
+            if self.verbose:
+                print(f"❌ Text generation failed after {duration:.2f}s: {type(e).__name__}: {str(e)}")
+            raise
     
     async def _generate_multimodal(
         self,

@@ -70,6 +70,7 @@ class ExternalAnalyzer:
             
             if self.verbose:
                 print(f"✅ External analysis complete: {result.category} - {result.explanation[:100]}...")
+                print(f"🔍 Raw Gemini response preview: {result.explanation[:200]}...")
             
             return result
             
