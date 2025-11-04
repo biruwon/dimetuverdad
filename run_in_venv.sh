@@ -12,7 +12,6 @@
 #   ./run_in_venv.sh test-integration             # run all integration tests
 #   ./run_in_venv.sh test-unit                   # run all unit test files in project
 #   ./run_in_venv.sh test-suite                  # run complete test suite (unit + integration)
-#   ./run_in_venv.sh compare-models    # run model comparison benchmarks
 #   ./run_in_venv.sh benchmarks        # run performance benchmarks
 #   ./run_in_venv.sh full              # run fetch then analyze-twitter
 
@@ -76,13 +75,6 @@ analyze_twitter_multi(){
   "$PY" "$ROOT_DIR/scripts/analyze_multi_model.py" "$@"
 }
 
-compare_models(){
-  ensure_venv
-  echo "Generating model comparison report..."
-  cd "$ROOT_DIR"
-  "$PY" "$ROOT_DIR/scripts/analyze_multi_model.py" --limit 50
-}
-
 web(){
   ensure_venv
   echo "Starting web application on port 5000..."
@@ -141,12 +133,6 @@ init_db(){
   "$PY" "$ROOT_DIR/scripts/init_database.py" "$@"
 }
 
-compare_models(){
-  ensure_venv
-  echo "Running model comparison..."
-  "$PY" "$ROOT_DIR/scripts/compare_models.py" "$@"
-}
-
 benchmarks(){
   ensure_venv
   echo "Running performance benchmarks..."
@@ -174,10 +160,6 @@ case "${1-}" in
   analyze-twitter-multi)
     shift
     analyze_twitter_multi "$@"
-    ;;
-  compare-models)
-    shift
-    compare_models "$@"
     ;;
   web)
     web
@@ -232,7 +214,6 @@ case "${1-}" in
     echo "  fetch             Run fetch_tweets.py (requires X credentials in .env)"
     echo "  analyze-twitter        Run analysis on posts from database"
     echo "  analyze-twitter-multi  Run multi-model analysis on posts"
-    echo "  compare-models         Generate model comparison report"
     echo "  web               Start web application on port 5000"
     echo "  test-analyzer-integration  Run analyzer integration tests"
     echo "  test-fetch-integration     Run fetch integration tests"
@@ -256,7 +237,6 @@ case "${1-}" in
     echo "  $0 analyze-twitter --username Vox_es --limit 10"
     echo "  $0 analyze-twitter-multi --limit 5"
     echo "  $0 analyze-twitter-multi --username Santi_ABASCAL --models gemma3:4b,gpt-oss:20b"
-    echo "  $0 compare-models"
     echo "  $0 backup-db list"
     exit 1
     ;;

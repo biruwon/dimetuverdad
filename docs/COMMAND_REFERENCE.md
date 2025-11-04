@@ -112,9 +112,6 @@ Complete reference of all available commands for dimetuverdad operations.
 # Performance analysis
 ./run_in_venv.sh benchmarks
 
-# Model comparison
-./run_in_venv.sh compare-models --quick
-
 # Database backup operations
 ./run_in_venv.sh backup-db              # Create backup
 ./run_in_venv.sh backup-db list         # List backups
@@ -145,14 +142,8 @@ python quick_test.py --interactive
 ## Performance Analysis
 
 ```bash
-# Compare different LLM models
-./run_in_venv.sh compare-models --quick
-
 # Run comprehensive performance benchmarks
 ./run_in_venv.sh benchmarks
-
-# Performance analysis with specific parameters
-./run_in_venv.sh compare-models --full --output results.json
 ```
 
 ## Parallel Test Execution
