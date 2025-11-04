@@ -70,12 +70,12 @@ async def _handle_single_tweet_analysis(tweet_id: str, verbose: bool = False):
         traceback.print_exc()
 
 
-async def _setup_analyzer_and_get_tweets(username, max_tweets, force_reanalyze, verbose):
+async def _setup_analyzer_and_get_tweets(username, max_tweets, force_reanalyze, verbose, fast_mode=False):
     """Initialize analyzer and retrieve tweets for analysis."""
     print("🚀 Initializing Analyzer...")
     try:
         config = AnalyzerConfig(verbose=verbose)
-        analyzer_instance = create_analyzer(config=config, verbose=verbose)  # Always use LLM for better explanations
+        analyzer_instance = create_analyzer(config=config, verbose=verbose, fast_mode=fast_mode)  # Always use LLM for better explanations
         print("✅ Analyzer ready!")
     except Exception as e:
         print(f"❌ Error initializing analyzer: {e}")
@@ -345,7 +345,7 @@ def _print_analysis_summary(results, category_counts, tracker):
     print_performance_summary(metrics)
 
 
-async def analyze_tweets_cli(username=None, max_tweets=None, force_reanalyze=False, tweet_id=None, verbose=False):
+async def analyze_tweets_cli(username=None, max_tweets=None, force_reanalyze=False, tweet_id=None, verbose=False, fast_mode=False):
     """
     CLI wrapper for tweet analysis functionality.
 
@@ -369,7 +369,7 @@ async def analyze_tweets_cli(username=None, max_tweets=None, force_reanalyze=Fal
 
     # Initialize analyzer and get tweets for bulk processing
     analyzer_instance, tweets, analyzed_count = await _setup_analyzer_and_get_tweets(
-        username, max_tweets, force_reanalyze, verbose
+        username, max_tweets, force_reanalyze, verbose, fast_mode
     )
 
     if not tweets:
@@ -390,18 +390,19 @@ async def analyze_tweets_cli(username=None, max_tweets=None, force_reanalyze=Fal
     _print_analysis_summary(results, category_counts, tracker)
 
 
-def create_analyzer_cli(config: Optional[AnalyzerConfig] = None, verbose: bool = False):
+def create_analyzer_cli(config: Optional[AnalyzerConfig] = None, verbose: bool = False, fast_mode: bool = False):
     """
     CLI wrapper for analyzer creation.
 
     Args:
         config: Analyzer configuration
         verbose: Enable verbose output
+        fast_mode: Use simplified prompts for faster processing
 
     Returns:
         Analyzer instance
     """
-    return create_analyzer(config=config, verbose=verbose)
+    return create_analyzer(config=config, verbose=verbose, fast_mode=fast_mode)
 
 
 async def reanalyze_tweet_cli(tweet_id: str, analyzer=None):
@@ -441,6 +442,8 @@ Examples:
     parser.add_argument('--tweet-id', '-t', help='Analyze/reanalyze a specific tweet by ID')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Show detailed analysis output for each tweet')
+    parser.add_argument('--fast-mode', action='store_true',
+                       help='Use simplified prompts for faster bulk processing')
 
     args = parser.parse_args()
 
@@ -450,7 +453,8 @@ Examples:
         max_tweets=args.limit,
         force_reanalyze=args.force_reanalyze,
         tweet_id=args.tweet_id,
-        verbose=args.verbose
+        verbose=args.verbose,
+        fast_mode=args.fast_mode
     ))
 
 

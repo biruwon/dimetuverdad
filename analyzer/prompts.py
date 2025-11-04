@@ -211,15 +211,70 @@ class EnhancedPromptGenerator:
 Clasifica en UNA categoría exacta:
 hate_speech, anti_immigration, anti_lgbtq, anti_feminism, disinformation, conspiracy_theory, call_to_action, nationalism, anti_government, political_general, general
 
-REGLAS CRÍTICAS PARA 100% PRECISIÓN:
+PRINCIPIOS FUNDAMENTALES DE CLASIFICACIÓN:
 
-1. Ataques a Islam/religión ("islamización", "velo islámico") → hate_speech
-2. Crítica a líderes/partidos ("gobierno corrupto", "Feijóo no cumple") → anti_government
-3. "ÚLTIMA HORA" + eventos/protestas reales → call_to_action
-4. Citas atribuidas sobre crimen/seguridad → general
-5. Crítica migratoria ("manadas de extranjeros", "clases árabe") → anti_immigration
-6. "ÚLTIMA HORA" + claims falsos políticos → disinformation
-7. Preguntas opiniones → general
+1. IDENTIFICA EL ELEMENTO PROBLEMÁTICO PRINCIPAL:
+   - hate_speech: Ataques PERSONALES directos con insultos individuales
+   - anti_government: Crítica INSTITUCIONAL al gobierno/sistema político
+   - disinformation: Información FALSA presentada como cierta sobre hechos verificables
+   - conspiracy_theory: Narrativas de CONSPIRACIÓN OCULTA y control secreto
+   - anti_immigration: Retórica XENÓFOBA colectiva contra inmigrantes
+   - call_to_action: Incitación a MOVILIZACIÓN COLECTIVA organizada
+   - nationalism: Promoción de IDENTIDAD NACIONAL española
+   - political_general: Contenido POLÍTICO NEUTRAL informativo
+   - general: Contenido NO POLÍTICO
+
+2. DIFERENCIACIONES CRÍTICAS:
+   - PERSONAL vs INSTITUCIONAL: hate_speech ataca individuos, anti_government critica sistemas
+   - FALSO vs INFORMATIVO: disinformation miente sobre hechos, political_general informa neutralmente
+   - OCULTO vs PÚBLICO: conspiracy_theory habla de agendas secretas, anti_government critica políticas públicas
+   - COLECTIVO vs INDIVIDUAL: anti_immigration critica grupos, hate_speech ataca personas específicas
+
+3. INDICADORES ESPECÍFICOS POR CATEGORÍA:
+
+HATE_SPEECH:
+- Insultos directos: "mierda", "indecente", "traidor", "psicópata", "fascista"
+- Deshumanización: comparaciones degradantes con animales/enfermedades
+- Ataques por origen/ideología/identidad personal
+
+ANTI_GOVERNMENT:
+- "Gobierno corrupto", "políticas erróneas", "instituciones fallidas"
+- Acusaciones de corrupción institucional, abuso de poder
+- Crítica a sistemas políticos, no ataques personales
+
+DISINFORMATION:
+- Claims falsos sobre hechos verificables: decretos, leyes, nombramientos sin fuente oficial
+- "CONFIRMADO:" + evento político inventado
+- Afirmaciones presentadas como ciertas sin evidencia (BOE, ministerios, partidos)
+
+CONSPIRACY_THEORY:
+- "Ellos controlan todo", "agenda oculta", "manipulación global"
+- Élites secretas, conspiraciones organizadas, control oculto
+- Narrativas amplias de agendas secretas y manipulación masiva
+
+ANTI_IMMIGRATION:
+- "Invasión migratoria", "fronteras abiertas", "manadas extranjeras"
+- Amenazas colectivas a identidad, seguridad, economía por inmigración
+- Retórica xenófoba contra grupos, no individuos
+
+CALL_TO_ACTION:
+- "Todos a la calle", "hay que actuar", "movilización inmediata"
+- Incitación a protestas/manifestaciones coordinadas
+- Lenguaje de urgencia colectiva organizada
+
+NATIONALISM:
+- "Orgullo español", "defensa de España", "tradiciones españolas"
+- Promoción de identidad nacional, símbolos patrios
+- Expresiones de superioridad o defensa cultural nacional
+
+POLITICAL_GENERAL:
+- Menciones políticas informativas sin crítica extrema
+- Contenido político neutral: partidos, líderes, eventos
+- SIN alarmismo, conspiraciones, ataques personales o falsedades
+
+GENERAL:
+- Temas no políticos, conversaciones cotidianas
+- Ausencia de elementos políticos identificables
 
 FORMATO:
 CATEGORÍA: [una_palabra]
@@ -232,15 +287,35 @@ EXPLICACIÓN: [2-3 frases]"""
 
 {content}
 
-REGLAS CRÍTICAS PARA 100% PRECISIÓN:
+INSTRUCCIONES PARA CLASIFICACIÓN PRECISA:
 
-1. Ataques a Islam/religión ("islamización", "velo islámico") → hate_speech
-2. Crítica a líderes/partidos ("gobierno corrupto", "Feijóo no cumple") → anti_government
-3. "ÚLTIMA HORA" + eventos/protestas reales → call_to_action
-4. Citas atribuidas sobre crimen/seguridad → general
-5. Crítica migratoria ("manadas de extranjeros", "clases árabe") → anti_immigration
-6. "ÚLTIMA HORA" + claims falsos políticos → disinformation
-7. Preguntas opiniones → general
+1. IDENTIFICA EL ELEMENTO PROBLEMÁTICO PRINCIPAL:
+   - hate_speech: Ataques PERSONALES directos con insultos individuales
+   - anti_government: Crítica INSTITUCIONAL al gobierno/sistema político
+   - disinformation: Información FALSA presentada como cierta sobre hechos verificables
+   - conspiracy_theory: Narrativas de CONSPIRACIÓN OCULTA y control secreto
+   - anti_immigration: Retórica XENÓFOBA colectiva contra inmigrantes
+   - call_to_action: Incitación a MOVILIZACIÓN COLECTIVA organizada
+   - nationalism: Promoción de IDENTIDAD NACIONAL española
+   - political_general: Contenido POLÍTICO NEUTRAL informativo
+   - general: Contenido NO POLÍTICO
+
+2. DIFERENCIACIONES CRÍTICAS:
+   - PERSONAL vs INSTITUCIONAL: hate_speech ataca individuos, anti_government critica sistemas
+   - FALSO vs INFORMATIVO: disinformation miente sobre hechos, political_general informa neutralmente
+   - OCULTO vs PÚBLICO: conspiracy_theory habla de agendas secretas, anti_government critica políticas públicas
+   - COLECTIVO vs INDIVIDUAL: anti_immigration critica grupos, hate_speech ataca personas específicas
+
+3. BUSCA INDICADORES ESPECÍFICOS:
+   - Insultos directos → hate_speech
+   - "Gobierno corrupto" → anti_government
+   - Claims falsos verificables → disinformation
+   - "Ellos controlan todo" → conspiracy_theory
+   - "Invasión migratoria" → anti_immigration
+   - "Todos a la calle" → call_to_action
+   - "Orgullo español" → nationalism
+   - Política neutral → political_general
+   - No político → general
 
 CATEGORÍA: [una_palabra]
 EXPLICACIÓN: [2-3 frases]"""
@@ -270,19 +345,27 @@ ENFÓCATE ÚNICAMENTE en por qué SÍ pertenece a {category}."""
 
 TEXTO: "{text}"
 
-INSTRUCCIONES:
-1. Examina el texto Y las imágenes proporcionadas
-2. Identifica símbolos políticos, banderas, figuras en las imágenes
-3. Evalúa cómo la imagen refuerza el mensaje del texto
-4. Clasifica en UNA categoría
+INSTRUCCIONES PARA ANÁLISIS MULTIMODAL:
 
-REGLAS CRÍTICAS:
-- Ataques a Islam/religión → hate_speech
-- Crítica a líderes/partidos → anti_government
-- "ÚLTIMA HORA" + eventos/protestas → call_to_action
-- Claims políticos falsos → disinformation
-- Crítica migratoria → anti_immigration
-- Preguntas opiniones → general
+1. EXAMINA TEXTO + IMÁGENES JUNTOS:
+   - Identifica símbolos políticos, banderas, figuras públicas en imágenes
+   - Evalúa cómo imagen refuerza o modifica el mensaje textual
+   - Busca elementos visuales que indiquen extremismo político
+
+2. REGLAS CRÍTICAS PARA CLASIFICACIÓN:
+   - hate_speech: Ataques personales + imágenes degradantes/dehumanizadoras
+   - anti_government: Crítica institucional + símbolos de protesta gubernamental
+   - disinformation: Texto falso + imágenes manipuladas o sin contexto
+   - conspiracy_theory: Texto conspirativo + símbolos de élites/control oculto
+   - anti_immigration: Retórica xenófoba + imágenes de "invasión" o fronteras
+   - call_to_action: Llamadas a movilización + imágenes de protestas/manifestaciones
+   - political_general: Política neutral + imágenes informativas
+   - general: Contenido no político + imágenes cotidianas
+
+3. EVALÚA COMBINACIÓN VISUAL-TEXTUAL:
+   - ¿Cómo se refuerzan mutuamente texto e imagen?
+   - ¿Añade la imagen elementos problemáticos al texto?
+   - ¿Cambia el contexto visual la interpretación del mensaje?
 
 FORMATO:
 CATEGORÍA: [categoría]
@@ -297,10 +380,22 @@ CATEGORÍA DETECTADA: {category}
 
 OBJETIVO: Explica por qué este contenido multimodal pertenece a la categoría {category}.
 
-INSTRUCCIONES:
-1. Examina el texto Y los elementos visuales
-2. Identifica cómo el contenido visual refuerza el mensaje textual
-3. Cita elementos específicos del texto Y de las imágenes
+INSTRUCCIONES PARA EXPLICACIÓN MULTIMODAL:
+1. EXAMINA TEXTO Y ELEMENTOS VISUALES:
+   - Identifica cómo el contenido visual refuerza el mensaje textual
+   - Menciona símbolos políticos, figuras, o elementos gráficos específicos
+   - Evalúa la combinación de mensaje escrito e imagen
+
+2. ESTRUCTURA LA EXPLICACIÓN:
+   - Comienza con elementos clave del TEXTO
+   - Describe cómo la IMAGEN refuerza o añade al mensaje
+   - Explica la relación entre ambos elementos
+   - Conecta con las características de la categoría {category}
+
+3. SE ESPECÍFICO:
+   - Cita frases exactas del texto entre comillas
+   - Describe elementos visuales concretos
+   - Muestra cómo texto e imagen crean el mensaje problemático
 
 EXPLICACIÓN:"""
 

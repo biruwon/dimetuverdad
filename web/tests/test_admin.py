@@ -93,7 +93,7 @@ class TestAdminEditAnalysis:
                                        follow_redirects=False)
 
             assert response.status_code == 302  # Redirect after action
-            mock_reanalyze.assert_called_once_with('1234567890')
+            mock_reanalyze.assert_called_once_with('1234567890', verbose=True)
 
     def test_edit_analysis_refresh_action(self, admin_client, mock_database, sample_tweet_data):
         """Test refresh action."""
@@ -126,7 +126,7 @@ class TestAdminEditAnalysis:
 
             assert response.status_code == 302
             mock_refetch.assert_called_once_with('1234567890')
-            mock_reanalyze.assert_called_once_with('1234567890')
+            mock_reanalyze.assert_called_once_with('1234567890', verbose=True)
 
 
 class TestAdminCategoryViews:

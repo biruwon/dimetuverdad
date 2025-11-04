@@ -66,16 +66,17 @@ class AnalysisFlowManager:
     3. External analysis only when explicitly triggered (admin action)
     """
     
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, fast_mode: bool = False):
         """
         Initialize flow manager with all analyzers.
         
         Args:
             verbose: Enable detailed logging
+            fast_mode: Use simplified prompts for faster bulk processing
         """
         # Initialize analyzers
         self.pattern_analyzer = PatternAnalyzer()
-        self.local_llm = OllamaAnalyzer(verbose=verbose)
+        self.local_llm = OllamaAnalyzer(verbose=verbose, fast_mode=fast_mode)
         self.external = ExternalAnalyzer(verbose=verbose)
         self.analyzer_hooks = create_analyzer_hooks(verbose=verbose)
         self.verbose = verbose

@@ -7,7 +7,7 @@ import base64
 import re
 import requests
 from typing import Tuple, Optional, List
-from .ollama_client import OllamaClient
+from .ollama_client import OllamaClient, OllamaRetryError
 from .categories import Categories
 from .prompts import EnhancedPromptGenerator
 
@@ -18,39 +18,54 @@ class OllamaAnalyzer:
     """
     
     # Default generation parameters
-    DEFAULT_TEMPERATURE_TEXT = 0.2 # the lower, the less creativity
-    DEFAULT_MAX_TOKENS = 150 # Reduced from 200 for faster responses
+    DEFAULT_TEMPERATURE_TEXT = 0.2 # Slightly higher for faster generation
+    DEFAULT_MAX_TOKENS = 80 # Further reduced for speed
     DEFAULT_TEMPERATURE_MULTIMODAL = 0.2
-    DEFAULT_TOP_P = 0.7 # reduces token examples so reduces probability
-    DEFAULT_NUM_PREDICT_MULTIMODAL = 150
+    DEFAULT_TOP_P = 0.9 # reduces token examples so reduces probability
+    DEFAULT_NUM_PREDICT_MULTIMODAL = 80 # Further reduced for speed
     DEFAULT_KEEP_ALIVE = "72h"
-    DETAULT_SEED = 42 # just a fixed number to force determinist responses
+    #DETAULT_SEED = 42 # just a fixed number to force determinist responses
     
     # Media handling settings
     DEFAULT_MEDIA_TIMEOUT = 5.0
     DEFAULT_MAX_MEDIA_SIZE = 10 * 1024 * 1024  # 10MB
     MAX_MEDIA_ITEMS = 3  # Process up to 3 media files
     
-    def __init__(self, model: str = "gemma3:27b-it-q4_K_M", verbose: bool = False):
+    def __init__(self, model: str = "gemma3:27b-it-q4_K_M", verbose: bool = False, fast_mode: bool = False):
         """
         Initialize Ollama analyzer.
         
         Args:
             model: Default model to use
             verbose: Enable detailed logging
+            fast_mode: Use simplified prompts for faster bulk processing
         """
         self.model = model
         self.verbose = verbose
+        self.fast_mode = fast_mode
         self.client = OllamaClient(verbose=verbose)
         self.prompt_generator = EnhancedPromptGenerator()
         
         if self.verbose:
-            print(f"🤖 OllamaAnalyzer initialized with model: {self.model}")
+            print(f"🤖 OllamaAnalyzer initialized with model: {self.model} (fast_mode: {fast_mode})")
+    
+    def _get_fast_system_prompt(self) -> str:
+        """Get simplified system prompt for fast mode."""
+        return self.prompt_generator.build_fast_system_prompt()
+
+    def _get_fast_categorization_prompt(self, content: str) -> str:
+        """Get simplified categorization prompt for fast mode."""
+        return self.prompt_generator.build_fast_categorization_prompt(content)
+
+    def _get_fast_explanation_prompt(self, content: str, category: str) -> str:
+        """Get simplified explanation prompt for fast mode."""
+        return self.prompt_generator.build_fast_explanation_prompt(content, category)
     
     async def categorize_and_explain(
         self,
         content: str,
-        media_urls: Optional[List[str]] = None
+        media_urls: Optional[List[str]] = None,
+        timeout: Optional[float] = None
     ) -> Tuple[str, str]:
         """
         Analyze content and return both category and explanation.
@@ -59,6 +74,7 @@ class OllamaAnalyzer:
         Args:
             content: Text content to analyze
             media_urls: Optional list of media URLs (images)
+            timeout: Optional timeout in seconds for LLM calls
         
         Returns:
             Tuple of (category, explanation)
@@ -84,7 +100,13 @@ class OllamaAnalyzer:
         try:
             # Phase 1: Build prompts
             prompt_start = time.time()
-            if media_urls:
+            if self.fast_mode:
+                if media_urls:
+                    prompt = self.prompt_generator.build_fast_multimodal_categorization_prompt(content)
+                else:
+                    prompt = self._get_fast_categorization_prompt(content)
+                system_prompt = self._get_fast_system_prompt()
+            elif media_urls:
                 prompt = self.prompt_generator.build_multimodal_categorization_prompt(content)
                 system_prompt = self.prompt_generator.build_ollama_multimodal_system_prompt()
             else:
@@ -105,9 +127,9 @@ class OllamaAnalyzer:
             # Phase 3: Generate LLM response
             llm_start = time.time()
             if media_urls and media_content:
-                response = await self._generate_multimodal(prompt, media_content, system_prompt)
+                response = await self._generate_multimodal(prompt, media_content, system_prompt, timeout)
             else:
-                response = await self._generate_text(prompt, system_prompt)
+                response = await self._generate_text(prompt, system_prompt, timeout)
             llm_time = time.time() - llm_start
             
             # Phase 4: Parse response
@@ -139,7 +161,8 @@ class OllamaAnalyzer:
         self,
         content: str,
         category: str,
-        media_urls: Optional[List[str]] = None
+        media_urls: Optional[List[str]] = None,
+        timeout: Optional[float] = None
     ) -> str:
         """
         Generate explanation for already-known category.
@@ -148,6 +171,7 @@ class OllamaAnalyzer:
             content: Content to explain
             category: Already-detected category
             media_urls: Optional list of media URLs
+            timeout: Optional timeout in seconds for LLM calls
         
         Returns:
             Explanation (Spanish, 2-3 sentences)
@@ -170,7 +194,13 @@ class OllamaAnalyzer:
         try:
             # Phase 1: Build prompts
             prompt_start = time.time()
-            if media_urls:
+            if self.fast_mode:
+                if media_urls:
+                    prompt = self.prompt_generator.build_fast_multimodal_explanation_prompt(content, category)
+                else:
+                    prompt = self._get_fast_explanation_prompt(content, category)
+                system_prompt = self._get_fast_system_prompt()
+            elif media_urls:
                 prompt = self.prompt_generator.build_multimodal_explanation_prompt(content, category)
                 system_prompt = self.prompt_generator.build_ollama_multimodal_system_prompt()
             else:
@@ -191,9 +221,9 @@ class OllamaAnalyzer:
             # Phase 3: Generate LLM response
             llm_start = time.time()
             if media_urls and media_content:
-                response = await self._generate_multimodal(prompt, media_content, system_prompt)
+                response = await self._generate_multimodal(prompt, media_content, system_prompt, timeout)
             else:
-                response = await self._generate_text(prompt, system_prompt)
+                response = await self._generate_text(prompt, system_prompt, timeout)
             llm_time = time.time() - llm_start
             
             # Phase 4: Parse response
@@ -227,7 +257,7 @@ class OllamaAnalyzer:
                 print(f"❌ Explanation generation failed after {total_time:.3f}s: {type(e).__name__}: {str(e)}")
             raise RuntimeError(f"Explanation generation failed: {str(e)}") from e
     
-    async def _generate_text(self, prompt: str, system_prompt: str) -> str:
+    async def _generate_text(self, prompt: str, system_prompt: str, timeout: Optional[float] = None) -> str:
         """Generate text-only response."""
         import time
         start_time = time.time()
@@ -244,7 +274,9 @@ class OllamaAnalyzer:
                     "temperature": self.DEFAULT_TEMPERATURE_TEXT,
                     "num_predict": self.DEFAULT_MAX_TOKENS,
                     "top_p": self.DEFAULT_TOP_P
-                }
+                },
+                keep_alive=self.DEFAULT_KEEP_ALIVE,
+                timeout=timeout
             )
             
             duration = time.time() - start_time
@@ -262,7 +294,8 @@ class OllamaAnalyzer:
         self,
         prompt: str,
         media_content: List[dict],
-        system_prompt: str
+        system_prompt: str,
+        timeout: Optional[float] = None
     ) -> str:
         """Generate multimodal response with images."""
         try:
@@ -283,7 +316,8 @@ class OllamaAnalyzer:
                     "num_predict": self.DEFAULT_MAX_TOKENS,
                     "top_p": self.DEFAULT_TOP_P
                 },
-                keep_alive=self.DEFAULT_KEEP_ALIVE
+                keep_alive=self.DEFAULT_KEEP_ALIVE,
+                timeout=timeout
             )
         except OllamaRetryError as e:
             raise RuntimeError(f"Multimodal generation failed: {str(e)}") from e

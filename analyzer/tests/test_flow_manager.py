@@ -161,7 +161,7 @@ class TestFlowManagerInitialization:
             
             assert manager.verbose is True
             # Verify verbose passed to components
-            mock_llm.assert_called_once_with(verbose=True)
+            mock_llm.assert_called_once_with(verbose=True, fast_mode=False)
             mock_ext.assert_called_once_with(verbose=True)
 
 

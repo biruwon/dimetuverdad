@@ -24,12 +24,12 @@ class OllamaClient:
     Provides robust text and multimodal generation with automatic error recovery.
     """
     
-    # Default timeout settings
-    DEFAULT_TEXT_TIMEOUT = 120.0  # 2 minutes for text generation
-    DEFAULT_MULTIMODAL_TIMEOUT = 240.0  # 4 minutes for multimodal generation
+    # Timeout settings (reasonable for production use)
+    DEFAULT_TEXT_TIMEOUT = 120.0  # 120 seconds for text generation
+    DEFAULT_MULTIMODAL_TIMEOUT = 180.0  # 180 seconds for multimodal (allows for image processing)
     
     # Retry settings
-    MAX_RETRIES = 3
+    MAX_RETRIES = 2
     BASE_RETRY_DELAY = 1.0  # seconds
     
     def __init__(self, verbose: bool = False):
@@ -40,6 +40,7 @@ class OllamaClient:
             verbose: Enable detailed logging
         """
         self.client = ollama.AsyncClient()
+        self.sync_client = ollama.Client()  # Synchronous client for to_thread
         self.verbose = verbose
         
         if self.verbose:
@@ -51,6 +52,7 @@ class OllamaClient:
         model: str,
         system_prompt: Optional[str] = None,
         options: Optional[Dict] = None,
+        keep_alive: Optional[str] = None,
         timeout: Optional[float] = None
     ) -> str:
         """
@@ -61,6 +63,7 @@ class OllamaClient:
             model: Model name
             system_prompt: Optional system prompt
             options: Optional generation parameters (temperature, num_predict, etc.)
+            keep_alive: How long to keep model loaded (e.g., "24h")
             timeout: Maximum wait time in seconds (defaults to DEFAULT_TEXT_TIMEOUT)
         
         Returns:
@@ -85,7 +88,8 @@ class OllamaClient:
             model=model,
             prompt=prompt,
             system=system_prompt,
-            options=options or {}
+            options=options or {},
+            keep_alive=keep_alive
         )
     
     async def generate_multimodal(
@@ -171,12 +175,17 @@ class OllamaClient:
                 if self.verbose:
                     print(f"📡 Calling Ollama API with {timeout}s timeout...")
                 
-                # Make the Ollama API call with timeout
+                # Make the Ollama API call with timeout using to_thread for proper cancellation
                 api_call_start = time.time()
+                
+                # Use to_thread with sync client for proper cancellation
+                # The async client uses sync HTTP calls internally, making it uncancellable
+                sync_call_func = self._get_sync_equivalent(call_func)
                 response = await asyncio.wait_for(
-                    call_func(*args, **kwargs),
+                    asyncio.to_thread(sync_call_func, *args, **kwargs),
                     timeout=timeout
                 )
+                
                 api_call_duration = time.time() - api_call_start
                 
                 if self.verbose:
@@ -283,3 +292,11 @@ class OllamaClient:
         ]
         
         return any(pattern in error_msg for pattern in retryable_patterns)
+    
+    def _get_sync_equivalent(self, async_call_func):
+        """Get the synchronous equivalent of an async call function."""
+        if async_call_func == self.client.generate:
+            return self.sync_client.generate
+        else:
+            # Fallback - assume it's already sync
+            return async_call_func

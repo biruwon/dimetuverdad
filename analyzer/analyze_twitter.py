@@ -8,6 +8,7 @@ CLI functionality has been moved to analyzer.cli module.
 import time
 import warnings
 import logging
+import traceback
 from typing import List, Optional
 from datetime import datetime
 from .categories import Categories
@@ -33,23 +34,25 @@ class Analyzer:
     - Evidence retrieval: For disinformation/conspiracy/numerical/temporal claims
     """
 
-    def __init__(self, config: Optional[AnalyzerConfig] = None, verbose: bool = False):
+    def __init__(self, config: Optional[AnalyzerConfig] = None, verbose: bool = False, fast_mode: bool = False):
         """
         Initialize analyzer with dual-flow architecture.
 
         Args:
             config: Analyzer configuration (created with defaults if None)
             verbose: Whether to enable verbose logging
+            fast_mode: Use simplified prompts for faster bulk processing
         """
         self.config = config or AnalyzerConfig()
         self.verbose = verbose
+        self.fast_mode = fast_mode
 
         # Initialize components
         self.metrics = MetricsCollector()
         self.repository = ContentAnalysisRepository()
 
         # Initialize analysis flow manager (handles all 3 stages)
-        self.flow_manager = AnalysisFlowManager(verbose=verbose)
+        self.flow_manager = AnalysisFlowManager(verbose=verbose, fast_mode=fast_mode)
 
         if self.verbose:
             print("🚀 Iniciando Analyzer con arquitectura dual-flow...")
@@ -288,9 +291,9 @@ class Analyzer:
 
 
 # Utility functions for analyzer operations
-def create_analyzer(config: Optional[AnalyzerConfig] = None, verbose: bool = False) -> Analyzer:
+def create_analyzer(config: Optional[AnalyzerConfig] = None, verbose: bool = False, fast_mode: bool = False) -> Analyzer:
     """Create and return an Analyzer instance with specified configuration."""
-    return Analyzer(config=config, verbose=verbose)
+    return Analyzer(config=config, verbose=verbose, fast_mode=fast_mode)
 
 
 async def reanalyze_tweet(tweet_id: str, verbose: bool = False, analyzer: Optional[Analyzer] = None) -> Optional[ContentAnalysis]:

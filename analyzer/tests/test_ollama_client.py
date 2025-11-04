@@ -31,7 +31,7 @@ class TestGenerateText:
         """Test successful text generation."""
         client = OllamaClient()
         
-        with patch.object(client.client, 'generate', new_callable=AsyncMock) as mock_generate:
+        with patch.object(client.sync_client, 'generate') as mock_generate:
             mock_generate.return_value = {"response": "Generated text response"}
             
             result = await client.generate_text(
@@ -47,7 +47,7 @@ class TestGenerateText:
         """Test text generation with custom options."""
         client = OllamaClient()
         
-        with patch.object(client.client, 'generate', new_callable=AsyncMock) as mock_generate:
+        with patch.object(client.sync_client, 'generate') as mock_generate:
             mock_generate.return_value = {"response": "Response with options"}
             
             result = await client.generate_text(
@@ -69,7 +69,7 @@ class TestGenerateMultimodal:
         """Test successful multimodal generation."""
         client = OllamaClient()
         
-        with patch.object(client.client, 'generate', new_callable=AsyncMock) as mock_generate:
+        with patch.object(client.sync_client, 'generate') as mock_generate:
             mock_generate.return_value = {"response": "Multimodal response"}
             
             result = await client.generate_multimodal(
@@ -102,7 +102,7 @@ class TestRetryLogic:
         """Test retry when model returns empty response."""
         client = OllamaClient()
         
-        with patch.object(client.client, 'generate', new_callable=AsyncMock) as mock_generate:
+        with patch.object(client.sync_client, 'generate') as mock_generate:
             # First call returns empty, second call succeeds
             mock_generate.side_effect = [
                 {"response": ""},
@@ -122,47 +122,45 @@ class TestRetryLogic:
         """Test that retries are exhausted after max attempts with empty responses."""
         client = OllamaClient()
         
-        with patch.object(client.client, 'generate', new_callable=AsyncMock) as mock_generate:
+        with patch.object(client.sync_client, 'generate') as mock_generate:
             # Always return empty
             mock_generate.return_value = {"response": ""}
             
-            with pytest.raises(OllamaRetryError, match="returned empty response after 3 attempts"):
+            with pytest.raises(OllamaRetryError, match="returned empty response after 2 attempts"):
                 await client.generate_text(
                     prompt="Test",
                     model="test-model"
                 )
             
-            assert mock_generate.call_count == 3
+            assert mock_generate.call_count == 2
     
     @pytest.mark.asyncio
     async def test_retry_on_timeout(self):
         """Test retry when request times out."""
         client = OllamaClient()
         
-        with patch.object(client.client, 'generate', new_callable=AsyncMock) as mock_generate:
-            # First call times out, second succeeds
-            async def side_effect(*args, **kwargs):
-                if mock_generate.call_count == 1:
-                    await asyncio.sleep(2)  # Simulate long operation
-                    return {"response": "too late"}
-                return {"response": "Success on retry"}
-            
-            mock_generate.side_effect = side_effect
+        with patch.object(client.sync_client, 'generate') as mock_generate:
+            # First call times out (simulate by raising TimeoutError), second succeeds
+            mock_generate.side_effect = [
+                asyncio.TimeoutError("Simulated timeout"),
+                {"response": "Success on retry"}
+            ]
             
             result = await client.generate_text(
                 prompt="Test",
                 model="test-model",
-                timeout=0.1  # Very short timeout to trigger timeout
+                timeout=1.0  # Reasonable timeout
             )
             
             assert result == "Success on retry"
+            assert mock_generate.call_count == 2
     
     @pytest.mark.asyncio
     async def test_non_retryable_error_fails_immediately(self):
         """Test that non-retryable errors fail without retry."""
         client = OllamaClient()
         
-        with patch.object(client.client, 'generate', new_callable=AsyncMock) as mock_generate:
+        with patch.object(client.sync_client, 'generate') as mock_generate:
             mock_generate.side_effect = ValueError("Invalid parameter")
             
             with pytest.raises(ValueError, match="Invalid parameter"):

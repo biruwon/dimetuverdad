@@ -447,7 +447,7 @@ class TestCLIFunctions(unittest.TestCase):
 
         asyncio.run(analyze_tweets_cli(username='specificuser', max_tweets=1))
 
-        mock_setup.assert_called_once_with('specificuser', 1, False, False)
+        mock_setup.assert_called_once_with('specificuser', 1, False, False, False)
 
 
 class TestUtilityFunctions(unittest.TestCase):
@@ -458,7 +458,7 @@ class TestUtilityFunctions(unittest.TestCase):
         """Test the create_analyzer utility function."""
         config = AnalyzerConfig()
         create_analyzer(config=config, verbose=True)
-        mock_analyzer_class.assert_called_once_with(config=config, verbose=True)
+        mock_analyzer_class.assert_called_once_with(config=config, verbose=True, fast_mode=False)
 
     @patch('analyzer.analyze_twitter.create_analyzer')
     def test_reanalyze_tweet_success(self, mock_create_analyzer):
@@ -511,7 +511,8 @@ class TestUtilityFunctions(unittest.TestCase):
             max_tweets=5,
             force_reanalyze=False,
             tweet_id=None,
-            verbose=False
+            verbose=False,
+            fast_mode=False
         )
 
     @patch('scripts.analyzer_cli.analyze_tweets_cli')
@@ -524,7 +525,8 @@ class TestUtilityFunctions(unittest.TestCase):
             max_tweets=None,
             force_reanalyze=False,
             tweet_id=None,
-            verbose=False
+            verbose=False,
+            fast_mode=False
         )
 
     @patch('scripts.analyzer_cli.analyze_tweets_cli')
@@ -537,5 +539,6 @@ class TestUtilityFunctions(unittest.TestCase):
             max_tweets=None,
             force_reanalyze=True,
             tweet_id='123',
-            verbose=False
+            verbose=False,
+            fast_mode=False
         )

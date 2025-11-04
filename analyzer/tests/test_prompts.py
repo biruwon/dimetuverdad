@@ -244,7 +244,7 @@ class TestEnhancedPromptGeneratorInstance(unittest.TestCase):
         
         # Should have the category-specific explanation structure for nationalism
         self.assertIn("nacionalismo", result.lower())
-        self.assertIn("valores nacionales", result.lower())
+        self.assertIn("superioridad nacional", result.lower())
 
     def test_generate_explanation_prompt_historical_revisionism(self):
         """Test explanation prompt for historical revisionism category."""
