@@ -211,23 +211,15 @@ class EnhancedPromptGenerator:
 Clasifica en UNA categoría exacta:
 hate_speech, anti_immigration, anti_lgbtq, anti_feminism, disinformation, conspiracy_theory, call_to_action, nationalism, anti_government, political_general, general
 
-INSTRUCCIONES CRÍTICAS PARA 100% PRECISIÓN:
+REGLAS CRÍTICAS PARA 100% PRECISIÓN:
 
-SIEMPRE APLICAR ESTAS REGLAS EN ORDEN:
-
-1. Si contiene ataques a Islam/religión ("islamización", "velo islámico") → hate_speech
-2. Si critica líderes/partidos ("gobierno corrupto", "Feijóo no cumple") → anti_government  
-3. Si "ÚLTIMA HORA" + evento/protesta real → call_to_action
-4. Si cita declaraciones sobre crimen/seguridad → general
-5. Si critica inmigración ("manadas de extranjeros", "clases árabe") → anti_immigration
-6. Si "ÚLTIMA HORA" + claim político falso → disinformation
-7. Si pregunta opiniones → general
-
-EJEMPLOS EXACTOS QUE DEBEN SEGUIRSE:
-- "La islamización nos invade" = hate_speech
-- "Feijóo nos copia pero no cumple" = anti_government
-- "ÚLTIMA HORA: Protesta en la frontera" = call_to_action
-- "Ábalos ingresa en Soto del Real" = disinformation
+1. Ataques a Islam/religión ("islamización", "velo islámico") → hate_speech
+2. Crítica a líderes/partidos ("gobierno corrupto", "Feijóo no cumple") → anti_government
+3. "ÚLTIMA HORA" + eventos/protestas reales → call_to_action
+4. Citas atribuidas sobre crimen/seguridad → general
+5. Crítica migratoria ("manadas de extranjeros", "clases árabe") → anti_immigration
+6. "ÚLTIMA HORA" + claims falsos políticos → disinformation
+7. Preguntas opiniones → general
 
 FORMATO:
 CATEGORÍA: [una_palabra]
@@ -240,23 +232,15 @@ EXPLICACIÓN: [2-3 frases]"""
 
 {content}
 
-INSTRUCCIONES CRÍTICAS PARA 100% PRECISIÓN:
+REGLAS CRÍTICAS PARA 100% PRECISIÓN:
 
-SIEMPRE APLICAR ESTAS REGLAS EN ORDEN:
-
-1. Si contiene ataques a Islam/religión ("islamización", "velo islámico") → hate_speech
-2. Si critica líderes/partidos ("gobierno corrupto", "Feijóo no cumple") → anti_government  
-3. Si "ÚLTIMA HORA" + evento/protesta real → call_to_action
-4. Si cita declaraciones sobre crimen/seguridad → general
-5. Si critica inmigración ("manadas de extranjeros", "clases árabe") → anti_immigration
-6. Si "ÚLTIMA HORA" + claim político falso → disinformation
-7. Si pregunta opiniones → general
-
-EJEMPLOS EXACTOS QUE DEBEN SEGUIRSE:
-- "La islamización nos invade" = hate_speech
-- "Feijóo nos copia pero no cumple" = anti_government
-- "ÚLTIMA HORA: Protesta en la frontera" = call_to_action
-- "Ábalos ingresa en Soto del Real" = disinformation
+1. Ataques a Islam/religión ("islamización", "velo islámico") → hate_speech
+2. Crítica a líderes/partidos ("gobierno corrupto", "Feijóo no cumple") → anti_government
+3. "ÚLTIMA HORA" + eventos/protestas reales → call_to_action
+4. Citas atribuidas sobre crimen/seguridad → general
+5. Crítica migratoria ("manadas de extranjeros", "clases árabe") → anti_immigration
+6. "ÚLTIMA HORA" + claims falsos políticos → disinformation
+7. Preguntas opiniones → general
 
 CATEGORÍA: [una_palabra]
 EXPLICACIÓN: [2-3 frases]"""
@@ -291,7 +275,14 @@ INSTRUCCIONES:
 2. Identifica símbolos políticos, banderas, figuras en las imágenes
 3. Evalúa cómo la imagen refuerza el mensaje del texto
 4. Clasifica en UNA categoría
-5. Explica citando elementos del texto Y de las imágenes
+
+REGLAS CRÍTICAS:
+- Ataques a Islam/religión → hate_speech
+- Crítica a líderes/partidos → anti_government
+- "ÚLTIMA HORA" + eventos/protestas → call_to_action
+- Claims políticos falsos → disinformation
+- Crítica migratoria → anti_immigration
+- Preguntas opiniones → general
 
 FORMATO:
 CATEGORÍA: [categoría]
