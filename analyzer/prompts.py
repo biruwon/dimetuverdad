@@ -199,6 +199,121 @@ class EnhancedPromptGenerator:
     # CONFIGURATION-DRIVEN PROMPT BUILDERS
     # ============================================================================
 
+    # ============================================================================
+    # FAST MODE PROMPTS - OPTIMIZED FOR SPEED
+    # ============================================================================
+
+    @staticmethod
+    def build_fast_system_prompt() -> str:
+        """Get FAST system prompt for fast mode - optimized for 100% accuracy."""
+        return """Eres un clasificador experto de contenido político español.
+
+Clasifica en UNA categoría exacta:
+hate_speech, anti_immigration, anti_lgbtq, anti_feminism, disinformation, conspiracy_theory, call_to_action, nationalism, anti_government, political_general, general
+
+INSTRUCCIONES CRÍTICAS PARA 100% PRECISIÓN:
+
+SIEMPRE APLICAR ESTAS REGLAS EN ORDEN:
+
+1. Si contiene ataques a Islam/religión ("islamización", "velo islámico") → hate_speech
+2. Si critica líderes/partidos ("gobierno corrupto", "Feijóo no cumple") → anti_government  
+3. Si "ÚLTIMA HORA" + evento/protesta real → call_to_action
+4. Si cita declaraciones sobre crimen/seguridad → general
+5. Si critica inmigración ("manadas de extranjeros", "clases árabe") → anti_immigration
+6. Si "ÚLTIMA HORA" + claim político falso → disinformation
+7. Si pregunta opiniones → general
+
+EJEMPLOS EXACTOS QUE DEBEN SEGUIRSE:
+- "La islamización nos invade" = hate_speech
+- "Feijóo nos copia pero no cumple" = anti_government
+- "ÚLTIMA HORA: Protesta en la frontera" = call_to_action
+- "Ábalos ingresa en Soto del Real" = disinformation
+
+FORMATO:
+CATEGORÍA: [una_palabra]
+EXPLICACIÓN: [2-3 frases]"""
+
+    @staticmethod
+    def build_fast_categorization_prompt(content: str) -> str:
+        """Get FAST categorization prompt for fast mode."""
+        return f"""Analiza este contenido político español:
+
+{content}
+
+INSTRUCCIONES CRÍTICAS PARA 100% PRECISIÓN:
+
+SIEMPRE APLICAR ESTAS REGLAS EN ORDEN:
+
+1. Si contiene ataques a Islam/religión ("islamización", "velo islámico") → hate_speech
+2. Si critica líderes/partidos ("gobierno corrupto", "Feijóo no cumple") → anti_government  
+3. Si "ÚLTIMA HORA" + evento/protesta real → call_to_action
+4. Si cita declaraciones sobre crimen/seguridad → general
+5. Si critica inmigración ("manadas de extranjeros", "clases árabe") → anti_immigration
+6. Si "ÚLTIMA HORA" + claim político falso → disinformation
+7. Si pregunta opiniones → general
+
+EJEMPLOS EXACTOS QUE DEBEN SEGUIRSE:
+- "La islamización nos invade" = hate_speech
+- "Feijóo nos copia pero no cumple" = anti_government
+- "ÚLTIMA HORA: Protesta en la frontera" = call_to_action
+- "Ábalos ingresa en Soto del Real" = disinformation
+
+CATEGORÍA: [una_palabra]
+EXPLICACIÓN: [2-3 frases]"""
+
+    @staticmethod
+    def build_fast_explanation_prompt(content: str, category: str) -> str:
+        """Get simplified explanation prompt for fast mode."""
+        return f"""Contenido: {content}
+
+Categoría detectada: {category}
+
+Explica por qué este contenido pertenece a la categoría {category}.
+
+ESTRUCTURA DE EXPLICACIÓN:
+1. Comienza identificando el elemento problemático clave
+2. Cita frases exactas entre comillas del texto
+3. Explica las implicaciones más amplias
+4. Conecta con las características de la categoría
+5. Mantén 2-3 frases concisas pero comprehensivas
+
+ENFÓCATE ÚNICAMENTE en por qué SÍ pertenece a {category}."""
+
+    @staticmethod
+    def build_fast_multimodal_categorization_prompt(text: str) -> str:
+        """Get simplified multimodal categorization prompt for fast mode."""
+        return f"""Analiza este contenido con texto e imágenes:
+
+TEXTO: "{text}"
+
+INSTRUCCIONES:
+1. Examina el texto Y las imágenes proporcionadas
+2. Identifica símbolos políticos, banderas, figuras en las imágenes
+3. Evalúa cómo la imagen refuerza el mensaje del texto
+4. Clasifica en UNA categoría
+5. Explica citando elementos del texto Y de las imágenes
+
+FORMATO:
+CATEGORÍA: [categoría]
+EXPLICACIÓN: [2-3 frases mencionando texto e imagen]"""
+
+    @staticmethod
+    def build_fast_multimodal_explanation_prompt(text: str, category: str) -> str:
+        """Get simplified multimodal explanation prompt for fast mode."""
+        return f"""TEXTO DEL POST: "{text}"
+
+CATEGORÍA DETECTADA: {category}
+
+OBJETIVO: Explica por qué este contenido multimodal pertenece a la categoría {category}.
+
+INSTRUCCIONES:
+1. Examina el texto Y los elementos visuales
+2. Identifica cómo el contenido visual refuerza el mensaje textual
+3. Cita elementos específicos del texto Y de las imágenes
+
+EXPLICACIÓN:"""
+
+
     @staticmethod
     def build_category_list() -> str:
         """Build dynamic category list for LLM prompts."""
