@@ -80,6 +80,7 @@ class AnalysisFlowManager:
         self.external = ExternalAnalyzer(verbose=verbose)
         self.analyzer_hooks = create_analyzer_hooks(verbose=verbose)
         self.verbose = verbose
+        self.analysis_count = 0  # Track number of analyses performed
         
         if self.verbose:
             print("🔄 AnalysisFlowManager initialized")
@@ -106,6 +107,20 @@ class AnalysisFlowManager:
         
         stages = AnalysisStages()
         stage_timings = {}  # Track timing for each stage
+        
+        # Reset model context before analysis (except for first analysis)
+        if self.analysis_count > 0:
+            if self.verbose:
+                print(f"🔄 Resetting model context before analysis #{self.analysis_count + 1}")
+            try:
+                await self.local_llm.reset_model_context()
+                if self.verbose:
+                    print("✅ Context reset complete")
+            except Exception as e:
+                if self.verbose:
+                    print(f"⚠️  Context reset failed: {e}")
+        
+        self.analysis_count += 1
         
         if self.verbose:
             print("=" * 80)
@@ -423,11 +438,5 @@ class AnalysisFlowManager:
                 import traceback
                 traceback.print_exc()
             
-            # Return error result instead of None
-            return AnalysisResult(
-                category="ERROR",
-                local_explanation=f"Analysis failed: {str(e)}",
-                stages=AnalysisStages(),
-                pattern_data={},
-                verification_data={}
-            )
+            # Re-raise the exception to stop the analysis pipeline
+            raise RuntimeError(f"Analysis failed: {str(e)}") from e

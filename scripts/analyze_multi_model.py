@@ -108,16 +108,18 @@ def get_tweets_for_multi_model_analysis(
 async def analyze_tweet_multi_model(
     tweet_data: Dict,
     analyzer: MultiModelAnalyzer,
-    models: Optional[List[str]] = None,
+    model: str = "gemma3:27b-it-q4_K_M",
+    variants: Optional[List[str]] = None,
     verbose: bool = False
 ) -> Dict:
     """
-    Analyze a single tweet with multiple models.
+    Analyze a single tweet with multiple prompt variants using the same model.
     
     Args:
         tweet_data: Dictionary with tweet information
-        analyzer: LocalMultimodalAnalyzer instance
-        models: Optional list of specific models to use
+        analyzer: MultiModelAnalyzer instance
+        model: Model to use for all variants
+        variants: Optional list of prompt variants to use
         verbose: Enable verbose output
         
     Returns:
@@ -137,36 +139,37 @@ async def analyze_tweet_multi_model(
         analysis_content = content
     
     if verbose:
-        print(f"🔍 Analyzing tweet {tweet_id} with multiple models")
+        print(f"🔍 Analyzing tweet {tweet_id} with prompt variants using {model}")
         if media_urls:
             print(f"    🖼️  Found {len(media_urls)} media files")
     
-    # Run multi-model analysis
-    model_results = await analyzer.analyze_with_multiple_models(
+    # Run prompt variant analysis
+    variant_results = await analyzer.analyze_with_prompt_variants(
         content=analysis_content,
         media_urls=media_urls if media_urls else None,
-        models=models
+        model=model,
+        variants=variants
     )
     
-    # Save individual model results to database
+    # Save individual variant results to database
     with get_db_connection_context() as conn:
         cursor = conn.cursor()
         
-        # If reanalyzing, delete old analyses for these models
-        if models:
-            placeholders = ','.join('?' * len(models))
+        # If reanalyzing, delete old analyses for these variants
+        if variants:
+            placeholders = ','.join('?' * len(variants))
             cursor.execute(
                 f"DELETE FROM model_analyses WHERE post_id = ? AND model_name IN ({placeholders})",
-                [tweet_id] + models
+                [tweet_id] + variants
             )
             if verbose and cursor.rowcount > 0:
                 print(f"    🗑️  Deleted {cursor.rowcount} old analyses before reanalyzing")
         
-        for model_name, (category, explanation, processing_time) in model_results.items():
+        for variant_name, (category, explanation, processing_time) in variant_results.items():
             database_multi_model.save_model_analysis(
                 conn=conn,
                 post_id=tweet_id,
-                model_name=model_name,
+                model_name=variant_name,  # Store variant name as model_name
                 category=category,
                 explanation=explanation,
                 processing_time=processing_time
@@ -179,7 +182,7 @@ async def analyze_tweet_multi_model(
     
     return {
         'tweet_id': tweet_id,
-        'model_results': model_results,
+        'variant_results': variant_results,
         'consensus': consensus
     }
 
@@ -188,7 +191,8 @@ async def analyze_tweets_multi_model_cli(
     username: Optional[str] = None,
     limit: Optional[int] = None,
     force_reanalyze: bool = False,
-    models: Optional[List[str]] = None,
+    model: str = "gemma3:27b-it-q4_K_M",
+    variants: Optional[List[str]] = None,
     verbose: bool = False,
     post_id: Optional[str] = None
 ):
@@ -199,21 +203,23 @@ async def analyze_tweets_multi_model_cli(
         username: Specific username to analyze
         limit: Maximum number of tweets to analyze
         force_reanalyze: If True, reanalyze already processed tweets
-        models: List of models to use (None = all available)
+        model: Model to use for all prompt variants
+        variants: List of prompt variants to use (None = all available)
         verbose: Enable verbose output
     """
-    print("🔍 Multi-Model Tweet Analysis Pipeline")
+    print("🔍 Multi-Prompt Analysis Pipeline")
     print("=" * 50)
     
     # Initialize analyzer
     print("🚀 Initializing Multi-Model Analyzer...")
     analyzer = MultiModelAnalyzer(verbose=verbose)
     
-    # Determine which models to use
-    if models is None:
-        models = list(MultiModelAnalyzer.AVAILABLE_MODELS.keys())
+    # Determine which variants to use
+    if variants is None:
+        variants = list(MultiModelAnalyzer.PROMPT_VARIANTS.keys())
     
-    print(f"✅ Using {len(models)} models: {', '.join(models)}")
+    print(f"✅ Using model: {model}")
+    print(f"✅ Using {len(variants)} prompt variants: {', '.join(variants)}")
     print()
     
     # Get tweets for analysis
@@ -229,17 +235,30 @@ async def analyze_tweets_multi_model_cli(
         print(f"✅ No {search_desc} found{f' for @{username}' if username else ''}")
         return
     
-    print(f"📊 Found {len(tweets)} tweets for multi-model analysis")
+    print(f"📊 Found {len(tweets)} tweets for multi-prompt analysis")
     print()
     
     # Analyze each tweet
     results = []
     category_votes = {}
-    model_stats = {model: {'total': 0, 'categories': {}} for model in models}
+    variant_stats = {variant: {'total': 0, 'categories': {}} for variant in variants}
     
     for idx, tweet_data in enumerate(tweets, 1):
         tweet_id = tweet_data['tweet_id']
         content = tweet_data['content']
+        
+        # Reset model context before each post to prevent degradation
+        if idx > 1:  # Skip first post, model is fresh
+            if verbose:
+                print(f"🔄 Resetting model context before post {idx}...")
+            # Get any analyzer instance to access client
+            if analyzer.analyzers:
+                temp_analyzer = list(analyzer.analyzers.values())[0]
+                try:
+                    await temp_analyzer.client.reset_model_context(model)
+                except Exception as e:
+                    if verbose:
+                        print(f"⚠️  Context reset warning: {e}")
         
         ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
         print(f"{ts} 📝 [{idx:2d}/{len(tweets)}] Analyzing: {tweet_id}")
@@ -253,7 +272,8 @@ async def analyze_tweets_multi_model_cli(
             result = await analyze_tweet_multi_model(
                 tweet_data=tweet_data,
                 analyzer=analyzer,
-                models=models,
+                model=model,
+                variants=variants,
                 verbose=verbose
             )
             
@@ -280,18 +300,18 @@ async def analyze_tweets_multi_model_cli(
                 agreement_pct = consensus['agreement_score'] * 100
                 print(f"    🎯 Consensus: {category_emoji} {consensus_cat} ({agreement_pct:.0f}% agreement)")
                 
-                # Show individual model results in verbose mode
+                # Show individual variant results in verbose mode
                 if verbose:
-                    print(f"    📊 Model votes:")
-                    for model_name, (cat, exp, time_taken) in result['model_results'].items():
-                        print(f"        • {model_name}: {cat} ({time_taken:.1f}s)")
+                    print(f"    📊 Variant votes:")
+                    for variant_name, (cat, exp, time_taken) in result['variant_results'].items():
+                        print(f"        • {variant_name}: {cat} ({time_taken:.1f}s)")
                         print(f"          {exp[:80]}...")
                 
-                # Update model stats
-                for model_name, (cat, _, _) in result['model_results'].items():
-                    model_stats[model_name]['total'] += 1
-                    model_stats[model_name]['categories'][cat] = \
-                        model_stats[model_name]['categories'].get(cat, 0) + 1
+                # Update variant stats
+                for variant_name, (cat, _, _) in result['variant_results'].items():
+                    variant_stats[variant_name]['total'] += 1
+                    variant_stats[variant_name]['categories'][cat] = \
+                        variant_stats[variant_name]['categories'].get(cat, 0) + 1
             
             print()
             
@@ -301,7 +321,7 @@ async def analyze_tweets_multi_model_cli(
             continue
     
     # Print summary
-    print("📊 Multi-Model Analysis Complete!")
+    print("📊 Multi-Prompt Analysis Complete!")
     print("=" * 50)
     print(f"📈 Tweets processed: {len(results)}")
     print()
@@ -325,12 +345,12 @@ async def analyze_tweets_multi_model_cli(
             print(f"    {emoji} {category}: {count} ({percentage:.1f}%)")
     
     print()
-    print("🤖 Model performance summary:")
-    for model_name in models:
-        stats = model_stats[model_name]
+    print("🤖 Prompt variant performance summary:")
+    for variant_name in variants:
+        stats = variant_stats[variant_name]
         if stats['total'] > 0:
-            print(f"    • {model_name}: {stats['total']} analyses")
-            # Show top 3 categories for this model
+            print(f"    • {variant_name}: {stats['total']} analyses")
+            # Show top 3 categories for this variant
             top_cats = sorted(stats['categories'].items(), key=lambda x: x[1], reverse=True)[:3]
             if top_cats:
                 cats_str = ", ".join([f"{cat} ({count})" for cat, count in top_cats])
@@ -344,17 +364,18 @@ async def analyze_tweets_multi_model_cli(
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Analyze tweets using multiple LLM models for comparison",
+        description="Analyze tweets using different prompt configurations with the same model for comparison",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python scripts/analyze_multi_model.py                           # Analyze all unanalyzed tweets with all models
-  python scripts/analyze_multi_model.py --username Santi_ABASCAL  # Analyze specific user with all models
+  python scripts/analyze_multi_model.py                           # Analyze all unanalyzed tweets with all prompt variants
+  python scripts/analyze_multi_model.py --username Santi_ABASCAL  # Analyze specific user with all prompt variants
   python scripts/analyze_multi_model.py --limit 5                 # Analyze 5 tweets
   python scripts/analyze_multi_model.py --force-reanalyze         # Reanalyze all tweets
-  python scripts/analyze_multi_model.py --models gemma3:4b,gpt-oss:20b  # Use specific models
+  python scripts/analyze_multi_model.py --model gemma3:4b         # Use different model with all variants
+  python scripts/analyze_multi_model.py --variants normal         # Use only normal prompts
   python scripts/analyze_multi_model.py --post-id 1234567890      # Analyze specific post ID
-  python scripts/analyze_multi_model.py -v                        # Verbose output with per-model details
+  python scripts/analyze_multi_model.py -v                        # Verbose output with per-variant details
         """
     )
     
@@ -362,24 +383,27 @@ Examples:
     parser.add_argument('--limit', '-l', type=int, help='Maximum number of tweets to process')
     parser.add_argument('--force-reanalyze', '-f', action='store_true',
                        help='Reanalyze already processed tweets')
-    parser.add_argument('--models', '-m', help='Comma-separated list of models to use (default: all)')
-    parser.add_argument('--verbose', '-v', action='store_true',
-                       help='Show detailed analysis output for each model')
+    parser.add_argument('--model', '-m', default='gemma3:27b-it-q4_K_M',
+                       help='Model to use for all prompt variants (default: gemma3:27b-it-q4_K_M)')
+    parser.add_argument('--variants', '-v', default='fast', help='Comma-separated list of prompt variants to use (default: fast)')
+    parser.add_argument('--verbose', action='store_true',
+                       help='Show detailed analysis output for each prompt variant')
     parser.add_argument('--post-id', '-p', help='Analyze specific post ID only')
     
     args = parser.parse_args()
     
-    # Parse models list
-    models = None
-    if args.models:
-        models = [m.strip() for m in args.models.split(',') if m.strip()]
+    # Parse variants list
+    variants = None
+    if args.variants:
+        variants = [v.strip() for v in args.variants.split(',') if v.strip()]
     
     # Run async analysis
     asyncio.run(analyze_tweets_multi_model_cli(
         username=args.username,
         limit=args.limit,
         force_reanalyze=args.force_reanalyze,
-        models=models,
+        model=args.model,
+        variants=variants,
         verbose=args.verbose,
         post_id=args.post_id
     ))

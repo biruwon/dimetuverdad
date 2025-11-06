@@ -26,10 +26,10 @@ class OllamaClient:
     
     # Timeout settings (reasonable for production use)
     DEFAULT_TEXT_TIMEOUT = 120.0  # 120 seconds for text generation
-    DEFAULT_MULTIMODAL_TIMEOUT = 180.0  # 180 seconds for multimodal (allows for image processing)
+    DEFAULT_MULTIMODAL_TIMEOUT = 300.0  # 300 seconds (5 minutes) for multimodal (allows for image processing)
     
     # Retry settings
-    MAX_RETRIES = 2
+    MAX_RETRIES = 1
     BASE_RETRY_DELAY = 1.0  # seconds
     
     def __init__(self, verbose: bool = False):
@@ -175,14 +175,12 @@ class OllamaClient:
                 if self.verbose:
                     print(f"📡 Calling Ollama API with {timeout}s timeout...")
                 
-                # Make the Ollama API call with timeout using to_thread for proper cancellation
+                # Make the Ollama API call with timeout
                 api_call_start = time.time()
                 
-                # Use to_thread with sync client for proper cancellation
-                # The async client uses sync HTTP calls internally, making it uncancellable
-                sync_call_func = self._get_sync_equivalent(call_func)
+                # Use direct async call for proper cancellation support
                 response = await asyncio.wait_for(
-                    asyncio.to_thread(sync_call_func, *args, **kwargs),
+                    call_func(*args, **kwargs),
                     timeout=timeout
                 )
                 
@@ -293,10 +291,29 @@ class OllamaClient:
         
         return any(pattern in error_msg for pattern in retryable_patterns)
     
-    def _get_sync_equivalent(self, async_call_func):
-        """Get the synchronous equivalent of an async call function."""
-        if async_call_func == self.client.generate:
-            return self.sync_client.generate
-        else:
-            # Fallback - assume it's already sync
-            return async_call_func
+    async def reset_model_context(self, model: str, keep_alive: str = "72h"):
+        """
+        Reset model context without unloading the model.
+        Sends a minimal request to clear conversation history while keeping model hot.
+        
+        Args:
+            model: Model name to reset
+            keep_alive: How long to keep model loaded after reset
+        """
+        if self.verbose:
+            print(f"🔄 Resetting context for model: {model}")
+        
+        try:
+            # Send minimal request to reset context
+            await self.client.generate(
+                model=model,
+                prompt=".",  # Minimal input
+                system="",   # Empty system prompt
+                options={"num_predict": 1},  # Generate just 1 token
+                keep_alive=keep_alive  # Keep model loaded
+            )
+            if self.verbose:
+                print(f"✅ Context reset complete")
+        except Exception as e:
+            if self.verbose:
+                print(f"⚠️  Context reset failed: {e}")

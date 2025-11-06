@@ -297,13 +297,14 @@ def get_model_agreement_stats(conn: sqlite3.Connection) -> Dict:
 def update_consensus_in_content_analyses(conn: sqlite3.Connection, post_id: str) -> bool:
     """
     Update the content_analyses table with multi-model consensus results.
+    Creates the row if it doesn't exist.
     
     Args:
         conn: Database connection
         post_id: Post/tweet identifier
         
     Returns:
-        True if update was successful, False otherwise
+        True if update/insert was successful, False otherwise
     """
     consensus = get_model_consensus(conn, post_id)
     
@@ -312,17 +313,41 @@ def update_consensus_in_content_analyses(conn: sqlite3.Connection, post_id: str)
     
     cursor = conn.cursor()
     
+    # Get tweet data for the insert
     cursor.execute('''
-        UPDATE content_analyses
-        SET 
-            multi_model_analysis = 1,
-            model_consensus_category = ?
-        WHERE post_id = ?
-    ''', (consensus['category'], post_id))
+        SELECT username, content, tweet_timestamp
+        FROM tweets
+        WHERE tweet_id = ?
+    ''', (post_id,))
+    
+    tweet_row = cursor.fetchone()
+    if not tweet_row:
+        return False
+    
+    # Insert or replace the content analysis record
+    cursor.execute('''
+        INSERT OR REPLACE INTO content_analyses (
+            post_id,
+            author_username,
+            category,
+            local_explanation,
+            analysis_timestamp,
+            multi_model_analysis,
+            model_consensus_category
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        post_id,
+        tweet_row['username'],
+        consensus['category'],  # Use consensus as the main category
+        f"Multi-model consensus analysis: {consensus['category']} (agreement: {consensus['agreement_score']:.2f})",
+        datetime.now().isoformat(),
+        1,  # multi_model_analysis = True
+        consensus['category']
+    ))
     
     conn.commit()
     
-    return cursor.rowcount > 0
+    return True
 
 
 def get_posts_for_multi_model_analysis(

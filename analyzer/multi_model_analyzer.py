@@ -29,6 +29,22 @@ class MultiModelAnalyzer:
         },
     }
     
+    # Available prompt variants for single-model comparison
+    PROMPT_VARIANTS = {
+        "normal": {
+            "description": "Standard detailed prompts for comprehensive analysis",
+            "fast_mode": False,
+            "multimodal": True,
+            "timeout": 300  # 5 minutes for complex prompts
+        },
+        "fast": {
+            "description": "Simplified prompts optimized for speed (text-only)",
+            "fast_mode": True,
+            "multimodal": False,  # Fast mode skips multimodal to be actually fast
+            "timeout": 120  # 2 minutes for simple prompts
+        }
+    }
+    
     def __init__(self, verbose: bool = False):
         """
         Initialize multi-model analyzer.
@@ -37,24 +53,28 @@ class MultiModelAnalyzer:
             verbose: Enable detailed logging
         """
         self.verbose = verbose
-        self.analyzers = {}  # Cache of OllamaAnalyzer instances per model
+        self.analyzers = {}  # Cache of OllamaAnalyzer instances per model+variant
         
         if self.verbose:
             print("🔬 MultiModelAnalyzer initialized")
     
-    def _get_analyzer(self, model: str) -> OllamaAnalyzer:
+    def _get_analyzer(self, model: str, fast_mode: bool = False) -> OllamaAnalyzer:
         """
-        Get or create analyzer instance for a specific model.
+        Get or create analyzer instance for a specific model and prompt variant.
         
         Args:
             model: Model name
+            fast_mode: Whether to use fast mode prompts
         
         Returns:
-            OllamaAnalyzer instance for the model
+            OllamaAnalyzer instance for the model+variant combination
         """
-        if model not in self.analyzers:
-            self.analyzers[model] = OllamaAnalyzer(model=model, verbose=self.verbose)
-        return self.analyzers[model]
+        key = f"{model}_{'fast' if fast_mode else 'normal'}"
+        if key not in self.analyzers:
+            if self.verbose:
+                print(f"🤖 Creating OllamaAnalyzer for model: {model}, fast_mode: {fast_mode}")
+            self.analyzers[key] = OllamaAnalyzer(model=model, verbose=self.verbose, fast_mode=fast_mode)
+        return self.analyzers[key]
     
     async def analyze_with_multiple_models(
         self,
@@ -92,7 +112,7 @@ class MultiModelAnalyzer:
         has_media = media_urls is not None and len(media_urls) > 0
         if has_media:
             # Use first available analyzer to check video-only status
-            temp_analyzer = self._get_analyzer(models[0])
+            temp_analyzer = self._get_analyzer(models[0], fast_mode=False)
             if temp_analyzer._has_only_videos(media_urls):
                 if self.verbose:
                     print("🎥 Content contains only videos - analyzing text only")
@@ -105,7 +125,7 @@ class MultiModelAnalyzer:
             if self.verbose:
                 print("📥 Preparing media content for multimodal analysis...")
             # Use first available analyzer to prepare media
-            temp_analyzer = self._get_analyzer(models[0])
+            temp_analyzer = self._get_analyzer(models[0], fast_mode=False)
             prepared_media_content = await temp_analyzer._prepare_media_content(media_urls)
             if prepared_media_content and self.verbose:
                 print(f"📦 Prepared {len(prepared_media_content)} media items")
@@ -154,6 +174,99 @@ class MultiModelAnalyzer:
         
         if not analysis_results:
             raise RuntimeError("No valid models available for analysis")
+        
+        return analysis_results
+    
+    async def analyze_with_prompt_variants(
+        self,
+        content: str,
+        media_urls: Optional[List[str]] = None,
+        model: str = "gemma3:27b-it-q4_K_M",
+        variants: Optional[List[str]] = None
+    ) -> Dict[str, Tuple[str, str, float]]:
+        """
+        Analyze content with different prompt variants using the same model.
+        
+        Args:
+            content: Text content to analyze
+            media_urls: Optional list of media URLs
+            model: Model to use for all variants
+            variants: List of prompt variants to use (defaults to all available)
+        
+        Returns:
+            Dictionary mapping variant_name -> (category, explanation, processing_time)
+            Example: {
+                "normal": ("hate_speech", "Explanation...", 25.3),
+                "fast": ("hate_speech", "Different explanation...", 15.2)
+            }
+        
+        Raises:
+            RuntimeError: If no valid variants are available
+        """
+        # Use all variants if not specified
+        if variants is None:
+            variants = list(self.PROMPT_VARIANTS.keys())
+        
+        if self.verbose:
+            print(f"🔍 Running prompt variant analysis with model {model}")
+            print(f"📝 Variants: {', '.join(variants)}")
+        
+        # Check if we have media and if it's video-only
+        has_media = media_urls is not None and len(media_urls) > 0
+        if has_media:
+            # Use first variant to check video-only status
+            temp_analyzer = self._get_analyzer(model, fast_mode=self.PROMPT_VARIANTS[variants[0]]["fast_mode"])
+            if temp_analyzer._has_only_videos(media_urls):
+                if self.verbose:
+                    print("🎥 Content contains only videos - analyzing text only")
+                media_urls = None
+                has_media = False
+        
+        # Execute analyses sequentially with different prompt variants
+        analysis_results = {}
+        
+        for i, variant in enumerate(variants, 1):
+            # Skip unknown variants
+            variant_info = self.PROMPT_VARIANTS.get(variant)
+            if not variant_info:
+                if self.verbose:
+                    print(f"⚠️  Unknown variant: {variant}, skipping")
+                continue
+            
+            fast_mode = variant_info["fast_mode"]
+            use_multimodal = has_media and variant_info.get("multimodal", True)
+            
+            if self.verbose:
+                mode_desc = "MULTIMODAL" if use_multimodal else "TEXT-ONLY"
+                print(f"⚡ Analyzing with variant {i}/{len(variants)}: {variant} ({mode_desc}, fast_mode: {fast_mode})")
+            
+            try:
+                timeout = variant_info.get("timeout", 120)  # Use variant-specific timeout, fallback to 120s
+                category, explanation, processing_time = await self._analyze_with_specific_variant(
+                    content=content,
+                    media_urls=media_urls if use_multimodal else None,  # Pass original URLs for multimodal
+                    model=model,
+                    fast_mode=fast_mode,
+                    timeout=timeout
+                )
+                
+                analysis_results[variant] = (category, explanation, processing_time)
+                
+                if self.verbose:
+                    print(f"✅ Variant {variant}: {category} ({processing_time:.1f}s)")
+                    
+            except Exception as e:
+                if self.verbose:
+                    print(f"❌ Variant {variant} failed: {str(e)}")
+                # Store error result
+                analysis_results[variant] = (
+                    Categories.GENERAL,
+                    f"Error durante el análisis: {str(e)[:100]}",
+                    0.0
+                )
+        
+        if not analysis_results:
+            raise RuntimeError("No valid prompt variants available for analysis")
         
         return analysis_results
     
@@ -241,3 +354,53 @@ class MultiModelAnalyzer:
         except Exception as e:
             processing_time = time.time() - start_time
             raise RuntimeError(f"Model {model} analysis failed: {str(e)}") from e
+    
+    async def _analyze_with_specific_variant(
+        self,
+        content: str,
+        media_urls: Optional[List[str]],
+        model: str,
+        fast_mode: bool,
+        timeout: int = 120
+    ) -> Tuple[str, str, float]:
+        """
+        Analyze content with a specific model and prompt variant.
+        
+        Args:
+            content: Text content to analyze
+            media_urls: Optional list of media URLs
+            model: Model name to use
+            fast_mode: Whether to use fast mode prompts
+        
+        Returns:
+            Tuple of (category, explanation, processing_time_seconds)
+        
+        Raises:
+            RuntimeError: If variant analysis fails
+        """
+        start_time = time.time()
+        
+        try:
+            # Get analyzer for this model+variant combination
+            analyzer = self._get_analyzer(model, fast_mode)
+            
+            if self.verbose:
+                variant_desc = "fast" if fast_mode else "normal"
+                media_status = f"with {len(media_urls)} media URLs" if media_urls else "no media"
+                print(f"    🔬 Running analysis ({variant_desc} prompts, {media_status})")
+            
+            # Run analysis using the analyzer's categorize_and_explain method
+            # This will automatically use fast prompts when fast_mode=True
+            category, explanation = await analyzer.categorize_and_explain(
+                content=content,
+                media_urls=media_urls,
+                timeout=timeout
+            )
+            
+            processing_time = time.time() - start_time
+            
+            return category, explanation, processing_time
+            
+        except Exception as e:
+            processing_time = time.time() - start_time
+            raise RuntimeError(f"Variant {fast_mode} analysis failed: {str(e)}") from e

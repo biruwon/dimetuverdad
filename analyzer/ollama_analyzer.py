@@ -18,12 +18,13 @@ class OllamaAnalyzer:
     """
     
     # Default generation parameters
-    DEFAULT_TEMPERATURE_TEXT = 0.2 # Slightly higher for faster generation
-    DEFAULT_MAX_TOKENS = 80 # Further reduced for speed
-    DEFAULT_TEMPERATURE_MULTIMODAL = 0.2
-    DEFAULT_TOP_P = 0.9 # reduces token examples so reduces probability
-    DEFAULT_NUM_PREDICT_MULTIMODAL = 80 # Further reduced for speed
+    DEFAULT_TEMPERATURE_TEXT = 0.1 # Lower for faster convergence
+    DEFAULT_MAX_TOKENS = 60 # Reduced for speed (categorization doesn't need long responses)
+    DEFAULT_TEMPERATURE_MULTIMODAL = 0.1
+    DEFAULT_TOP_P = 0.8 # Slightly more focused for speed
+    DEFAULT_NUM_PREDICT_MULTIMODAL = 60 # Reduced for speed
     DEFAULT_KEEP_ALIVE = "72h"
+    DEFAULT_NUM_CTX = 8192  # Limit context window to prevent unbounded growth
     #DETAULT_SEED = 42 # just a fixed number to force determinist responses
     
     # Media handling settings
@@ -48,6 +49,16 @@ class OllamaAnalyzer:
         
         if self.verbose:
             print(f"🤖 OllamaAnalyzer initialized with model: {self.model} (fast_mode: {fast_mode})")
+    
+    async def reset_model_context(self, keep_alive: str = "72h"):
+        """
+        Reset model context without unloading the model.
+        Sends a minimal request to clear conversation history while keeping model hot.
+        
+        Args:
+            keep_alive: How long to keep model loaded after reset
+        """
+        await self.client.reset_model_context(self.model, keep_alive)
     
     def _get_fast_system_prompt(self) -> str:
         """Get simplified system prompt for fast mode."""
@@ -273,7 +284,8 @@ class OllamaAnalyzer:
                 options={
                     "temperature": self.DEFAULT_TEMPERATURE_TEXT,
                     "num_predict": self.DEFAULT_MAX_TOKENS,
-                    "top_p": self.DEFAULT_TOP_P
+                    "top_p": self.DEFAULT_TOP_P,
+                    "num_ctx": self.DEFAULT_NUM_CTX  # Limit context window
                 },
                 keep_alive=self.DEFAULT_KEEP_ALIVE,
                 timeout=timeout
@@ -314,7 +326,8 @@ class OllamaAnalyzer:
                 options={
                     "temperature": self.DEFAULT_TEMPERATURE_TEXT,
                     "num_predict": self.DEFAULT_MAX_TOKENS,
-                    "top_p": self.DEFAULT_TOP_P
+                    "top_p": self.DEFAULT_TOP_P,
+                    "num_ctx": self.DEFAULT_NUM_CTX  # Limit context window
                 },
                 keep_alive=self.DEFAULT_KEEP_ALIVE,
                 timeout=timeout

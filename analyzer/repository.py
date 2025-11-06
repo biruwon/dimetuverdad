@@ -252,7 +252,37 @@ class ContentAnalysisRepository:
             # Use standardized repository for basic tweet operations
             if force_reanalyze:
                 # Get all tweets for the user or all users
-                tweets_data = self.tweet_repo.get_tweets_by_username(username=username, limit=max_tweets)
+                if username:
+                    tweets_data = self.tweet_repo.get_tweets_by_username(username=username, limit=max_tweets)
+                else:
+                    # When no username specified and force_reanalyze=True, get all tweets
+                    with self._get_connection() as conn:
+                        cursor = conn.cursor()
+                        query = """
+                            SELECT tweet_id, tweet_url, username, content, media_links, original_content 
+                            FROM tweets 
+                            ORDER BY tweet_timestamp DESC
+                        """
+                        params = []
+                        if max_tweets:
+                            query += " LIMIT ?"
+                            params.append(max_tweets)
+                        
+                        cursor.execute(query, params)
+                        tweets_data = cursor.fetchall()
+                        
+                        # Convert to dict format for consistency
+                        tweets_data = [
+                            {
+                                'tweet_id': row[0],
+                                'tweet_url': row[1], 
+                                'username': row[2],
+                                'content': row[3],
+                                'media_links': row[4],
+                                'original_content': row[5]
+                            }
+                            for row in tweets_data
+                        ]
             else:
                 # Get unanalyzed tweets - this requires custom logic, so we still need some direct access
                 with self._get_connection() as conn:

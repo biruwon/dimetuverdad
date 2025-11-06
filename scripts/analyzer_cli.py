@@ -397,7 +397,7 @@ def create_analyzer_cli(config: Optional[AnalyzerConfig] = None, verbose: bool =
     Args:
         config: Analyzer configuration
         verbose: Enable verbose output
-        fast_mode: Use simplified prompts for faster processing
+        fast_mode: Use simplified prompts for faster bulk processing
 
     Returns:
         Analyzer instance

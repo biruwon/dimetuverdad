@@ -140,41 +140,12 @@ class Analyzer:
             return result
 
         except Exception as e:
-            # Check for critical Ollama errors that should cause immediate failure
-            error_str = str(e).lower()
-            if ("500" in error_str or "internal server error" in error_str or 
-                "ollama" in error_str or "connection" in error_str or
-                "model returned empty response" in error_str):
-                if self.verbose:
-                    print(f"💥 Critical Ollama error detected: {e}")
-                    traceback.print_exc()
-                # Re-raise critical errors to stop the analysis pipeline
-                raise RuntimeError(f"Critical Ollama error: {str(e)}") from e
-            
-            # Handle analysis errors gracefully for non-critical issues
+            # Re-raise all errors to stop the analysis pipeline
             if self.verbose:
-                print(f"❌ Error en análisis: {e}")
+                print(f"💥 Critical error in analyze_content: {e}")
+                import traceback
                 traceback.print_exc()
-
-            # Return error result with minimal data
-            return ContentAnalysis(
-                post_id=tweet_id,
-                post_url=tweet_url,
-                author_username=username,
-                post_content=content,
-                analysis_timestamp=datetime.now().isoformat(),
-                category="ERROR",
-                categories_detected=["ERROR"],
-                local_explanation=f"Analysis failed: {str(e)}",
-                external_explanation="",
-                analysis_stages="error",
-                external_analysis_used=False,
-                media_urls=media_urls or [],
-                media_type="",
-                pattern_matches=[],
-                topic_classification={},
-                analysis_json=f'{{"error": "{str(e)[:500]}"}}'
-            )
+            raise RuntimeError(f"Analysis failed: {str(e)}") from e
     def _detect_media_type(self, media_urls: List[str]) -> str:
         """
         Detect the primary media type from URLs.
