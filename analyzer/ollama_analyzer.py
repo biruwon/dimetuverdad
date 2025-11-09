@@ -28,7 +28,7 @@ class OllamaAnalyzer:
     # Token limits by response type
     CATEGORY_TOKENS = 30      # Just a category word
     MEDIA_TOKENS = 100  # Short media description
-    EXPLANATION_TOKENS = 120  # 1-2 sentence explanation    
+    EXPLANATION_TOKENS = 250  # Complete explanation with media context    
     # Media handling settings
     DEFAULT_MEDIA_TIMEOUT = 5.0
     DEFAULT_MAX_MEDIA_SIZE = 10 * 1024 * 1024  # 10MB

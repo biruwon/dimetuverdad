@@ -264,30 +264,49 @@ class AnalysisFlowManager:
                 print("   🔄 Explanation indicates disinformation - overriding category")
             primary_category = Categories.DISINFORMATION
         
-        # STAGE 5: Verification (for disinformation category only)
+        # STAGE 5: Verification (for disinformation category or political event claims)
         verification_data = {}
-        if primary_category == Categories.DISINFORMATION:
+        should_run_verification = primary_category == Categories.DISINFORMATION
+
+        # Also check for political event claims that need verification
+        if not should_run_verification:
+            political_event_claim = self.analyzer_hooks._extract_political_event_claim(content)
+            if political_event_claim:
+                should_run_verification = True
+                if self.verbose:
+                    print(f"🎯 Detected political event claim: {political_event_claim.event_type} for {political_event_claim.person_name}")
+
+        if should_run_verification:
             if self.verbose:
-                print("\n🔍 Stage 5: Verification Feedback Enhancement")
-            
+                print("\n🔍 Stage 5: Verification")
+
             # Convert enum to string for verification hooks
             analyzer_result = {'category': primary_category.value if hasattr(primary_category, 'value') else primary_category, 'confidence': 0.8}
             should_trigger, reason = self.analyzer_hooks.should_trigger_verification(content, analyzer_result)
-            
-            if should_trigger:
+
+            if should_trigger or political_event_claim:
                 if self.verbose:
-                    print(f"🔍 Verification triggered: {reason}")
-                
+                    trigger_reason = reason if should_trigger else f"political event claim: {political_event_claim.event_type}"
+                    print(f"🔍 Verification triggered: {trigger_reason}")
+
                 start_time = time.time()
                 try:
                     analysis_result = await self.analyzer_hooks.analyze_with_verification(
-                        content, 
+                        content,
                         original_result=analyzer_result
                     )
-                    
+
                     stage_timings['verification'] = time.time() - start_time
                     verification_data = analysis_result.verification_data
-                    
+
+                    # Check if verification found debunked claims that should change category to disinformation
+                    if (verification_data and
+                        verification_data.get('overall_verdict') == 'debunked' and
+                        primary_category != Categories.DISINFORMATION):
+                        if self.verbose:
+                            print("🔄 Verification found false claims - overriding category to disinformation")
+                        primary_category = Categories.DISINFORMATION
+
                     # Update explanation with verification context if contradictions found
                     if verification_data and verification_data.get('contradictions_detected'):
                         if self.verbose:
@@ -295,11 +314,15 @@ class AnalysisFlowManager:
                         local_explanation = analysis_result.explanation_with_verification
                     elif verification_data and verification_data.get('sources_cited'):
                         local_explanation = analysis_result.explanation_with_verification
-                        
+
                 except Exception as e:
                     stage_timings['verification'] = time.time() - start_time
                     if self.verbose:
                         print(f"⚠️  Verification failed: {e}")
+        
+        # ADDITIONAL VERIFICATION: Check for false claims about current status
+        # This is now handled by the retrieval system's PoliticalEventVerifier
+        # through the analyzer_hooks system when appropriate
         
         # Prepare pattern data
         pattern_data = {

@@ -122,6 +122,7 @@ def create_fresh_database_schema(db_path: str = None):
             topic_classification TEXT,
             media_urls TEXT,
             media_type TEXT,
+            media_description TEXT,
             verification_data TEXT,
             verification_confidence REAL DEFAULT 0.0,
             multi_model_analysis BOOLEAN DEFAULT FALSE,
@@ -283,7 +284,7 @@ def verify_schema():
         ca_columns = [row['name'] for row in c.fetchall()]
         essential_ca_fields = [
             'post_id', 'author_username', 'platform', 'category', 'analysis_stages', 'analysis_timestamp',
-            'categories_detected', 'media_urls', 'media_type',
+            'categories_detected', 'media_urls', 'media_type', 'media_description',
             'verification_data', 'verification_confidence',
             'multi_model_analysis', 'model_consensus_category'
         ]

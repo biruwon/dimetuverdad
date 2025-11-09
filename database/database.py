@@ -111,6 +111,7 @@ def create_fresh_database_schema(db_path: str):
             topic_classification TEXT,
             media_urls TEXT,
             media_type TEXT,
+            media_description TEXT,
             verification_data TEXT,
             verification_confidence REAL DEFAULT 0.0,
             multi_model_analysis BOOLEAN DEFAULT FALSE,

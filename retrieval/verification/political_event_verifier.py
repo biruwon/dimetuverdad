@@ -216,22 +216,27 @@ class PoliticalEventVerifier:
         if claim.institution:
             search_query += f' "{claim.institution}"'
 
-        search_url = f"{source['search_url']}{search_query}"
+        # URL encode the search query
+        from urllib.parse import quote
+        encoded_query = quote(search_query)
+        search_url = f"{source['search_url']}{encoded_query}"
 
+        # Perform actual web search
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
             try:
                 async with session.get(search_url) as response:
                     if response.status == 200:
                         html = await response.text()
 
-                        # Simple text analysis (in production, use proper HTML parsing)
+                        # Analyze the search results
                         if self._contains_contradiction_indicators(html, claim):
                             evidence_list.append(VerificationEvidence(
                                 source_name=source['name'],
                                 source_url=search_url,
                                 verdict=VerificationVerdict.DEBUNKED,
                                 confidence=0.8,
-                                explanation=f"Fact-checking site {source['name']} indicates this claim is false or misleading."
+                                explanation=f"{source['name']} indica que la afirmación sobre {claim.person_name} es falsa o engañosa.",
+                                publish_date=datetime.now()
                             ))
                         elif self._contains_confirmation_indicators(html, claim):
                             evidence_list.append(VerificationEvidence(
@@ -239,7 +244,18 @@ class PoliticalEventVerifier:
                                 source_url=search_url,
                                 verdict=VerificationVerdict.VERIFIED,
                                 confidence=0.7,
-                                explanation=f"Fact-checking site {source['name']} confirms this event occurred."
+                                explanation=f"{source['name']} confirma que el evento con {claim.person_name} ocurrió.",
+                                publish_date=datetime.now()
+                            ))
+                        else:
+                            # No clear indication found
+                            evidence_list.append(VerificationEvidence(
+                                source_name=source['name'],
+                                source_url=search_url,
+                                verdict=VerificationVerdict.QUESTIONABLE,
+                                confidence=0.4,
+                                explanation=f"{source['name']} no encontró información concluyente sobre la afirmación.",
+                                publish_date=datetime.now()
                             ))
 
             except asyncio.TimeoutError:
@@ -261,28 +277,113 @@ class PoliticalEventVerifier:
         """
         evidence_list = []
 
-        # For arrest claims, check if person appears in official records
-        # This is a simplified implementation - in production would integrate with actual APIs
-
-        # Check if person is a known public figure who would be in news if arrested
-        known_figures = [
-            'pedro sánchez', 'alberto núñez feijóo', 'santiago abascal',
-            'pablo iglesias', 'irene montero', 'yolanda díaz', 'iñigo errejón'
+        # Define official sources to check
+        official_sources = [
+            {
+                'name': 'BOE (Boletín Oficial del Estado)',
+                'search_url': 'https://www.boe.es/buscar.php?campo%5B0%5D=DEM&dato%5B0%5D=',
+                'type': 'judicial'
+            },
+            {
+                'name': 'Congreso de los Diputados',
+                'search_url': 'https://www.congreso.es/busqueda-de-diputados?p_p_id=diputadobusqueda_WAR_diputadobusqueda_INSTANCE_5H9i&p_p_lifecycle=0&p_p_state=normal&p_p_mode=view&p_p_col_id=column-1&p_p_col_count=1&_diputadobusqueda_WAR_diputadobusqueda_INSTANCE_5H9i_action=search&_diputadobusqueda_WAR_diputadobusqueda_INSTANCE_5H9i_apellido=',
+                'type': 'parliamentary'
+            },
+            {
+                'name': 'Senado',
+                'search_url': 'https://www.senado.es/web/relacionesciudadanos/senadores/senadores/index.html',
+                'type': 'parliamentary'
+            }
         ]
 
-        person_lower = claim.person_name.lower()
-        is_known_figure = any(figure in person_lower for figure in known_figures)
+        # Search each official source
+        for source in official_sources:
+            source_evidence = await self._search_official_source(claim, source)
+            evidence_list.extend(source_evidence)
 
-        if is_known_figure and claim.event_type in ['arrest', 'detención', 'prisión']:
-            # Known political figures would be major news if arrested
-            # Lack of confirmation from official sources suggests it's false
-            evidence_list.append(VerificationEvidence(
-                source_name='Fuentes Oficiales',
-                source_url='https://www.boe.es/',
-                verdict=VerificationVerdict.DEBUNKED,
-                confidence=0.9,
-                explanation="No hay registro oficial de esta detención en fuentes gubernamentales o judiciales."
-            ))
+        return evidence_list
+
+    async def _search_official_source(self, claim: PoliticalEventClaim, source: Dict[str, str]) -> List[VerificationEvidence]:
+        """
+        Search a specific official source for the claim.
+        
+        Args:
+            claim: Claim to search for
+            source: Source configuration
+            
+        Returns:
+            List of evidence found
+        """
+        evidence_list = []
+
+        # Construct search query based on source type
+        if source['type'] == 'judicial':
+            # For judicial sources like BOE, search for legal proceedings
+            search_query = f'"{claim.person_name}"'
+            if claim.event_type in ['arrest', 'prisión', 'condena']:
+                search_query += ' resolución judicial'
+        elif source['type'] == 'parliamentary':
+            # For parliamentary sources, search for member status
+            search_query = f'"{claim.person_name}"'
+        else:
+            search_query = f'"{claim.person_name}" {claim.event_type}'
+
+        # URL encode the search query
+        from urllib.parse import quote
+        encoded_query = quote(search_query)
+        search_url = f"{source['search_url']}{encoded_query}"
+
+        # Perform actual web search
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+            try:
+                async with session.get(search_url) as response:
+                    if response.status == 200:
+                        html = await response.text()
+
+                        # Analyze the results
+                        if self._contains_contradiction_indicators(html, claim):
+                            evidence_list.append(VerificationEvidence(
+                                source_name=source['name'],
+                                source_url=search_url,
+                                verdict=VerificationVerdict.DEBUNKED,
+                                confidence=0.9,
+                                explanation=f"{source['name']} no registra ningún {claim.event_type} de {claim.person_name}.",
+                                publish_date=datetime.now()
+                            ))
+                        elif self._contains_confirmation_indicators(html, claim):
+                            evidence_list.append(VerificationEvidence(
+                                source_name=source['name'],
+                                source_url=search_url,
+                                verdict=VerificationVerdict.VERIFIED,
+                                confidence=0.95,
+                                explanation=f"{source['name']} confirma el {claim.event_type} de {claim.person_name}.",
+                                publish_date=datetime.now()
+                            ))
+                        else:
+                            # No clear information found - for official sources, this often means no record
+                            if claim.event_type in ['arrest', 'prisión', 'condena']:
+                                evidence_list.append(VerificationEvidence(
+                                    source_name=source['name'],
+                                    source_url=search_url,
+                                    verdict=VerificationVerdict.DEBUNKED,
+                                    confidence=0.7,
+                                    explanation=f"{source['name']} no tiene registro de {claim.event_type} para {claim.person_name}.",
+                                    publish_date=datetime.now()
+                                ))
+                            else:
+                                evidence_list.append(VerificationEvidence(
+                                    source_name=source['name'],
+                                    source_url=search_url,
+                                    verdict=VerificationVerdict.QUESTIONABLE,
+                                    confidence=0.3,
+                                    explanation=f"{source['name']} no proporciona información concluyente sobre {claim.person_name}.",
+                                    publish_date=datetime.now()
+                                ))
+
+            except asyncio.TimeoutError:
+                self.logger.warning(f"Timeout searching {source['name']}")
+            except Exception as e:
+                self.logger.warning(f"Error searching {source['name']}: {e}")
 
         return evidence_list
 
@@ -298,16 +399,107 @@ class PoliticalEventVerifier:
         """
         evidence_list = []
 
-        # Simplified news search - in production would use news APIs
-        # For now, return inconclusive results
+        # Define news sources to check
+        news_sources = [
+            {
+                'name': 'El País',
+                'search_url': 'https://elpais.com/buscador/?q='
+            },
+            {
+                'name': 'El Mundo',
+                'search_url': 'https://www.elmundo.es/buscar.html?query='
+            },
+            {
+                'name': 'ABC',
+                'search_url': 'https://www.abc.es/buscar?q='
+            },
+            {
+                'name': 'Google News',
+                'search_url': 'https://news.google.com/search?q='
+            }
+        ]
 
-        evidence_list.append(VerificationEvidence(
-            source_name='Búsqueda en Medios',
-            source_url='https://news.google.com/',
-            verdict=VerificationVerdict.QUESTIONABLE,
-            confidence=0.5,
-            explanation="No se encontraron confirmaciones recientes en medios de comunicación."
-        ))
+        # Search each news source
+        for source in news_sources:
+            source_evidence = await self._search_news_source(claim, source)
+            evidence_list.extend(source_evidence)
+
+        return evidence_list
+
+    async def _search_news_source(self, claim: PoliticalEventClaim, source: Dict[str, str]) -> List[VerificationEvidence]:
+        """
+        Search a specific news source for the claim.
+        
+        Args:
+            claim: Claim to search for
+            source: Source configuration
+            
+        Returns:
+            List of evidence found
+        """
+        evidence_list = []
+
+        # Construct search query
+        search_query = f'"{claim.person_name}" {claim.event_type}'
+        if claim.institution:
+            search_query += f' "{claim.institution}"'
+
+        # URL encode the search query
+        from urllib.parse import quote
+        encoded_query = quote(search_query)
+        search_url = f"{source['search_url']}{encoded_query}"
+
+        # Perform actual web search
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+            try:
+                async with session.get(search_url) as response:
+                    if response.status == 200:
+                        html = await response.text()
+
+                        # Analyze the search results
+                        if self._contains_contradiction_indicators(html, claim):
+                            evidence_list.append(VerificationEvidence(
+                                source_name=source['name'],
+                                source_url=search_url,
+                                verdict=VerificationVerdict.DEBUNKED,
+                                confidence=0.8,
+                                explanation=f"{source['name']} indica que la afirmación sobre {claim.person_name} es falsa o no confirmada.",
+                                publish_date=datetime.now()
+                            ))
+                        elif self._contains_confirmation_indicators(html, claim):
+                            evidence_list.append(VerificationEvidence(
+                                source_name=source['name'],
+                                source_url=search_url,
+                                verdict=VerificationVerdict.VERIFIED,
+                                confidence=0.7,
+                                explanation=f"{source['name']} confirma que el evento con {claim.person_name} ocurrió.",
+                                publish_date=datetime.now()
+                            ))
+                        else:
+                            # No clear indication found - for major political events, lack of coverage suggests it's false
+                            if claim.event_type in ['arrest', 'prisión', 'condena']:
+                                evidence_list.append(VerificationEvidence(
+                                    source_name=source['name'],
+                                    source_url=search_url,
+                                    verdict=VerificationVerdict.DEBUNKED,
+                                    confidence=0.6,
+                                    explanation=f"{source['name']} no reporta ningún {claim.event_type} de {claim.person_name}. Un evento de esta magnitud tendría cobertura inmediata.",
+                                    publish_date=datetime.now()
+                                ))
+                            else:
+                                evidence_list.append(VerificationEvidence(
+                                    source_name=source['name'],
+                                    source_url=search_url,
+                                    verdict=VerificationVerdict.QUESTIONABLE,
+                                    confidence=0.4,
+                                    explanation=f"{source['name']} no encontró información concluyente sobre la afirmación.",
+                                    publish_date=datetime.now()
+                                ))
+
+            except asyncio.TimeoutError:
+                self.logger.warning(f"Timeout searching {source['name']}")
+            except Exception as e:
+                self.logger.warning(f"Error searching {source['name']}: {e}")
 
         return evidence_list
 

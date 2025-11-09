@@ -584,37 +584,96 @@ class TestContentAnalysisRepository:
 
         assert result == 0
 
-    def test_row_to_content_analysis(self):
-        """Test conversion from database row to ContentAnalysis."""
+    def test_save_with_media_description(self):
+        """Test saving analysis with media description."""
+        # Create test tweet data first
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            c.execute('''
+                INSERT OR REPLACE INTO tweets
+                (tweet_id, tweet_url, username, content, tweet_timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ("test_media_123", "https://twitter.com/test/status/test_media_123", "test_user", "Test content with media", "2024-01-01T12:00:00"))
+            conn.commit()
+
         repo = ContentAnalysisRepository()
 
-        # Create a mock row
-        mock_row = Mock()
-        mock_row.__getitem__ = Mock(side_effect=lambda key: {
-            'post_id': 'test_123',
-            'post_url': 'https://twitter.com/test/status/test_123',
-            'author_username': 'test_user',
-            'post_content': 'Test content',
-            'analysis_timestamp': '2024-01-01T12:00:00',
-            'category': Categories.HATE_SPEECH,
-            'categories_detected': '["hate_speech"]',
-            'local_explanation': 'Test explanation',
-            'analysis_stages': 'llm',
-            'media_urls': '["https://example.com/image.jpg"]',
-            'media_analysis': 'Test media analysis',
-            'media_type': 'image',
-            'multimodal_analysis': 1,
-            'analysis_json': '{"pattern_matches": [], "topic_classification": {}}',
-            'verification_data': None,
-            'verification_confidence': 0.0
-        }[key])
+        analysis = ContentAnalysis(
+            post_id="test_media_123",
+            post_url="https://twitter.com/test/status/test_media_123",
+            author_username="test_user",
+            post_content="Test content with media",
+            analysis_timestamp="2024-01-01T12:00:00",
+            category=Categories.HATE_SPEECH,
+            categories_detected=[Categories.HATE_SPEECH],
+            local_explanation="Test explanation with media context",
+            analysis_stages="pattern->local_llm->media_analysis",
+            media_urls=["https://example.com/image.jpg"],
+            media_type="image",
+            media_description="Imagen mostrando una manifestación con banderas políticas y carteles con mensajes controvertidos",
+            pattern_matches=[],
+            topic_classification={}
+        )
 
-        result = repo._row_to_content_analysis(mock_row)
+        repo.save(analysis)
 
-        assert isinstance(result, ContentAnalysis)
-        assert result.post_id == 'test_123'
-        assert result.category == Categories.HATE_SPEECH
-        assert result.local_explanation == 'Test explanation'
-        assert result.multimodal_analysis == True
-        assert len(result.media_urls) == 1
-        assert result.media_urls[0] == 'https://example.com/image.jpg'
+        # Verify saved using environment-based database connection
+        with get_db_connection_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f'SELECT * FROM {DatabaseConstants.TABLE_NAME} WHERE post_id = ?', ("test_media_123",))
+            row = cursor.fetchone()
+
+            assert row is not None
+            assert row['post_id'] == "test_media_123"
+            assert row['category'] == Categories.HATE_SPEECH
+            assert row['media_description'] == "Imagen mostrando una manifestación con banderas políticas y carteles con mensajes controvertidos"
+            assert row['media_type'] == "image"
+            assert row['media_urls'] == '["https://example.com/image.jpg"]'
+
+    def test_get_by_post_id_with_media_description(self):
+        """Test retrieving analysis with media description."""
+        # Create test tweet data first
+        with get_db_connection_context() as conn:
+            c = conn.cursor()
+            # Create account first
+            c.execute('INSERT OR REPLACE INTO accounts (username, platform) VALUES (?, ?)', ("test_user", "twitter"))
+            c.execute('''
+                INSERT OR REPLACE INTO tweets
+                (tweet_id, tweet_url, username, content, tweet_timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ("test_retrieve_456", "https://twitter.com/test/status/test_retrieve_456", "test_user", "Test content for retrieval", "2024-01-01T12:00:00"))
+            conn.commit()
+
+        # First save an analysis with media description
+        repo = ContentAnalysisRepository()
+        
+        analysis = ContentAnalysis(
+            post_id="test_retrieve_456",
+            post_url="https://twitter.com/test/status/test_retrieve_456",
+            author_username="test_user",
+            post_content="Test content for retrieval",
+            analysis_timestamp="2024-01-01T12:00:00",
+            category=Categories.DISINFORMATION,
+            categories_detected=[Categories.DISINFORMATION],
+            local_explanation="Test explanation with media analysis",
+            analysis_stages="pattern->local_llm->media_analysis",
+            media_urls=["https://example.com/video.mp4"],
+            media_type="video",
+            media_description="Video mostrando una protesta con participantes portando símbolos políticos y pancartas con mensajes alarmistas",
+            pattern_matches=[{"matched_text": "alerta", "category": "disinformation"}],
+            topic_classification={"topic": "politics"}
+        )
+        repo.save(analysis)
+
+        # Now retrieve it
+        retrieved = repo.get_by_post_id("test_retrieve_456")
+        assert retrieved is not None
+        assert retrieved.post_id == "test_retrieve_456"
+        assert retrieved.category == Categories.DISINFORMATION
+        assert retrieved.media_description == "Video mostrando una protesta con participantes portando símbolos políticos y pancartas con mensajes alarmistas"
+        assert retrieved.media_type == "video"
+        assert len(retrieved.media_urls) == 1
+        assert retrieved.media_urls[0] == "https://example.com/video.mp4"
+        assert retrieved.multimodal_analysis == True

@@ -723,9 +723,9 @@ INSTRUCCIONES CRÍTICAS:
 anti_immigration: Retórica xenófoba contra grupos ("invasión", "manadas", "ilegales", "ocupación")
 anti_lgbtq: Ataques al colectivo LGBTQ ("ideología de género", "adoctrinamiento", "imposición")
 anti_feminism: Retórica anti-feminista ("feminazis", "hembrismo", roles tradicionales)
-disinformation: Claims FALSOS verificables sin fuente - "CONFIRMADO:" sin BOE/ministerio/fuente oficial
+disinformation: Afirmaciones FALSAS verificables EN EL TEXTO del post sobre hechos actuales ("X ha dimitido", "X está en prisión", "X ha sido detenido") sin fuente oficial
 conspiracy_theory: Agendas secretas, élites ocultas ("ellos controlan", "agenda oculta", "manipulación global")
-call_to_action: Incitación a movilización ("todos a la calle", "hay que actuar", "únete", "#manifestación")
+call_to_action: Incitación EXPLÍCITA a movilización colectiva ("todos a la calle", "hay que actuar YA", "únete a la manifestación")
 nationalism: Promoción identidad nacional ("orgullo español", "España primero", banderas, símbolos)
 anti_government: Crítica institucional ("gobierno corrupto", "régimen", "dictadura", "tiranía")
 political_general: Contenido político neutral - menciones de partidos/políticos sin extremismo
@@ -734,12 +734,11 @@ general: Contenido NO político - temas cotidianos, personales, entretenimiento"
         # Critical rules with examples - ENHANCED
         key_rules = """Reglas críticas:
 • hate_speech: INSULTO PERSONAL ("X es un traidor/rata") | anti_government: CRÍTICA SISTEMA ("el gobierno es corrupto")
-• disinformation: FALSO presentado como CIERTO sin fuente ("CONFIRMADO: decreto X" sin BOE) | political_general: INFORMATIVO con fuente
+• disinformation: FALSO EN EL TEXTO DEL POST sobre situación actual ("X está en prisión", "X ha dimitido") sin fuente oficial | political_general: INFORMATIVO con fuente
 • conspiracy_theory: CONTROL SECRETO ("élites manipulan todo") | anti_government: CRÍTICA PÚBLICA de políticas visibles
-• call_to_action: ORDEN/LLAMADO ("sal a la calle", "únete") | political_general: OPINIÓN ("deberían cambiar")
+• call_to_action: INCITACIÓN EXPLÍCITA a movilización colectiva ("sal a la calle YA", "únete a la manifestación") | political_general: OPINIÓN o invitación pasiva ("deberían cambiar", "os dejo el enlace")
 • anti_immigration: ATAQUE A GRUPO étnico | hate_speech: ATAQUE A INDIVIDUO concreto
-• nationalism: ORGULLO/IDENTIDAD nacional | political_general: MENCIÓN neutral de España
-• disinformation: Requiere claim ESPECÍFICO falso (decreto/ley/dimisión sin fuente) - NO es ironía/sarcasmo"""
+• nationalism: ORGULLO/IDENTIDAD nacional | political_general: MENCIÓN neutral de España"""
         
         if pattern_category and pattern_category != Categories.GENERAL:
             # Pattern suggested a category - quick validation

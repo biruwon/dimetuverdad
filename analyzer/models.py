@@ -30,6 +30,7 @@ class ContentAnalysis:
     # Media analysis fields
     media_urls: List[str] = None  # List of media URLs
     media_type: str = ""          # "image", "video", or ""
+    media_description: str = ""   # Description of media content from vision analysis
 
     # Technical data
     pattern_matches: List[Dict] = None

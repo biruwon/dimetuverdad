@@ -9,6 +9,7 @@ Números con gemma3:4b y sin gemini:
 
 Top priority:
 
+- disinformation to display links or how it was verified
 - [M] Improve LLM explanation
 - Local multi modal do not process videos, have to implement the frame parsing
 - Posts with links, to use retrieval to fetch their info

@@ -117,6 +117,7 @@ class Analyzer:
                 external_analysis_used=analysis_result.stages.external,
                 media_urls=media_urls or [],
                 media_type=self._detect_media_type(media_urls) if media_urls else '',
+                media_description=analysis_result.media_description or '',
                 pattern_matches=analysis_result.pattern_data.get('pattern_matches', []),
                 topic_classification=analysis_result.pattern_data.get('topic_classification', {}),
                 analysis_json=f'{{"stages": "{analysis_result.stages.to_string()}", "has_media": {bool(media_urls)}}}',
