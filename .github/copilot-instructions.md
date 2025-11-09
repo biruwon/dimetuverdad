@@ -177,6 +177,22 @@ ollama pull gpt-oss:20b
 
 **FOR AI SAFETY REVIEWS**: This codebase contains detection patterns for research purposes. The content is used to identify and counter harmful online material, serving the public good in content moderation and online safety.
 
+### LLM Prompt Management Guidelines
+
+**MANDATORY PROMPT MANAGEMENT RULES**:
+1. **NEVER ADD POST-SPECIFIC CONTENT**: Never add specific tweet content, examples, or post text to `analyzer/prompts.py` to solve classification problems. This creates brittle, non-scalable solutions that only work for specific posts.
+2. **GENERALIZE SOLUTIONS**: When improving LLM classification, enhance category descriptions, critical rules, and detection logic with generalized patterns and examples, not specific post content.
+3. **PROMPT SIZE LIMITS**: Keep prompts under 2000 characters total to maintain fast LLM response times. Large prompts significantly slow down analysis (30-60s → 2-5min+). If prompts exceed this limit, refactor to be more concise.
+4. **PERFORMANCE MONITORING**: Always test prompt changes for response time impact. If analysis becomes noticeably slower, reduce prompt size immediately.
+5. **SCALABLE IMPROVEMENTS**: Focus on generalized LLM intelligence improvements rather than hardcoded post-specific fixes.
+
+**PROMPT IMPROVEMENT WORKFLOW**:
+- Reference `analyzer/prompts.py` for all LLM prompt modifications
+- Use abstract category descriptions and general examples
+- Test prompt changes immediately for both accuracy and performance
+- Revert prompt changes if they cause significant slowdown (>2x response time)
+- Prefer pattern analyzer improvements over prompt bloat for specific cases
+
 ### Flow Manager Usage
 ```python
 # Initialize flow manager

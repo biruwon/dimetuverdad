@@ -723,7 +723,7 @@ INSTRUCCIONES CRÍTICAS:
         """
         # Simplified category list with descriptions and key indicators
         categories_simple = """
-hate_speech: Insultos directos a individuos específicos - INCLUYE insultos culturales españoles (referencias despectivas a características físicas como apodos degradantes) y palabras graves como "rata", "mierda", "traidor", "psicópata", "basura", "escoria", "parásito", "animal", "monstruo"
+hate_speech: Insultos directos a individuos específicos, acoso sexual, insinuaciones sexuales degradantes, objectificación sexual - INCLUYE insultos culturales españoles (referencias despectivas a características físicas como apodos degradantes), palabras graves como "rata", "mierda", "traidor", "psicópata", "basura", "escoria", "parásito", "animal", "monstruo", comentarios sexuales humillantes, insinuaciones degradantes, objectificación de cuerpos (apodos relacionados con apariencia física, referencias despectivas a características corporales), referencias a prostitución o servicios sexuales, y metáforas sexuales degradantes dirigidas a personas específicas
 anti_immigration: Retórica xenófoba contra grupos ("invasión", "manadas", "ilegales", "ocupación")
 anti_lgbtq: Ataques al colectivo LGBTQ ("ideología de género", "adoctrinamiento", "imposición")
 anti_feminism: Retórica anti-feminista ("feminazis", "hembrismo", roles tradicionales)
@@ -737,7 +737,7 @@ general: Contenido NO POLÍTICO o temas cotidianos no relacionados con política
         
         # Critical rules with examples - ENHANCED
         key_rules = """Reglas críticas:
-• hate_speech: INSULTO PERSONAL ("X es un traidor/rata") | anti_government: CRÍTICA SISTEMA ("el gobierno es corrupto")
+• hate_speech: INSULTO PERSONAL, ACOSO SEXUAL, OBJECTIFICACIÓN, insinuaciones sexuales degradantes o referencias a prostitución dirigidas a individuos específicos ("X es un traidor/rata", apodos despectivos relacionados con apariencia física, insinuaciones sexuales humillantes, referencias a servicios sexuales) | anti_government: CRÍTICA SISTEMA ("el gobierno es corrupto")
 • disinformation: FALSO EN EL TEXTO DEL POST sobre situación actual ("X está en prisión", "X ha dimitido") sin fuente oficial | political_general: INFORMATIVO con fuente
 • conspiracy_theory: CONTROL SECRETO ("élites manipulan todo") | anti_government: CRÍTICA PÚBLICA de políticas visibles
 • call_to_action: INCITACIÓN EXPLÍCITA a movilización colectiva ("sal a la calle YA", "únete a la manifestación") | political_general: OPINIÓN o invitación pasiva ("deberían cambiar", "os dejo el enlace")
