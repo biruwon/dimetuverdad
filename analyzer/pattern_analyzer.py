@@ -47,13 +47,15 @@ class PatternAnalyzer:
                     # Dehumanizing language
                     re.compile(r'\b(?:alimañas?|parásitos?|escoria|basura)\s+(?:musulman|gitana|mora|negra)', re.IGNORECASE),
                     re.compile(r'\b(?:invasión|plaga|epidemia)\s+(?:de\s+)?(?:musulmanes|moros|gitanos)', re.IGNORECASE),
-                    # Direct hate speech with context
-                    re.compile(r'\b(?:siento\s+|tengo\s+|profeso\s+)?(?:odio|rencor|resentimiento)\s+(?:hacia\s+|contra\s+)?(?:los?\s+)?(?:musulmanes|inmigrantes|gitanos)\b', re.IGNORECASE),
+                    # Common Spanish insults used derogatorily (predicate form)
+                    re.compile(r'\b(?:tienes?\s+|eres\s+un[ao]?\s+)(?:orejas?|narizotas?|patas?\s+de\s+elefante|elefante|gorila|mono|chimpancé|cerdo|cerda|rata|basura|mierda|escoria|parásito|animal|monstruo)\b', re.IGNORECASE),
+                    # Vocative insults (calling someone directly by insulting name at start of sentence)
+                    re.compile(r'(?:^|[.!?]\s+)(?:orejas?|narizotas?|gorila|mono|chimpancé|cerdo|cerda|rata|basura|mierda|escoria|parásito|animal|monstruo)(?:[,!?\s]+(?:tienes?|eres|te|tu|tus?|que|y|pero)\b)', re.IGNORECASE),
                     re.compile(r'\b(?:apoyo\s+la\s+|defiendo\s+la\s+)?(?:discriminación|segregación)\s+(?:de\s+|hacia\s+|contra\s+)(?:los?\s+)?(?:musulmanes|inmigrantes|gitanos)\b', re.IGNORECASE),
                     # Homophobic and sexist slurs
                     re.compile(r'\b(?:maricas?|maricones?)\b', re.IGNORECASE),
                     re.compile(r'\b(?:feminazis?)\b', re.IGNORECASE),
-                    # MERGED: Xenophobic patterns (formerly separate category)
+                    # Xenophobic patterns
                     re.compile(r'\bfuera\s+(?:los?\s+|las?\s+)?(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\b', re.IGNORECASE),
                     re.compile(r'\b(?:moros?|extranjeros?|ilegales?|inmigrantes?|menas?)\s+fuera\s+(?:de\s+)?(?:España|Europa)\b', re.IGNORECASE),
                     re.compile(r'\b(?:expuls\w+|deport\w+)\s+(?:a\s+)?(?:los?\s+)?(?:moros?|extranjeros?|ilegales?)\b', re.IGNORECASE),

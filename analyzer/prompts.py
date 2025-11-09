@@ -723,7 +723,7 @@ INSTRUCCIONES CRÍTICAS:
         """
         # Simplified category list with descriptions and key indicators
         categories_simple = """
-hate_speech: SOLO Y ÚNICAMENTE cuando contiene INSULTOS EXPLÍCITOS GRAVES como "rata", "mierda", "traidor", "psicópata", "basura", "escoria", "parásito", "animal", "monstruo" dirigidos directamente a individuos específicos - NUNCA para interpretaciones subjetivas, sarcasmo, expresiones culturales, amenazas veladas, o contenido sin insultos explícitos
+hate_speech: Insultos directos a individuos específicos - INCLUYE insultos culturales españoles (referencias despectivas a características físicas como apodos degradantes) y palabras graves como "rata", "mierda", "traidor", "psicópata", "basura", "escoria", "parásito", "animal", "monstruo"
 anti_immigration: Retórica xenófoba contra grupos ("invasión", "manadas", "ilegales", "ocupación")
 anti_lgbtq: Ataques al colectivo LGBTQ ("ideología de género", "adoctrinamiento", "imposición")
 anti_feminism: Retórica anti-feminista ("feminazis", "hembrismo", roles tradicionales)
@@ -746,10 +746,13 @@ general: Contenido NO POLÍTICO o temas cotidianos no relacionados con política
 • political_general: PROCESOS ELECTORALES Y DEMOCRÁTICOS ("elecciones", "partidos", "candidatos", "campañas") | general: ACTIVIDADES OPERATIVAS GUBERNAMENTALES ("policía detiene", "justicia investiga", "administración funciona") SIN CONTEXTO POLÍTICO"""
         
         if pattern_category and pattern_category != Categories.GENERAL:
+            # Pattern suggested a category - add generalized validation guidance
+            pattern_guidance = f"\n\n⚠️ VALIDACIÓN DE PATRÓN: Los patrones automáticos detectaron posible {pattern_category}. Valida si el contexto confirma esta clasificación. Si el contenido usa las palabras de forma literal, neutra, o sin intención problemática, elige la categoría correcta."
+            
             # Pattern suggested a category - quick validation
             prompt = f"""Contenido: {content}
 
-Sugerida: {pattern_category}
+Sugerida: {pattern_category}{pattern_guidance}
 
 Categorías:
 {categories_simple}
