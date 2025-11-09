@@ -120,6 +120,10 @@ class OllamaAnalyzer:
         # Extract and validate category
         detected_category = response.strip().lower()
         
+        # Clean up common LLM artifacts (Ok, Okay, Sure, etc.)
+        detected_category = re.sub(r'^(ok|okay|sure|bien|categoría|category)[\s\.,;:-]*', '', detected_category, flags=re.IGNORECASE)
+        detected_category = detected_category.strip()
+        
         # Validate it's a real category
         all_categories = [c.lower() for c in Categories.get_all_categories()]
         
@@ -130,6 +134,13 @@ class OllamaAnalyzer:
                     if self.verbose:
                         print(f"✅ Detected category: {cat}")
                     return cat
+        
+        # Try partial matching for cases where LLM adds extra text
+        for cat in Categories.get_all_categories():
+            if cat.lower() in detected_category:
+                if self.verbose:
+                    print(f"✅ Detected category (partial match): {cat}")
+                return cat
         
         # Invalid category - this should not happen with proper prompting
         raise RuntimeError(f"LLM returned invalid category: '{response.strip()}'. Expected one of: {', '.join(Categories.get_all_categories())}")

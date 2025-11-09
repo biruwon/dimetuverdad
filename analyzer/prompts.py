@@ -726,7 +726,7 @@ anti_feminism: Retórica anti-feminista ("feminazis", "hembrismo", roles tradici
 disinformation: Afirmaciones FALSAS verificables EN EL TEXTO del post sobre hechos actuales ("X ha dimitido", "X está en prisión", "X ha sido detenido") sin fuente oficial
 conspiracy_theory: Agendas secretas, élites ocultas ("ellos controlan", "agenda oculta", "manipulación global")
 call_to_action: Incitación EXPLÍCITA a movilización colectiva ("todos a la calle", "hay que actuar YA", "únete a la manifestación")
-nationalism: Promoción identidad nacional ("orgullo español", "España primero", banderas, símbolos)
+nationalism: RETÓRICA NACIONALISTA EXCLUYENTE que requiere lenguaje de superioridad nacional, rechazo a lo extranjero, o identidad nacional amenazada ("España primero sobre todo", "nuestra nación es superior", "rechazamos influencias extranjeras", "defensa de la pureza nacional") - NO BASTA con símbolos patrios solos, banderas, o expresiones de apoyo político neutral
 anti_government: Crítica institucional ("gobierno corrupto", "régimen", "dictadura", "tiranía")
 political_general: Contenido político neutral - menciones de partidos/políticos sin extremismo
 general: Contenido NO político - temas cotidianos, personales, entretenimiento"""
@@ -738,7 +738,7 @@ general: Contenido NO político - temas cotidianos, personales, entretenimiento"
 • conspiracy_theory: CONTROL SECRETO ("élites manipulan todo") | anti_government: CRÍTICA PÚBLICA de políticas visibles
 • call_to_action: INCITACIÓN EXPLÍCITA a movilización colectiva ("sal a la calle YA", "únete a la manifestación") | political_general: OPINIÓN o invitación pasiva ("deberían cambiar", "os dejo el enlace")
 • anti_immigration: ATAQUE A GRUPO étnico | hate_speech: ATAQUE A INDIVIDUO concreto
-• nationalism: ORGULLO/IDENTIDAD nacional | political_general: MENCIÓN neutral de España"""
+• nationalism: REQUIERE TEXTO EXPLÍCITO de superioridad nacional o exclusión ("nuestra nación es superior", "rechazamos lo extranjero") - símbolos patrios solos (banderas, emojis) sin retórica nacionalista = political_general"""
         
         if pattern_category and pattern_category != Categories.GENERAL:
             # Pattern suggested a category - quick validation
