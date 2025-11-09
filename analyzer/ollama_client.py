@@ -29,7 +29,7 @@ class OllamaClient:
     DEFAULT_MULTIMODAL_TIMEOUT = 300.0  # 300 seconds (5 minutes) for multimodal (allows for image processing)
     
     # Retry settings
-    MAX_RETRIES = 1
+    MAX_RETRIES = 2
     BASE_RETRY_DELAY = 1.0  # seconds
     
     def __init__(self, verbose: bool = False):

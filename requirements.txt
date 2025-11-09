@@ -14,6 +14,7 @@ lxml>=4.9.0
 # HTTP requests
 requests>=2.31.0
 aiohttp>=3.9.0
+httpx>=0.27.0
 feedparser>=6.0.0
 
 # LLM integration

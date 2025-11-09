@@ -63,8 +63,8 @@ class ConfigDefaults:
     DATABASE_TIMEOUT: Final[float] = 30.0
     DOWNLOAD_TIMEOUT: Final[float] = 120.0
     REQUEST_TIMEOUT: Final[float] = 30.0
-    MAX_CONCURRENCY: Final[int] = 4
-    MAX_LLM_CONCURRENCY: Final[int] = 6  # Increased from 2 to 6 for better parallel processing
+    MAX_CONCURRENCY: Final[int] = 1  # Sequential processing to avoid context accumulation in single model
+    MAX_LLM_CONCURRENCY: Final[int] = 1  # Must be 1 for single-model setups to prevent context pollution
 
 
 class MetricsKeys:

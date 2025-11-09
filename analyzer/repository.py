@@ -235,13 +235,13 @@ class ContentAnalysisRepository:
         except Exception as save_error:
             print(f"Failed to save error analysis for post {post_id}: {save_error}")
 
-    def get_tweets_for_analysis(self, username: Optional[str] = None, max_tweets: Optional[int] = None, 
+    def get_tweets_for_analysis(self, usernames: Optional[List[str]] = None, max_tweets: Optional[int] = None, 
                                force_reanalyze: bool = False) -> List[Tuple[str, str, str, str, str, str]]:
         """
         Get tweets from database that need analysis.
         
         Args:
-            username: Specific username to analyze (None for all)
+            usernames: List of usernames to analyze (None for all)
             max_tweets: Maximum number of tweets to return (None for all)
             force_reanalyze: If True, return all tweets (including already analyzed)
             
@@ -252,8 +252,14 @@ class ContentAnalysisRepository:
             # Use standardized repository for basic tweet operations
             if force_reanalyze:
                 # Get all tweets for the user or all users
-                if username:
-                    tweets_data = self.tweet_repo.get_tweets_by_username(username=username, limit=max_tweets)
+                if usernames:
+                    tweets_data = []
+                    for username in usernames:
+                        user_tweets = self.tweet_repo.get_tweets_by_username(username=username, limit=max_tweets)
+                        tweets_data.extend(user_tweets)
+                        if max_tweets and len(tweets_data) >= max_tweets:
+                            tweets_data = tweets_data[:max_tweets]
+                            break
                 else:
                     # When no username specified and force_reanalyze=True, get all tweets
                     with self._get_connection() as conn:
@@ -298,9 +304,11 @@ class ContentAnalysisRepository:
                         )
                     """
                     params = []
-                    if username:
-                        query += " AND t.username = ?"
-                        params.append(username)
+                    if usernames:
+                        # Use IN clause for multiple usernames
+                        placeholders = ','.join('?' * len(usernames))
+                        query += f" AND t.username IN ({placeholders})"
+                        params.extend(usernames)
                     
                     query += " ORDER BY t.tweet_id DESC"
                     

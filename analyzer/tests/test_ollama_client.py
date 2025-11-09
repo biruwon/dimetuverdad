@@ -31,7 +31,7 @@ class TestGenerateText:
         """Test successful text generation."""
         client = OllamaClient()
         
-        with patch.object(client.sync_client, 'generate') as mock_generate:
+        with patch.object(client.client, 'generate') as mock_generate:
             mock_generate.return_value = {"response": "Generated text response"}
             
             result = await client.generate_text(
@@ -47,7 +47,7 @@ class TestGenerateText:
         """Test text generation with custom options."""
         client = OllamaClient()
         
-        with patch.object(client.sync_client, 'generate') as mock_generate:
+        with patch.object(client.client, 'generate') as mock_generate:
             mock_generate.return_value = {"response": "Response with options"}
             
             result = await client.generate_text(
@@ -69,7 +69,7 @@ class TestGenerateMultimodal:
         """Test successful multimodal generation."""
         client = OllamaClient()
         
-        with patch.object(client.sync_client, 'generate') as mock_generate:
+        with patch.object(client.client, 'generate') as mock_generate:
             mock_generate.return_value = {"response": "Multimodal response"}
             
             result = await client.generate_multimodal(
@@ -102,7 +102,7 @@ class TestRetryLogic:
         """Test retry when model returns empty response."""
         client = OllamaClient()
         
-        with patch.object(client.sync_client, 'generate') as mock_generate:
+        with patch.object(client.client, 'generate') as mock_generate:
             # First call returns empty, second call succeeds
             mock_generate.side_effect = [
                 {"response": ""},
@@ -122,7 +122,7 @@ class TestRetryLogic:
         """Test that retries are exhausted after max attempts with empty responses."""
         client = OllamaClient()
         
-        with patch.object(client.sync_client, 'generate') as mock_generate:
+        with patch.object(client.client, 'generate') as mock_generate:
             # Always return empty
             mock_generate.return_value = {"response": ""}
             
@@ -139,7 +139,7 @@ class TestRetryLogic:
         """Test retry when request times out."""
         client = OllamaClient()
         
-        with patch.object(client.sync_client, 'generate') as mock_generate:
+        with patch.object(client.client, 'generate') as mock_generate:
             # First call times out (simulate by raising TimeoutError), second succeeds
             mock_generate.side_effect = [
                 asyncio.TimeoutError("Simulated timeout"),
@@ -160,7 +160,7 @@ class TestRetryLogic:
         """Test that non-retryable errors fail without retry."""
         client = OllamaClient()
         
-        with patch.object(client.sync_client, 'generate') as mock_generate:
+        with patch.object(client.client, 'generate') as mock_generate:
             mock_generate.side_effect = ValueError("Invalid parameter")
             
             with pytest.raises(ValueError, match="Invalid parameter"):

@@ -19,7 +19,9 @@ from retrieval.integration.analyzer_hooks import create_analyzer_hooks
 class AnalysisStages:
     """Records which stages were executed"""
     pattern: bool = False
-    local_llm: bool = False
+    category_detection: bool = False  # LLM category detection/validation
+    media_analysis: bool = False      # Vision model media description
+    explanation: bool = False          # Final explanation generation
     external: bool = False
     
     def to_string(self) -> str:
@@ -27,8 +29,12 @@ class AnalysisStages:
         stages = []
         if self.pattern:
             stages.append("pattern")
-        if self.local_llm:
-            stages.append("local_llm")
+        if self.category_detection:
+            stages.append("category_detection")
+        if self.media_analysis:
+            stages.append("media_analysis")
+        if self.explanation:
+            stages.append("explanation")
         if self.external:
             stages.append("external")
         return ",".join(stages)
@@ -40,7 +46,9 @@ class AnalysisStages:
         if stages_str:
             parts = stages_str.split(",")
             stages.pattern = "pattern" in parts
-            stages.local_llm = "local_llm" in parts
+            stages.category_detection = "category_detection" in parts
+            stages.media_analysis = "media_analysis" in parts
+            stages.explanation = "explanation" in parts
             stages.external = "external" in parts
         return stages
 
@@ -53,6 +61,7 @@ class AnalysisResult:
     stages: AnalysisStages
     pattern_data: dict
     verification_data: dict
+    media_description: Optional[str] = None
     external_explanation: Optional[str] = None
 
 
@@ -76,7 +85,13 @@ class AnalysisFlowManager:
         """
         # Initialize analyzers
         self.pattern_analyzer = PatternAnalyzer()
-        self.local_llm = OllamaAnalyzer(verbose=verbose, fast_mode=fast_mode)
+        
+        # Text analyzer for category detection and explanation (gemma3:27b)
+        self.text_llm = OllamaAnalyzer(model="gemma3:27b-it-q4_K_M", verbose=verbose, fast_mode=fast_mode)
+        
+        # Vision analyzer using same model (gemma3 supports multimodal!)
+        self.vision_llm = OllamaAnalyzer(model="gemma3:27b-it-q4_K_M", verbose=verbose, fast_mode=fast_mode)
+        
         self.external = ExternalAnalyzer(verbose=verbose)
         self.analyzer_hooks = create_analyzer_hooks(verbose=verbose)
         self.verbose = verbose
@@ -84,6 +99,8 @@ class AnalysisFlowManager:
         
         if self.verbose:
             print("🔄 AnalysisFlowManager initialized")
+            print("   📝 Text LLM: gemma3:27b-it-q4_K_M")
+            print("   🖼️  Vision LLM: gemma3:27b-it-q4_K_M (multimodal capable)")
     
     async def analyze_local(
         self,
@@ -91,31 +108,31 @@ class AnalysisFlowManager:
         media_urls: Optional[List[str]] = None
     ) -> AnalysisResult:
         """
-        Run local analysis flow (pattern + local LLM).
-        
-        Always runs both pattern detection and LLM analysis, then intelligently
-        combines results based on pattern confidence.
+        Run local analysis flow with new optimized stages:
+        1. Pattern Detection (fast, rule-based)
+        2. Category Detection/Validation (text LLM, category only)
+        3. Media Analysis (vision LLM, if media present)
+        4. Explanation Generation (text LLM, with full context)
         
         Args:
             content: Text content to analyze
             media_urls: Optional media URLs for multimodal analysis
         
         Returns:
-            AnalysisResult with category, local_explanation, stages, pattern_data, and verification_data
+            AnalysisResult with category, explanation, media_description, stages, pattern_data, verification_data
         """
         import time
         
         stages = AnalysisStages()
-        stage_timings = {}  # Track timing for each stage
+        stage_timings = {}
+        media_description = None
         
         # Reset model context before analysis (except for first analysis)
         if self.analysis_count > 0:
             if self.verbose:
                 print(f"🔄 Resetting model context before analysis #{self.analysis_count + 1}")
             try:
-                await self.local_llm.reset_model_context()
-                if self.verbose:
-                    print("✅ Context reset complete")
+                await self.text_llm.reset_model_context()
             except Exception as e:
                 if self.verbose:
                     print(f"⚠️  Context reset failed: {e}")
@@ -124,50 +141,59 @@ class AnalysisFlowManager:
         
         if self.verbose:
             print("=" * 80)
-            print("🔄 Starting LOCAL analysis flow")
+            print("🔄 Starting LOCAL analysis flow (NEW ARCHITECTURE)")
             print(f"📝 Content: {content[:100] if content else '(empty)'}...")
             if media_urls:
                 print(f"🖼️  Media URLs: {len(media_urls)} items")
         
-        # Handle empty content as special case
+        # Handle empty content
         if not content or len(content.strip()) < 3:
             if self.verbose:
                 print("⚠️  Empty or very short content detected")
             
-            # If we have media URLs but no text, run multimodal analysis
             if media_urls and len(media_urls) > 0:
+                # Media-only post - analyze images then explain
                 if self.verbose:
-                    print("🖼️  Media-only post detected - running multimodal analysis")
+                    print("🖼️  Media-only post - analyzing images")
                 
-                # Skip pattern detection (no text to analyze)
-                # Go directly to LLM multimodal analysis
+                # Stage: Media Analysis
                 start_time = time.time()
-                primary_category, local_explanation = await self.local_llm.categorize_and_explain("", media_urls)
-                stage_timings['llm_multimodal'] = time.time() - start_time
-                stages.local_llm = True
+                media_description = await self.vision_llm.describe_media(media_urls)
+                stage_timings['media_analysis'] = time.time() - start_time
+                stages.media_analysis = True
                 
-                if self.verbose:
-                    print(f"   ✅ Final category: {primary_category}")
-                    print(f"   ✅ Local explanation: {local_explanation[:100]}...")
+                # Use media description as content for category detection
+                start_time = time.time()
+                primary_category = await self.text_llm.detect_category_only(media_description, None)
+                stage_timings['category_detection'] = time.time() - start_time
+                stages.category_detection = True
+                
+                # Generate explanation based on media
+                start_time = time.time()
+                local_explanation = await self.text_llm.generate_explanation_with_context("", primary_category, media_description)
+                stage_timings['explanation'] = time.time() - start_time
+                stages.explanation = True
                 
                 return AnalysisResult(
                     category=primary_category,
                     local_explanation=local_explanation,
+                    media_description=media_description,
                     stages=stages,
                     pattern_data={},
                     verification_data={'stage_timings': stage_timings}
                 )
             else:
-                # No text and no media - truly empty content
+                # Truly empty content
                 return AnalysisResult(
                     category=Categories.GENERAL,
                     local_explanation="Contenido vacío o muy corto para analizar.",
+                    media_description=None,
                     stages=stages,
                     pattern_data={},
                     verification_data={'stage_timings': stage_timings}
                 )
         
-        # Stage 1: Pattern Detection
+        # STAGE 1: Pattern Detection
         if self.verbose:
             print("\n📊 Stage 1: Pattern Detection")
         
@@ -176,58 +202,76 @@ class AnalysisFlowManager:
         stage_timings['pattern_detection'] = time.time() - start_time
         stages.pattern = True
         
+        # Extract pattern-suggested category
+        pattern_category = None
+        if pattern_result.categories and Categories.GENERAL not in pattern_result.categories:
+            pattern_category = pattern_result.categories[0]
+        
         if self.verbose:
-            print(f"   Categories found: {pattern_result.categories}")
+            print(f"   Pattern category: {pattern_category or 'None'}")
             print(f"   Pattern matches: {len(pattern_result.pattern_matches)}")
             print(f"   ⏱️  Pattern detection: {stage_timings['pattern_detection']:.3f}s")
         
-        # Stage 2: Local LLM Analysis (always run)
+        # STAGE 2: Category Detection/Validation (Text LLM)
         if self.verbose:
-            print("\n🤖 Stage 2: Local LLM Analysis")
-        
-        # Determine if we need categorization or just explanation
-        patterns_found_specific_category = (
-            pattern_result.categories and 
-            Categories.GENERAL not in pattern_result.categories
-        )
+            print("\n🤖 Stage 2: Category Detection (Text LLM)")
         
         start_time = time.time()
-        if patterns_found_specific_category:
-            # Patterns found a specific category - use LLM for explanation only
-            primary_category = pattern_result.categories[0]
-            if self.verbose:
-                print(f"   Using LLM for explanation of pattern-detected category: {primary_category}")
-            
-            local_explanation = await self.local_llm.explain_only(content, primary_category, media_urls)
-        else:
-            # No specific patterns found - use LLM for both categorization and explanation
-            if self.verbose:
-                print("   Using LLM for full categorization + explanation")
-            
-            primary_category, local_explanation = await self.local_llm.categorize_and_explain(content, media_urls)
-        
-        stage_timings['llm_analysis'] = time.time() - start_time
-        stages.local_llm = True
+        primary_category = await self.text_llm.detect_category_only(content, pattern_category)
+        stage_timings['category_detection'] = time.time() - start_time
+        stages.category_detection = True
         
         if self.verbose:
-            print(f"   ✅ Final category: {primary_category}")
-            print(f"   ✅ Local explanation: {local_explanation[:100]}...")
-            print(f"   ⏱️  LLM analysis: {stage_timings['llm_analysis']:.3f}s")
+            print(f"   Detected category: {primary_category}")
+            print(f"   ⏱️  Category detection: {stage_timings['category_detection']:.3f}s")
+        
+        # STAGE 3: Media Analysis (Vision LLM, if media present)
+        if media_urls and len(media_urls) > 0:
+            if self.verbose:
+                print("\n🖼️  Stage 3: Media Analysis (Vision LLM)")
+            
+            start_time = time.time()
+            try:
+                media_description = await self.vision_llm.describe_media(media_urls)
+                stage_timings['media_analysis'] = time.time() - start_time
+                stages.media_analysis = True
+                
+                if self.verbose:
+                    print(f"   Media description: {media_description[:100]}...")
+                    print(f"   ⏱️  Media analysis: {stage_timings['media_analysis']:.3f}s")
+            except Exception as e:
+                if self.verbose:
+                    print(f"   ⚠️  Media analysis failed: {e}")
+                # Continue without media description
+                media_description = None
+        
+        # STAGE 4: Explanation Generation (Text LLM with full context)
+        if self.verbose:
+            print("\n💭 Stage 4: Explanation Generation (Text LLM)")
+        
+        start_time = time.time()
+        local_explanation = await self.text_llm.generate_explanation_with_context(content, primary_category, media_description)
+        stage_timings['explanation'] = time.time() - start_time
+        stages.explanation = True
+        
+        if self.verbose:
+            print(f"   Explanation: {local_explanation[:100]}...")
+            print(f"   ⏱️  Explanation generation: {stage_timings['explanation']:.3f}s")
         
         # Check if LLM explanation indicates this should be disinformation
         if self.analyzer_hooks.explanation_indicates_disinformation(local_explanation):
             if self.verbose:
-                print("   🔄 LLM explanation indicates disinformation - overriding category")
+                print("   🔄 Explanation indicates disinformation - overriding category")
             primary_category = Categories.DISINFORMATION
         
-        # Apply verification feedback enhancement
-        if self.verbose:
-            print("\n🔍 Phase 2: Verification Feedback Enhancement")
-        
-        # Run verification only for disinformation category (most critical for fact-checking)
+        # STAGE 5: Verification (for disinformation category only)
+        verification_data = {}
         if primary_category == Categories.DISINFORMATION:
-            # Check if verification should be triggered
-            analyzer_result = {'category': primary_category, 'confidence': 0.8}
+            if self.verbose:
+                print("\n🔍 Stage 5: Verification Feedback Enhancement")
+            
+            # Convert enum to string for verification hooks
+            analyzer_result = {'category': primary_category.value if hasattr(primary_category, 'value') else primary_category, 'confidence': 0.8}
             should_trigger, reason = self.analyzer_hooks.should_trigger_verification(content, analyzer_result)
             
             if should_trigger:
@@ -236,49 +280,28 @@ class AnalysisFlowManager:
                 
                 start_time = time.time()
                 try:
-                    # Run verification
                     analysis_result = await self.analyzer_hooks.analyze_with_verification(
                         content, 
                         original_result=analyzer_result
                     )
                     
                     stage_timings['verification'] = time.time() - start_time
-                    
                     verification_data = analysis_result.verification_data
                     
-                    # Check if verification found contradictions
+                    # Update explanation with verification context if contradictions found
                     if verification_data and verification_data.get('contradictions_detected'):
                         if self.verbose:
-                            print("⚠️  Verification found contradictions - updating category to disinformation")
-                        
-                        # Update category to disinformation
-                        primary_category = Categories.DISINFORMATION
+                            print("⚠️  Verification found contradictions")
                         local_explanation = analysis_result.explanation_with_verification
-                    
-                    # No contradictions found, but add verification context if sources were checked
                     elif verification_data and verification_data.get('sources_cited'):
                         local_explanation = analysis_result.explanation_with_verification
-                        verification_data = analysis_result.verification_data
-                    
+                        
                 except Exception as e:
                     stage_timings['verification'] = time.time() - start_time
                     if self.verbose:
                         print(f"⚠️  Verification failed: {e}")
-                    verification_data = {}
-            else:
-                verification_data = {}
-        else:
-            verification_data = {}
         
-        if self.verbose:
-            print(f"   ✅ Final category after verification: {primary_category}")
-            print(f"   ✅ Enhanced explanation: {local_explanation[:100]}...")
-            if 'verification' in stage_timings:
-                print(f"   ⏱️  Verification: {stage_timings['verification']:.3f}s")
-            else:
-                print("   ⏱️  Verification: skipped")
-        
-        # Return pattern data
+        # Prepare pattern data
         pattern_data = {
             'pattern_matches': [match.__dict__ for match in pattern_result.pattern_matches],
             'topic_classification': {
@@ -295,9 +318,19 @@ class AnalysisFlowManager:
         else:
             verification_data = {'stage_timings': stage_timings}
         
+        if self.verbose:
+            print(f"\n✅ Local analysis complete:")
+            print(f"   Final category: {primary_category}")
+            print(f"   Explanation: {local_explanation[:100]}...")
+            if media_description:
+                print(f"   Media: {media_description[:80]}...")
+            total_time = sum(stage_timings.values())
+            print(f"   ⏱️  Total time: {total_time:.3f}s")
+        
         return AnalysisResult(
             category=primary_category,
             local_explanation=local_explanation,
+            media_description=media_description,
             stages=stages,
             pattern_data=pattern_data,
             verification_data=verification_data

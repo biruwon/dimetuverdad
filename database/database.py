@@ -112,7 +112,9 @@ def create_fresh_database_schema(db_path: str):
             media_urls TEXT,
             media_type TEXT,
             verification_data TEXT,
-            verification_confidence REAL DEFAULT 0.0
+            verification_confidence REAL DEFAULT 0.0,
+            multi_model_analysis BOOLEAN DEFAULT FALSE,
+            model_consensus_category TEXT
         )
         ''')
 

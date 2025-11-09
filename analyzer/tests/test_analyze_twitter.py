@@ -144,8 +144,8 @@ class TestAnalyzerAnalysis(unittest.TestCase):
         mock_pattern_result.pattern_matches = [Mock(matched_text="test", category="hate_speech", description="test")]
         analyzer.flow_manager.pattern_analyzer.analyze_content = Mock(return_value=mock_pattern_result)
 
-        # Mock the local LLM to avoid needing Ollama
-        analyzer.flow_manager.local_llm.explain_only = AsyncMock(return_value="Mock explanation")
+        # Mock the text LLM to avoid needing Ollama
+        analyzer.flow_manager.text_llm.explain_only = AsyncMock(return_value="Mock explanation")
 
         # Mock the external analyzer to avoid needing Gemini
         analyzer.flow_manager.external.analyze = AsyncMock(return_value=ExternalAnalysisResult(
@@ -166,7 +166,7 @@ class TestAnalyzerAnalysis(unittest.TestCase):
 
         # Should detect hate speech
         self.assertEqual(result.category, Categories.HATE_SPEECH)
-        self.assertEqual(result.analysis_stages, "pattern,local_llm,external")
+        self.assertEqual(result.analysis_stages, "pattern,category_detection,explanation,external")
         self.assertEqual(len(result.categories_detected), 1)
 
 
@@ -318,7 +318,7 @@ class TestCLIFunctions(unittest.TestCase):
         mock_analyzer.repository.get_tweets_for_analysis.return_value = []
         mock_analyzer.repository.get_analysis_count_by_author.return_value = 0
         
-        mock_setup.return_value = (mock_analyzer, [], 0)
+        mock_setup.return_value = (mock_analyzer, [], 0, 0)
 
         asyncio.run(analyze_tweets_cli())
 
@@ -331,7 +331,7 @@ class TestCLIFunctions(unittest.TestCase):
         mock_analyzer = Mock()
         mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
-        ], 5)
+        ], 5, 10)
 
         # Mock analysis result
         mock_result = Mock()
@@ -339,6 +339,7 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.local_explanation = "Hate speech detected"
         mock_result.analysis_stages = "llm"
         mock_result.multimodal_analysis = False
+        mock_result.verification_data = {'stage_timings': {'pattern_detection': 0.1, 'category_detection': 0.5, 'explanation': 0.3}}
         mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
         asyncio.run(analyze_tweets_cli(max_tweets=1))
@@ -354,7 +355,7 @@ class TestCLIFunctions(unittest.TestCase):
         mock_analyzer = Mock()
         mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', 'url1.jpg,url2.jpg', '')
-        ], 0)
+        ], 0, 5)
 
         mock_result = Mock()
         mock_result.category = Categories.GENERAL
@@ -362,6 +363,7 @@ class TestCLIFunctions(unittest.TestCase):
         mock_result.analysis_stages = "multimodal"
         mock_result.multimodal_analysis = True
         mock_result.media_type = "image"
+        mock_result.verification_data = {'stage_timings': {'pattern_detection': 0.1, 'category_detection': 0.4, 'media_analysis': 1.2, 'explanation': 0.3}}
         mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
         asyncio.run(analyze_tweets_cli(max_tweets=1))
@@ -377,12 +379,13 @@ class TestCLIFunctions(unittest.TestCase):
         mock_analyzer = Mock()
         mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Main content', '', 'Quoted content')
-        ], 0)
+        ], 0, 3)
 
         mock_result = Mock()
         mock_result.category = Categories.GENERAL
         mock_result.local_explanation = "Normal content"
         mock_result.analysis_stages = "llm"
+        mock_result.verification_data = {'stage_timings': {'pattern_detection': 0.1, 'category_detection': 0.4, 'explanation': 0.3}}
         mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
         asyncio.run(analyze_tweets_cli(max_tweets=1))
@@ -399,7 +402,7 @@ class TestCLIFunctions(unittest.TestCase):
         mock_analyzer = Mock()
         mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
-        ], 0)
+        ], 0, 2)
 
         mock_analyzer.analyze_content = AsyncMock(side_effect=Exception("Analysis failed"))
 
@@ -418,12 +421,13 @@ class TestCLIFunctions(unittest.TestCase):
         mock_analyzer = Mock()
         mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
-        ], 10)
+        ], 10, 15)
 
         mock_result = Mock()
         mock_result.category = Categories.GENERAL
         mock_result.local_explanation = "Reanalyzed content"
         mock_result.analysis_stages = "llm"
+        mock_result.verification_data = {'stage_timings': {'pattern_detection': 0.1, 'category_detection': 0.4, 'explanation': 0.3}}
         mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
         asyncio.run(analyze_tweets_cli(force_reanalyze=True, max_tweets=1))
@@ -439,15 +443,16 @@ class TestCLIFunctions(unittest.TestCase):
         mock_analyzer = Mock()
         mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'specificuser', 'Test content', '', '')
-        ], 0)
+        ], 0, 8)
 
         mock_result = Mock()
         mock_result.category = Categories.GENERAL
+        mock_result.verification_data = {'stage_timings': {'pattern_detection': 0.1, 'category_detection': 0.4, 'explanation': 0.3}}
         mock_analyzer.analyze_content = AsyncMock(return_value=mock_result)
 
-        asyncio.run(analyze_tweets_cli(username='specificuser', max_tweets=1))
+        asyncio.run(analyze_tweets_cli(usernames=['specificuser'], max_tweets=1))
 
-        mock_setup.assert_called_once_with('specificuser', 1, False, False, False)
+        mock_setup.assert_called_once_with(['specificuser'], 1, False, False, False)
 
 
 class TestUtilityFunctions(unittest.TestCase):
@@ -507,7 +512,7 @@ class TestUtilityFunctions(unittest.TestCase):
         """Test main function with command line arguments."""
         main()
         mock_analyze.assert_called_once_with(
-            username='testuser',
+            usernames=['testuser'],
             max_tweets=5,
             force_reanalyze=False,
             tweet_id=None,
@@ -521,7 +526,7 @@ class TestUtilityFunctions(unittest.TestCase):
         """Test main function with no arguments."""
         main()
         mock_analyze.assert_called_once_with(
-            username=None,
+            usernames=None,
             max_tweets=None,
             force_reanalyze=False,
             tweet_id=None,
@@ -535,7 +540,7 @@ class TestUtilityFunctions(unittest.TestCase):
         """Test main function with force reanalyze and tweet ID."""
         main()
         mock_analyze.assert_called_once_with(
-            username=None,
+            usernames=None,
             max_tweets=None,
             force_reanalyze=True,
             tweet_id='123',

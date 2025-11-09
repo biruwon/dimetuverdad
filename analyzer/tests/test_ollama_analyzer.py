@@ -121,14 +121,19 @@ class TestMediaPreparation:
     
     @pytest.mark.asyncio
     async def test_prepare_image_success(self):
-        """Test successful image download and preparation."""
+        """Test successful image preparation."""
         analyzer = OllamaAnalyzer()
         
-        with patch('requests.get') as mock_get:
-            mock_response = Mock()
-            mock_response.content = b"fake_image_data"
-            mock_response.headers = {'content-length': '1024'}
-            mock_get.return_value = mock_response
+        mock_response = Mock()
+        mock_response.content = b"image_data"
+        mock_response.headers = {'content-length': '1024'}
+        mock_response.raise_for_status.return_value = None
+        
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+            mock_client_class.return_value.__aexit__.return_value = None
+            mock_client.get.return_value = mock_response
             
             result = await analyzer._prepare_media_content(["http://example.com/image.jpg"])
             
@@ -153,11 +158,16 @@ class TestMediaPreparation:
         """Test that video thumbnails with image extensions are processed."""
         analyzer = OllamaAnalyzer()
         
-        with patch('requests.get') as mock_get:
-            mock_response = Mock()
-            mock_response.content = b"thumbnail_data"
-            mock_response.headers = {'content-length': '512'}
-            mock_get.return_value = mock_response
+        mock_response = Mock()
+        mock_response.content = b"thumbnail_data"
+        mock_response.headers = {'content-length': '512'}
+        mock_response.raise_for_status.return_value = None
+        
+        with patch('httpx.AsyncClient') as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+            mock_client_class.return_value.__aexit__.return_value = None
+            mock_client.get.return_value = mock_response
             
             result = await analyzer._prepare_media_content([
                 "http://example.com/amplify_video_thumb/image.jpg"

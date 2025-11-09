@@ -401,24 +401,16 @@ class TestContentAnalysisRepository:
 
             assert row is not None
 
-    @patch('analyzer.repository.get_tweet_repository')
-    def test_get_tweets_for_analysis_force_reanalyze(self, mock_tweet_repo):
+    @patch('sqlite3.connect')
+    def test_get_tweets_for_analysis_force_reanalyze(self, mock_connect):
         """Test getting tweets for analysis with force reanalyze."""
-        mock_repo = Mock()
-        mock_tweet_repo.return_value = mock_repo
-
-        # Mock tweet data
-        mock_tweets = [
-            Mock(
-                tweet_id="123",
-                tweet_url="https://twitter.com/test/status/123",
-                username="testuser",
-                content="Test content",
-                media_links="url1.jpg",
-                original_content="Original content"
-            )
+        mock_conn = Mock()
+        mock_cursor = Mock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.fetchall.return_value = [
+            ("123", "https://twitter.com/test/status/123", "testuser", "Test content", "url1.jpg", "Original content")
         ]
-        mock_repo.get_tweets_by_username.return_value = mock_tweets
+        mock_connect.return_value = mock_conn
 
         repo = ContentAnalysisRepository()
         result = repo.get_tweets_for_analysis(force_reanalyze=True, max_tweets=10)

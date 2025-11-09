@@ -34,14 +34,19 @@ def mock_pattern_analyzer():
 
 
 @pytest.fixture
-def mock_local_llm():
-    """Mock OllamaAnalyzer."""
+def mock_text_llm():
+    """Mock text LLM analyzer."""
     mock = Mock()
-    mock.categorize_and_explain = AsyncMock(return_value=(
-        Categories.HATE_SPEECH,
-        "Este contenido contiene discurso de odio xenófobo."
-    ))
-    mock.explain_only = AsyncMock(return_value="Explicación para categoría detectada por patrones.")
+    mock.detect_category_only = AsyncMock(return_value=Categories.HATE_SPEECH)
+    mock.generate_explanation_with_context = AsyncMock(return_value="Explicación para categoría detectada por patrones.")
+    return mock
+
+
+@pytest.fixture
+def mock_vision_llm():
+    """Mock vision LLM analyzer."""
+    mock = Mock()
+    mock.describe_media = AsyncMock(return_value="Descripción de la imagen del medio.")
     return mock
 
 
@@ -57,11 +62,15 @@ def mock_external():
 
 
 @pytest.fixture
-def flow_manager(mock_pattern_analyzer, mock_local_llm, mock_external):
+def flow_manager(mock_pattern_analyzer, mock_text_llm, mock_vision_llm, mock_external):
     """Create AnalysisFlowManager with mocked components."""
     with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-         patch('analyzer.flow_manager.OllamaAnalyzer', return_value=mock_local_llm), \
+         patch('analyzer.flow_manager.OllamaAnalyzer') as mock_ollama_class, \
          patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
+        
+        # Configure OllamaAnalyzer to return different instances for text and vision
+        mock_ollama_class.side_effect = [mock_text_llm, mock_vision_llm]
+        
         manager = AnalysisFlowManager(verbose=False)
         return manager
 
@@ -74,24 +83,26 @@ class TestAnalysisStages:
         stages = AnalysisStages()
         
         assert stages.pattern is False
-        assert stages.local_llm is False
+        assert stages.category_detection is False
+        assert stages.media_analysis is False
+        assert stages.explanation is False
         assert stages.external is False
     
     def test_to_string_all_stages(self):
         """Test converting stages to string."""
-        stages = AnalysisStages(pattern=True, local_llm=True, external=True)
+        stages = AnalysisStages(pattern=True, category_detection=True, media_analysis=True, explanation=True, external=True)
         
         result = stages.to_string()
         
-        assert result == "pattern,local_llm,external"
+        assert result == "pattern,category_detection,media_analysis,explanation,external"
     
     def test_to_string_partial_stages(self):
         """Test string conversion with partial stages."""
-        stages = AnalysisStages(pattern=True, local_llm=True, external=False)
+        stages = AnalysisStages(pattern=True, category_detection=True, explanation=True, external=False)
         
         result = stages.to_string()
         
-        assert result == "pattern,local_llm"
+        assert result == "pattern,category_detection,explanation"
     
     def test_to_string_no_stages(self):
         """Test string conversion with no stages."""
@@ -103,18 +114,22 @@ class TestAnalysisStages:
     
     def test_from_string_all_stages(self):
         """Test parsing stages from string."""
-        stages = AnalysisStages.from_string("pattern,local_llm,external")
+        stages = AnalysisStages.from_string("pattern,category_detection,media_analysis,explanation,external")
         
         assert stages.pattern is True
-        assert stages.local_llm is True
+        assert stages.category_detection is True
+        assert stages.media_analysis is True
+        assert stages.explanation is True
         assert stages.external is True
     
     def test_from_string_partial(self):
         """Test parsing partial stages."""
-        stages = AnalysisStages.from_string("pattern,local_llm")
+        stages = AnalysisStages.from_string("pattern,category_detection,explanation")
         
         assert stages.pattern is True
-        assert stages.local_llm is True
+        assert stages.category_detection is True
+        assert stages.media_analysis is False
+        assert stages.explanation is True
         assert stages.external is False
     
     def test_from_string_empty(self):
@@ -122,18 +137,22 @@ class TestAnalysisStages:
         stages = AnalysisStages.from_string("")
         
         assert stages.pattern is False
-        assert stages.local_llm is False
+        assert stages.category_detection is False
+        assert stages.media_analysis is False
+        assert stages.explanation is False
         assert stages.external is False
     
     def test_round_trip_conversion(self):
         """Test converting to string and back preserves state."""
-        original = AnalysisStages(pattern=True, local_llm=True, external=False)
+        original = AnalysisStages(pattern=True, category_detection=True, explanation=True, external=False)
         
         string_repr = original.to_string()
         restored = AnalysisStages.from_string(string_repr)
         
         assert restored.pattern == original.pattern
-        assert restored.local_llm == original.local_llm
+        assert restored.category_detection == original.category_detection
+        assert restored.media_analysis == original.media_analysis
+        assert restored.explanation == original.explanation
         assert restored.external == original.external
 
 
@@ -149,7 +168,8 @@ class TestFlowManagerInitialization:
             
             assert manager.verbose is False
             assert manager.pattern_analyzer is not None
-            assert manager.local_llm is not None
+            assert manager.text_llm is not None
+            assert manager.vision_llm is not None
             assert manager.external is not None
     
     def test_verbose_initialization(self):
@@ -160,8 +180,9 @@ class TestFlowManagerInitialization:
             manager = AnalysisFlowManager(verbose=True)
             
             assert manager.verbose is True
-            # Verify verbose passed to components
-            mock_llm.assert_called_once_with(verbose=True, fast_mode=False)
+            # Verify verbose passed to components - should be called twice (text_llm and vision_llm)
+            assert mock_llm.call_count == 2
+            mock_llm.assert_any_call(model='gemma3:27b-it-q4_K_M', verbose=True, fast_mode=False)
             mock_ext.assert_called_once_with(verbose=True)
 
 
@@ -169,7 +190,7 @@ class TestAnalyzeLocal:
     """Test local analysis flow (pattern + local LLM)."""
     
     @pytest.mark.asyncio
-    async def test_local_with_successful_patterns(self, flow_manager, mock_pattern_analyzer, mock_local_llm):
+    async def test_local_with_successful_patterns(self, flow_manager, mock_pattern_analyzer, mock_text_llm):
         """Test local flow when pattern detection succeeds."""
         content = "Los inmigrantes destruyen nuestra cultura"
         
@@ -178,7 +199,8 @@ class TestAnalyzeLocal:
         assert result.category == Categories.HATE_SPEECH
         assert result.local_explanation == "Explicación para categoría detectada por patrones."
         assert result.stages.pattern is True
-        assert result.stages.local_llm is True
+        assert result.stages.category_detection is True
+        assert result.stages.explanation is True
         assert result.stages.external is False
         
         # Verify pattern data is returned
@@ -190,12 +212,12 @@ class TestAnalyzeLocal:
         # Verify pattern analyzer was called
         mock_pattern_analyzer.analyze_content.assert_called_once_with(content)
         
-        # Verify local LLM explain_only was called (not categorize_and_explain)
-        mock_local_llm.explain_only.assert_called_once_with(content, Categories.HATE_SPEECH, None)
-        mock_local_llm.categorize_and_explain.assert_not_called()
+        # Verify text LLM methods were called
+        mock_text_llm.detect_category_only.assert_called_once()
+        mock_text_llm.generate_explanation_with_context.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_local_with_failed_patterns(self, flow_manager, mock_pattern_analyzer, mock_local_llm):
+    async def test_local_with_failed_patterns(self, flow_manager, mock_pattern_analyzer, mock_text_llm):
         """Test local flow when pattern detection returns general category."""
         # Mock pattern detection finding only general category
         mock_pattern_analyzer.analyze_content.return_value = AnalysisResult(
@@ -211,21 +233,22 @@ class TestAnalyzeLocal:
         result = await flow_manager.analyze_local(content)
         
         assert result.category == Categories.HATE_SPEECH  # From LLM mock
-        assert result.local_explanation == "Este contenido contiene discurso de odio xenófobo."
+        assert result.local_explanation == "Explicación para categoría detectada por patrones."
         assert result.stages.pattern is True
-        assert result.stages.local_llm is True
+        assert result.stages.category_detection is True
+        assert result.stages.explanation is True
         
         # Verify pattern data is returned
         assert 'pattern_matches' in result.pattern_data
         assert 'topic_classification' in result.pattern_data
         assert len(result.pattern_data['pattern_matches']) == 0
         
-        # Verify local LLM categorize_and_explain was called (not explain_only)
-        mock_local_llm.categorize_and_explain.assert_called_once_with(content, None)
-        mock_local_llm.explain_only.assert_not_called()
+        # Verify text LLM methods were called
+        mock_text_llm.detect_category_only.assert_called_once()
+        mock_text_llm.generate_explanation_with_context.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_local_with_no_categories(self, flow_manager, mock_pattern_analyzer, mock_local_llm):
+    async def test_local_with_no_categories(self, flow_manager, mock_pattern_analyzer, mock_text_llm):
         """Test local flow when pattern detection returns empty categories."""
         mock_pattern_analyzer.analyze_content.return_value = AnalysisResult(
             categories=[],
@@ -240,15 +263,15 @@ class TestAnalyzeLocal:
         result = await flow_manager.analyze_local(content)
         
         # Should use LLM for both category and explanation
-        mock_local_llm.categorize_and_explain.assert_called_once()
-        mock_local_llm.explain_only.assert_not_called()
+        mock_text_llm.detect_category_only.assert_called_once()
+        mock_text_llm.generate_explanation_with_context.assert_called_once()
         
         # Verify pattern data is returned
         assert 'pattern_matches' in result.pattern_data
         assert 'topic_classification' in result.pattern_data
     
     @pytest.mark.asyncio
-    async def test_local_with_multiple_pattern_categories(self, flow_manager, mock_pattern_analyzer, mock_local_llm):
+    async def test_local_with_multiple_pattern_categories(self, flow_manager, mock_pattern_analyzer, mock_text_llm):
         """Test local flow uses first non-general category from patterns."""
         mock_pattern_analyzer.analyze_content.return_value = AnalysisResult(
             categories=[Categories.DISINFORMATION, Categories.ANTI_GOVERNMENT],
@@ -267,8 +290,9 @@ class TestAnalyzeLocal:
         
         result = await flow_manager.analyze_local(content)
         
-        assert result.category == Categories.DISINFORMATION  # First category
-        mock_local_llm.explain_only.assert_called_once_with(content, Categories.DISINFORMATION, None)
+        assert result.category == Categories.HATE_SPEECH  # From LLM mock
+        mock_text_llm.detect_category_only.assert_called_once()
+        mock_text_llm.generate_explanation_with_context.assert_called_once()
         
         # Verify pattern data is returned
         assert 'pattern_matches' in result.pattern_data
@@ -310,7 +334,7 @@ class TestAnalyzeFull:
     
     @pytest.mark.asyncio
     async def test_full_triggers_external_for_hate_speech(
-        self, flow_manager, mock_pattern_analyzer, mock_local_llm, mock_external
+        self, flow_manager, mock_pattern_analyzer, mock_text_llm, mock_external
     ):
         """Test full flow triggers external for hate_speech category."""
         content = "Hate speech content"
@@ -321,7 +345,8 @@ class TestAnalyzeFull:
         assert result.local_explanation == "Explicación para categoría detectada por patrones."
         assert result.external_explanation == "Análisis externo detallado usando Gemini."
         assert result.stages.pattern is True
-        assert result.stages.local_llm is True
+        assert result.stages.category_detection is True
+        assert result.stages.explanation is True
         assert result.stages.external is True  # Should run external
         
         # Verify pattern data is returned
@@ -333,7 +358,7 @@ class TestAnalyzeFull:
     
     @pytest.mark.asyncio
     async def test_full_skips_external_for_general(
-        self, flow_manager, mock_pattern_analyzer, mock_local_llm, mock_external
+        self, flow_manager, mock_pattern_analyzer, mock_text_llm, mock_external
     ):
         """Test full flow skips external for general category."""
         # Mock pattern detection finding general category
@@ -344,10 +369,10 @@ class TestAnalyzeFull:
             political_context=[],
             keywords=[]
         )
-        mock_local_llm.categorize_and_explain.return_value = (
-            Categories.GENERAL,
-            "Contenido general sin patrones problemáticos."
-        )
+        
+        # Mock text LLM to also return GENERAL
+        mock_text_llm.detect_category_only.return_value = Categories.GENERAL
+        mock_text_llm.generate_explanation_with_context.return_value = "Contenido general sin patrones problemáticos."
         
         content = "Normal neutral content"
         
@@ -366,7 +391,7 @@ class TestAnalyzeFull:
     
     @pytest.mark.asyncio
     async def test_full_skips_external_for_political_general(
-        self, flow_manager, mock_pattern_analyzer, mock_local_llm, mock_external
+        self, flow_manager, mock_pattern_analyzer, mock_text_llm, mock_external
     ):
         """Test full flow skips external for political_general category."""
         mock_pattern_analyzer.analyze_content.return_value = AnalysisResult(
@@ -381,6 +406,10 @@ class TestAnalyzeFull:
             political_context=["general politics"],
             keywords=["política"]
         )
+        
+        # Mock text LLM to return POLITICAL_GENERAL
+        mock_text_llm.detect_category_only.return_value = Categories.POLITICAL_GENERAL
+        mock_text_llm.generate_explanation_with_context.return_value = "Contenido político general."
         
         content = "General political discussion"
         
@@ -398,7 +427,7 @@ class TestAnalyzeFull:
     
     @pytest.mark.asyncio
     async def test_full_admin_override_triggers_external(
-        self, flow_manager, mock_pattern_analyzer, mock_local_llm, mock_external
+        self, flow_manager, mock_pattern_analyzer, mock_text_llm, mock_external
     ):
         """Test admin override triggers external even for general category."""
         mock_pattern_analyzer.analyze_content.return_value = AnalysisResult(
@@ -408,10 +437,10 @@ class TestAnalyzeFull:
             political_context=[],
             keywords=[]
         )
-        mock_local_llm.categorize_and_explain.return_value = (
-            Categories.GENERAL,
-            "Contenido general."
-        )
+        
+        # Mock text LLM to return GENERAL
+        mock_text_llm.detect_category_only.return_value = Categories.GENERAL
+        mock_text_llm.generate_explanation_with_context.return_value = "Contenido general."
         
         content = "Content requiring admin review"
         
@@ -429,7 +458,7 @@ class TestAnalyzeFull:
     
     @pytest.mark.asyncio
     async def test_full_with_media_urls(
-        self, flow_manager, mock_pattern_analyzer, mock_local_llm, mock_external
+        self, flow_manager, mock_pattern_analyzer, mock_text_llm, mock_external
     ):
         """Test full flow passes media URLs to external analyzer."""
         content = "Content with images"
@@ -446,7 +475,7 @@ class TestAnalyzeFull:
     
     @pytest.mark.asyncio
     async def test_full_triggers_external_for_all_non_general_categories(
-        self, flow_manager, mock_pattern_analyzer, mock_local_llm, mock_external
+        self, flow_manager, mock_pattern_analyzer, mock_text_llm, mock_external
     ):
         """Test external analysis triggers for all problematic categories."""
         problematic_categories = [
@@ -488,7 +517,7 @@ class TestAnalyzeFull:
             
     @pytest.mark.asyncio
     async def test_full_external_overrides_category_any_category(
-        self, flow_manager, mock_pattern_analyzer, mock_local_llm, mock_external
+        self, flow_manager, mock_pattern_analyzer, mock_text_llm, mock_external
     ):
         """Test that external analysis can override category for any category, not just disinformation."""
         # Mock local analysis returns hate_speech
@@ -517,11 +546,13 @@ class TestAnalyzeFull:
     """Test verbose logging output."""
     
     @pytest.mark.asyncio
-    async def test_local_verbose_output(self, mock_pattern_analyzer, mock_local_llm, mock_external, capsys):
+    async def test_local_verbose_output(self, mock_pattern_analyzer, mock_text_llm, mock_vision_llm, mock_external, capsys):
         """Test verbose logging in local analysis."""
         with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-             patch('analyzer.flow_manager.OllamaAnalyzer', return_value=mock_local_llm), \
+             patch('analyzer.flow_manager.OllamaAnalyzer') as mock_ollama_class, \
              patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
+            
+            mock_ollama_class.side_effect = [mock_text_llm, mock_vision_llm]
             manager = AnalysisFlowManager(verbose=True)
             
             await manager.analyze_local("Test content")
@@ -532,11 +563,13 @@ class TestAnalyzeFull:
             assert "🤖 Stage 2:" in captured.out
     
     @pytest.mark.asyncio
-    async def test_external_verbose_output(self, mock_pattern_analyzer, mock_local_llm, mock_external, capsys):
+    async def test_external_verbose_output(self, mock_pattern_analyzer, mock_text_llm, mock_vision_llm, mock_external, capsys):
         """Test verbose logging in external analysis."""
         with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-             patch('analyzer.flow_manager.OllamaAnalyzer', return_value=mock_local_llm), \
+             patch('analyzer.flow_manager.OllamaAnalyzer') as mock_ollama_class, \
              patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
+            
+            mock_ollama_class.side_effect = [mock_text_llm, mock_vision_llm]
             manager = AnalysisFlowManager(verbose=True)
             
             await manager.analyze_external("Test content", media_urls=["https://example.com/image.jpg"])
@@ -547,12 +580,14 @@ class TestAnalyzeFull:
     
     @pytest.mark.asyncio
     async def test_full_verbose_output_with_external(
-        self, mock_pattern_analyzer, mock_local_llm, mock_external, capsys
+        self, mock_pattern_analyzer, mock_text_llm, mock_vision_llm, mock_external, capsys
     ):
         """Test verbose logging in full analysis with external."""
         with patch('analyzer.flow_manager.PatternAnalyzer', return_value=mock_pattern_analyzer), \
-             patch('analyzer.flow_manager.OllamaAnalyzer', return_value=mock_local_llm), \
+             patch('analyzer.flow_manager.OllamaAnalyzer') as mock_ollama_class, \
              patch('analyzer.flow_manager.ExternalAnalyzer', return_value=mock_external):
+            
+            mock_ollama_class.side_effect = [mock_text_llm, mock_vision_llm]
             manager = AnalysisFlowManager(verbose=True)
             
             await manager.analyze_full("Test content")
@@ -560,4 +595,4 @@ class TestAnalyzeFull:
             captured = capsys.readouterr()
             assert "🌐 External analysis triggered" in captured.out
             assert "✅ Analysis complete:" in captured.out
-            assert "Stages: pattern,local_llm,external" in captured.out
+            assert "Stages: pattern,category_detection,explanation,external" in captured.out

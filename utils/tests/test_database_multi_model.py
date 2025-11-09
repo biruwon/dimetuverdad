@@ -36,7 +36,10 @@ def test_db_connection():
     conn.execute('''
         CREATE TABLE IF NOT EXISTS content_analyses (
             post_id TEXT PRIMARY KEY,
+            author_username TEXT,
             category TEXT,
+            local_explanation TEXT,
+            analysis_timestamp TIMESTAMP,
             multi_model_analysis INTEGER DEFAULT 0,
             model_consensus_category TEXT
         )
@@ -260,7 +263,13 @@ class TestUpdateConsensusInContentAnalyses:
     """Test update_consensus_in_content_analyses function."""
     
     def test_update_consensus_success(self, test_db_connection):
-        """Test updating content_analyses with consensus."""
+        """Test successful consensus update."""
+        # Insert tweet first (required for username lookup)
+        test_db_connection.execute(
+            "INSERT INTO tweets (tweet_id, content, username, tweet_timestamp) VALUES (?, ?, ?, ?)",
+            ("123", "Test content", "testuser", "2024-01-01")
+        )
+        
         # Insert content analysis
         test_db_connection.execute(
             "INSERT INTO content_analyses (post_id, category) VALUES (?, ?)",
