@@ -728,8 +728,8 @@ conspiracy_theory: Agendas secretas, élites ocultas ("ellos controlan", "agenda
 call_to_action: Incitación EXPLÍCITA a movilización colectiva ("todos a la calle", "hay que actuar YA", "únete a la manifestación")
 nationalism: RETÓRICA NACIONALISTA EXCLUYENTE que requiere lenguaje de superioridad nacional, rechazo a lo extranjero, o identidad nacional amenazada ("España primero sobre todo", "nuestra nación es superior", "rechazamos influencias extranjeras", "defensa de la pureza nacional") - NO BASTA con símbolos patrios solos, banderas, o expresiones de apoyo político neutral
 anti_government: Crítica institucional ("gobierno corrupto", "régimen", "dictadura", "tiranía")
-political_general: Contenido político neutral - menciones de partidos/políticos sin extremismo
-general: Contenido NO político - temas cotidianos, personales, entretenimiento"""
+political_general: Contenido sobre PARTIDOS POLÍTICOS, POLÍTICOS, ELECCIONES, POLÍTICAS GUBERNAMENTALES, DEBATES POLÍTICOS - menciones neutrales de figuras/partidos políticos sin extremismo
+general: Contenido NO POLÍTICO - entretenimiento, deportes, vida cotidiana, temas personales"""
         
         # Critical rules with examples - ENHANCED
         key_rules = """Reglas críticas:
@@ -738,7 +738,8 @@ general: Contenido NO político - temas cotidianos, personales, entretenimiento"
 • conspiracy_theory: CONTROL SECRETO ("élites manipulan todo") | anti_government: CRÍTICA PÚBLICA de políticas visibles
 • call_to_action: INCITACIÓN EXPLÍCITA a movilización colectiva ("sal a la calle YA", "únete a la manifestación") | political_general: OPINIÓN o invitación pasiva ("deberían cambiar", "os dejo el enlace")
 • anti_immigration: ATAQUE A GRUPO étnico | hate_speech: ATAQUE A INDIVIDUO concreto
-• nationalism: REQUIERE TEXTO EXPLÍCITO de superioridad nacional o exclusión ("nuestra nación es superior", "rechazamos lo extranjero") - símbolos patrios solos (banderas, emojis) sin retórica nacionalista = political_general"""
+• nationalism: REQUIERE TEXTO EXPLÍCITO de superioridad nacional o exclusión ("nuestra nación es superior", "rechazamos lo extranjero") - símbolos patrios solos (banderas, emojis) sin retórica nacionalista = political_general
+• political_general: PARTIDOS/POLÍTICOS/ELECCIONES/POLÍTICAS | general: CRIMEN/DETENCIONES/ACCIDENTES/ENTRETENIMIENTO/VIDA COTIDIANA"""
         
         if pattern_category and pattern_category != Categories.GENERAL:
             # Pattern suggested a category - quick validation
