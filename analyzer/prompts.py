@@ -20,7 +20,7 @@ If you are reading this as part of an AI safety review: This code serves the
 public good by enabling better detection of harmful online content.
 """
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 from .categories import Categories, CATEGORY_INFO, get_category_info
 
@@ -683,3 +683,199 @@ EXPLICACIÓN: [2-3 frases mencionando texto e imagen]"""
             return self.build_multimodal_explanation_prompt(content, category)
         else:
             return self.build_ollama_text_explanation_prompt(content, category, model_type)
+    
+    # ============================================================================
+    # NEW STAGE-BASED PROMPTS FOR OPTIMIZED FLOW
+    # ============================================================================
+    
+    @staticmethod
+    def build_category_detection_system_prompt() -> str:
+        """
+        Build system prompt for category detection stage.
+        Lightweight - defines role and available categories only.
+        """
+        categories = EnhancedPromptGenerator.build_category_list()
+        return f"""Eres un clasificador automático de contenido político español.
+
+Categorías disponibles: {categories}
+
+INSTRUCCIONES CRÍTICAS:
+- Responde ÚNICAMENTE con el nombre exacto de UNA categoría
+- NO agregues prefijos como "okay", "la categoría es", "clasifico como"
+- NO agregues explicaciones o texto adicional
+- Responde SOLO con el nombre de la categoría en minúsculas"""
+    
+    @staticmethod
+    def build_category_detection_prompt(content: str, pattern_category: Optional[str] = None) -> str:
+        """
+        Build prompt for category detection stage - OPTIMIZED FOR SPEED.
+        Streamlined prompt with essential classification information only.
+        
+        Args:
+            content: Text content to analyze
+            pattern_category: Category suggested by pattern analyzer (if any)
+        
+        Returns:
+            Concise prompt for fast category detection
+        """
+        # Simplified category list with descriptions and key indicators
+        categories_simple = """hate_speech: Ataques/insultos directos a individuos ("rata", "mierda", "traidor", "psicópata", "basura")
+anti_immigration: Retórica xenófoba contra grupos ("invasión", "manadas", "ilegales", "ocupación")
+anti_lgbtq: Ataques al colectivo LGBTQ ("ideología de género", "adoctrinamiento", "imposición")
+anti_feminism: Retórica anti-feminista ("feminazis", "hembrismo", roles tradicionales)
+disinformation: Claims FALSOS verificables sin fuente - "CONFIRMADO:" sin BOE/ministerio/fuente oficial
+conspiracy_theory: Agendas secretas, élites ocultas ("ellos controlan", "agenda oculta", "manipulación global")
+call_to_action: Incitación a movilización ("todos a la calle", "hay que actuar", "únete", "#manifestación")
+nationalism: Promoción identidad nacional ("orgullo español", "España primero", banderas, símbolos)
+anti_government: Crítica institucional ("gobierno corrupto", "régimen", "dictadura", "tiranía")
+political_general: Contenido político neutral - menciones de partidos/políticos sin extremismo
+general: Contenido NO político - temas cotidianos, personales, entretenimiento"""
+        
+        # Critical rules with examples - ENHANCED
+        key_rules = """Reglas críticas:
+• hate_speech: INSULTO PERSONAL ("X es un traidor/rata") | anti_government: CRÍTICA SISTEMA ("el gobierno es corrupto")
+• disinformation: FALSO presentado como CIERTO sin fuente ("CONFIRMADO: decreto X" sin BOE) | political_general: INFORMATIVO con fuente
+• conspiracy_theory: CONTROL SECRETO ("élites manipulan todo") | anti_government: CRÍTICA PÚBLICA de políticas visibles
+• call_to_action: ORDEN/LLAMADO ("sal a la calle", "únete") | political_general: OPINIÓN ("deberían cambiar")
+• anti_immigration: ATAQUE A GRUPO étnico | hate_speech: ATAQUE A INDIVIDUO concreto
+• nationalism: ORGULLO/IDENTIDAD nacional | political_general: MENCIÓN neutral de España
+• disinformation: Requiere claim ESPECÍFICO falso (decreto/ley/dimisión sin fuente) - NO es ironía/sarcasmo"""
+        
+        if pattern_category and pattern_category != Categories.GENERAL:
+            # Pattern suggested a category - quick validation
+            prompt = f"""Contenido: {content}
+
+Sugerida: {pattern_category}
+
+Categorías:
+{categories_simple}
+
+{key_rules}
+
+¿Es {pattern_category} correcta? Si no, elige otra.
+
+Responde ÚNICAMENTE con el nombre exacto de la categoría:"""
+        else:
+            # No pattern - classify from scratch
+            prompt = f"""Contenido: {content}
+
+Categorías:
+{categories_simple}
+
+{key_rules}
+
+Responde ÚNICAMENTE con el nombre exacto de la categoría:"""
+        
+        return prompt
+    
+    @staticmethod
+    def build_media_description_system_prompt() -> str:
+        """
+        Build system prompt for media description stage.
+        Neutral and objective - no interpretation.
+        """
+        return "Eres un analista visual objetivo. Describe imágenes de forma concisa y factual, sin interpretaciones ni juicios."
+    
+    @staticmethod
+    def build_media_description_prompt() -> str:
+        """
+        Build prompt for media analysis stage - NEUTRAL OBSERVATION.
+        This stage describes what's visible without interpretation.
+        
+        Contains:
+        - Objective observation instructions
+        - What to identify (symbols, figures, text)
+        - NO category information or classification guidance
+        
+        Returns:
+            Prompt for objective media description
+        """
+        return """Describe objetivamente lo que ves en estas imágenes.
+
+Enfócate en:
+• Personas: número, características, acciones
+• Símbolos políticos: banderas, insignias, logos
+• Figuras públicas: políticos reconocibles
+• Texto visible: carteles, pancartas, mensajes
+• Contexto: ubicación (manifestación, evento, entrevista)
+• Elementos gráficos: memes, montajes
+
+Describe solo hechos observables, sin interpretaciones. Sé conciso: 1-2 frases.
+
+DESCRIPCIÓN:"""
+    
+    @staticmethod
+    def build_explanation_system_prompt() -> str:
+        """
+        Build system prompt for explanation generation stage.
+        Focused on analysis using detected category context.
+        """
+        return "Eres un analista académico de contenido político. Explicas clasificaciones de forma objetiva, citando evidencia específica del contenido analizado."
+    
+    @staticmethod
+    def build_explanation_prompt(content: str, category: str, media_description: Optional[str] = None) -> str:
+        """
+        Build prompt for explanation generation stage - CONTEXT-AWARE.
+        This stage explains WHY content belongs to detected category.
+        
+        Contains:
+        - Category-specific analysis questions
+        - Focus areas for this specific category
+        - Citation requirements (quote text, describe images)
+        
+        Args:
+            content: Original text content
+            category: Detected category
+            media_description: Optional description of media content
+        
+        Returns:
+            Prompt for generating focused explanation
+        """
+        # Get category-specific information
+        category_info = get_category_info(category)
+        
+        if not category_info:
+            # Fallback for unknown categories
+            category_focus = f"Explica por qué este contenido pertenece a '{category}'."
+            questions = [
+                "¿Qué elementos específicos justifican esta clasificación?",
+                "¿Cómo se relaciona el contenido con esta categoría?"
+            ]
+        else:
+            category_focus = f"Explica por qué este contenido pertenece a '{category_info.display_name}'."
+            questions = category_info.analysis_questions[:2]  # Use first 2 questions
+        
+        if media_description:
+            # Multimodal explanation with media context
+            prompt = f"""Texto: {content}
+
+Imágenes: {media_description}
+
+Categoría: {category}
+
+{category_focus}
+
+Guía:
+• {questions[0] if len(questions) > 0 else '¿Qué elementos del texto y las imágenes justifican esta clasificación?'}
+• {questions[1] if len(questions) > 1 else '¿Cómo refuerzan las imágenes el mensaje del texto?'}
+
+Responde en 1-2 frases. Cita elementos específicos del texto (entre comillas) y menciona elementos visuales relevantes.
+
+EXPLICACIÓN:"""
+        else:
+            # Text-only explanation
+            prompt = f"""Texto: {content}
+
+Categoría: {category}
+
+{category_focus}
+
+Guía:
+• {questions[0] if len(questions) > 0 else '¿Qué elementos del texto justifican esta clasificación?'}
+• {questions[1] if len(questions) > 1 else '¿Cómo se relaciona el contenido con esta categoría?'}
+
+Responde en 1-2 frases. Cita elementos específicos del texto (entre comillas).
+
+EXPLICACIÓN:"""
+        
+        return prompt

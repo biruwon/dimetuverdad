@@ -5,7 +5,8 @@ Handles media preparation, response parsing, and analysis workflows.
 
 import base64
 import re
-import requests
+import httpx
+import asyncio
 from typing import Tuple, Optional, List
 from .ollama_client import OllamaClient, OllamaRetryError
 from .categories import Categories
@@ -19,18 +20,23 @@ class OllamaAnalyzer:
     
     # Default generation parameters
     DEFAULT_TEMPERATURE_TEXT = 0.1 # Lower for faster convergence
-    DEFAULT_MAX_TOKENS = 60 # Reduced for speed (categorization doesn't need long responses)
     DEFAULT_TEMPERATURE_MULTIMODAL = 0.1
     DEFAULT_TOP_P = 0.8 # Slightly more focused for speed
-    DEFAULT_NUM_PREDICT_MULTIMODAL = 60 # Reduced for speed
     DEFAULT_KEEP_ALIVE = "72h"
     DEFAULT_NUM_CTX = 8192  # Limit context window to prevent unbounded growth
     #DETAULT_SEED = 42 # just a fixed number to force determinist responses
-    
+    # Token limits by response type
+    CATEGORY_TOKENS = 30      # Just a category word
+    MEDIA_TOKENS = 100  # Short media description
+    EXPLANATION_TOKENS = 120  # 1-2 sentence explanation    
     # Media handling settings
     DEFAULT_MEDIA_TIMEOUT = 5.0
     DEFAULT_MAX_MEDIA_SIZE = 10 * 1024 * 1024  # 10MB
     MAX_MEDIA_ITEMS = 3  # Process up to 3 media files
+    # LLM operation timeouts
+    CATEGORY_TIMEOUT = 60.0  # Fast category detection
+    MEDIA_TIMEOUT = 120.0    # Media description (Gemma3 vision)
+    EXPLANATION_TIMEOUT = 120.0  # Explanation generation
     
     def __init__(self, model: str = "gemma3:27b-it-q4_K_M", verbose: bool = False, fast_mode: bool = False):
         """
@@ -72,11 +78,171 @@ class OllamaAnalyzer:
         """Get simplified explanation prompt for fast mode."""
         return self.prompt_generator.build_fast_explanation_prompt(content, category)
     
+    async def detect_category_only(
+        self, 
+        content: str, 
+        pattern_category: Optional[str] = None
+    ) -> str:
+        """
+        Detect or validate category from text content only.
+        This is a focused operation that ONLY returns category name, no explanation.
+        
+        Args:
+            content: Text content to analyze
+            pattern_category: Category suggested by pattern analyzer (if any)
+        
+        Returns:
+            Category name string
+        
+        Raises:
+            RuntimeError: If category detection fails
+        """
+        if self.verbose:
+            print(f"🔍 Detecting category (pattern hint: {pattern_category or 'None'})")
+        
+        # Build prompts using centralized prompt generator
+        prompt = self.prompt_generator.build_category_detection_prompt(content, pattern_category)
+        system_prompt = self.prompt_generator.build_category_detection_system_prompt()
+        
+        # Use minimal tokens for category detection (just need category name)
+        response = await self.client.generate_text(
+            prompt=prompt,
+            model=self.model,
+            system_prompt=system_prompt,
+            options={
+                "temperature": self.DEFAULT_TEMPERATURE_TEXT,
+                "num_predict": self.CATEGORY_TOKENS,  # Just a category word
+                "top_p": self.DEFAULT_TOP_P
+            },
+            timeout=self.CATEGORY_TIMEOUT
+        )
+        
+        # Extract and validate category
+        detected_category = response.strip().lower()
+        
+        # Validate it's a real category
+        all_categories = [c.lower() for c in Categories.get_all_categories()]
+        
+        if detected_category in all_categories:
+            # Find the properly cased version
+            for cat in Categories.get_all_categories():
+                if cat.lower() == detected_category:
+                    if self.verbose:
+                        print(f"✅ Detected category: {cat}")
+                    return cat
+        
+        # Invalid category - this should not happen with proper prompting
+        raise RuntimeError(f"LLM returned invalid category: '{response.strip()}'. Expected one of: {', '.join(Categories.get_all_categories())}")
+    
+    async def describe_media(
+        self,
+        media_urls: List[str]
+    ) -> str:
+        """
+        Generate objective description of media content using vision model.
+        
+        Args:
+            media_urls: List of media URLs to analyze
+        
+        Returns:
+            Description of media content (2-3 sentences)
+        
+        Raises:
+            RuntimeError: If media description fails
+        """
+        if self.verbose:
+            print(f"🖼️  Describing {len(media_urls)} media items")
+        
+        # Prepare media content
+        media_content = await self._prepare_media_content(media_urls)
+        if not media_content:
+            raise RuntimeError("No valid media content found")
+        
+        # Build prompts using centralized prompt generator
+        prompt = self.prompt_generator.build_media_description_prompt()
+        system_prompt = self.prompt_generator.build_media_description_system_prompt()
+        
+        # Extract base64 images
+        images = [media["image_url"]["url"] for media in media_content 
+                 if media.get("type") == "image_url" and media.get("image_url", {}).get("url")]
+        
+        if not images:
+            raise RuntimeError("No valid images found in media content")
+        
+        # Use vision model for description
+        response = await self.client.generate_multimodal(
+            prompt=prompt,
+            images=images,
+            model=self.model,
+            system_prompt=system_prompt,
+            options={
+                "temperature": self.DEFAULT_TEMPERATURE_TEXT,
+                "num_predict": self.MEDIA_TOKENS,  # Short media description
+                "top_p": self.DEFAULT_TOP_P
+            },
+            timeout=self.MEDIA_TIMEOUT
+        )
+        
+        description = response.strip()
+        
+        if self.verbose:
+            print(f"✅ Media description: {description[:100]}...")
+        
+        return description
+    
+    async def generate_explanation_with_context(
+        self,
+        content: str,
+        category: str,
+        media_description: Optional[str] = None
+    ) -> str:
+        """
+        Generate explanation for detected category with full context.
+        
+        Args:
+            content: Original text content
+            category: Detected category
+            media_description: Optional description of media content
+        
+        Returns:
+            Explanation in Spanish (2-3 sentences)
+        
+        Raises:
+            RuntimeError: If explanation generation fails
+        """
+        if self.verbose:
+            print(f"💭 Generating explanation for category: {category}")
+            if media_description:
+                print(f"   With media context: {media_description[:50]}...")
+        
+        # Build prompts using centralized prompt generator
+        prompt = self.prompt_generator.build_explanation_prompt(content, category, media_description)
+        system_prompt = self.prompt_generator.build_explanation_system_prompt()
+        
+        # Generate explanation
+        response = await self.client.generate_text(
+            prompt=prompt,
+            model=self.model,
+            system_prompt=system_prompt,
+            options={
+                "temperature": self.DEFAULT_TEMPERATURE_TEXT,
+                "num_predict": self.EXPLANATION_TOKENS,  # 1-2 sentence explanation
+                "top_p": self.DEFAULT_TOP_P
+            },
+            timeout=self.EXPLANATION_TIMEOUT
+        )
+        
+        explanation = response.strip()
+        
+        if self.verbose:
+            print(f"✅ Explanation: {explanation[:100]}...")
+        
+        return explanation
+    
     async def categorize_and_explain(
         self,
         content: str,
-        media_urls: Optional[List[str]] = None,
-        timeout: Optional[float] = None
+        media_urls: Optional[List[str]] = None
     ) -> Tuple[str, str]:
         """
         Analyze content and return both category and explanation.
@@ -85,7 +251,6 @@ class OllamaAnalyzer:
         Args:
             content: Text content to analyze
             media_urls: Optional list of media URLs (images)
-            timeout: Optional timeout in seconds for LLM calls
         
         Returns:
             Tuple of (category, explanation)
@@ -138,9 +303,9 @@ class OllamaAnalyzer:
             # Phase 3: Generate LLM response
             llm_start = time.time()
             if media_urls and media_content:
-                response = await self._generate_multimodal(prompt, media_content, system_prompt, timeout)
+                response = await self._generate_multimodal(prompt, media_content, system_prompt)
             else:
-                response = await self._generate_text(prompt, system_prompt, timeout)
+                response = await self._generate_text(prompt, system_prompt)
             llm_time = time.time() - llm_start
             
             # Phase 4: Parse response
@@ -172,8 +337,7 @@ class OllamaAnalyzer:
         self,
         content: str,
         category: str,
-        media_urls: Optional[List[str]] = None,
-        timeout: Optional[float] = None
+        media_urls: Optional[List[str]] = None
     ) -> str:
         """
         Generate explanation for already-known category.
@@ -182,7 +346,6 @@ class OllamaAnalyzer:
             content: Content to explain
             category: Already-detected category
             media_urls: Optional list of media URLs
-            timeout: Optional timeout in seconds for LLM calls
         
         Returns:
             Explanation (Spanish, 2-3 sentences)
@@ -232,9 +395,9 @@ class OllamaAnalyzer:
             # Phase 3: Generate LLM response
             llm_start = time.time()
             if media_urls and media_content:
-                response = await self._generate_multimodal(prompt, media_content, system_prompt, timeout)
+                response = await self._generate_multimodal(prompt, media_content, system_prompt)
             else:
-                response = await self._generate_text(prompt, system_prompt, timeout)
+                response = await self._generate_text(prompt, system_prompt)
             llm_time = time.time() - llm_start
             
             # Phase 4: Parse response
@@ -268,7 +431,7 @@ class OllamaAnalyzer:
                 print(f"❌ Explanation generation failed after {total_time:.3f}s: {type(e).__name__}: {str(e)}")
             raise RuntimeError(f"Explanation generation failed: {str(e)}") from e
     
-    async def _generate_text(self, prompt: str, system_prompt: str, timeout: Optional[float] = None) -> str:
+    async def _generate_text(self, prompt: str, system_prompt: str) -> str:
         """Generate text-only response."""
         import time
         start_time = time.time()
@@ -283,12 +446,12 @@ class OllamaAnalyzer:
                 system_prompt=system_prompt,
                 options={
                     "temperature": self.DEFAULT_TEMPERATURE_TEXT,
-                    "num_predict": self.DEFAULT_MAX_TOKENS,
+                    "num_predict": self.EXPLANATION_TOKENS,  # For explanation responses
                     "top_p": self.DEFAULT_TOP_P,
                     "num_ctx": self.DEFAULT_NUM_CTX  # Limit context window
                 },
                 keep_alive=self.DEFAULT_KEEP_ALIVE,
-                timeout=timeout
+                timeout=self.EXPLANATION_TIMEOUT
             )
             
             duration = time.time() - start_time
@@ -306,8 +469,7 @@ class OllamaAnalyzer:
         self,
         prompt: str,
         media_content: List[dict],
-        system_prompt: str,
-        timeout: Optional[float] = None
+        system_prompt: str
     ) -> str:
         """Generate multimodal response with images."""
         try:
@@ -325,12 +487,12 @@ class OllamaAnalyzer:
                 system_prompt=system_prompt,
                 options={
                     "temperature": self.DEFAULT_TEMPERATURE_TEXT,
-                    "num_predict": self.DEFAULT_MAX_TOKENS,
+                    "num_predict": self.EXPLANATION_TOKENS,  # For explanation responses
                     "top_p": self.DEFAULT_TOP_P,
                     "num_ctx": self.DEFAULT_NUM_CTX  # Limit context window
                 },
                 keep_alive=self.DEFAULT_KEEP_ALIVE,
-                timeout=timeout
+                timeout=self.EXPLANATION_TIMEOUT
             )
         except OllamaRetryError as e:
             raise RuntimeError(f"Multimodal generation failed: {str(e)}") from e
@@ -384,19 +546,20 @@ class OllamaAnalyzer:
                 if self.verbose:
                     print(f"📥 Downloading image: {url}")
                 
-                # Download with timeout
-                response = requests.get(url, timeout=self.DEFAULT_MEDIA_TIMEOUT, stream=True)
-                response.raise_for_status()
-                
-                # Check file size
-                content_length = response.headers.get('content-length')
-                if content_length and int(content_length) > self.DEFAULT_MAX_MEDIA_SIZE:
-                    if self.verbose:
-                        print(f"⚠️  Skipping large file ({content_length} bytes)")
-                    continue
-                
-                # Convert to base64
-                image_data = base64.b64encode(response.content).decode('utf-8')
+                # Download with timeout using async httpx
+                async with httpx.AsyncClient(timeout=self.DEFAULT_MEDIA_TIMEOUT) as client:
+                    response = await client.get(url, follow_redirects=True)
+                    response.raise_for_status()
+                    
+                    # Check file size
+                    content_length = response.headers.get('content-length')
+                    if content_length and int(content_length) > self.DEFAULT_MAX_MEDIA_SIZE:
+                        if self.verbose:
+                            print(f"⚠️  Skipping large file ({content_length} bytes)")
+                        continue
+                    
+                    # Convert to base64
+                    image_data = base64.b64encode(response.content).decode('utf-8')
                 
                 media_content.append({
                     "type": "image_url",
@@ -406,11 +569,11 @@ class OllamaAnalyzer:
                 if self.verbose:
                     print(f"✅ Downloaded {len(response.content)} bytes")
                 
-            except requests.exceptions.Timeout:
+            except asyncio.TimeoutError:
                 if self.verbose:
                     print(f"⏰ Timeout downloading {url}")
                 continue
-            except requests.exceptions.RequestException as e:
+            except httpx.HTTPError as e:
                 if self.verbose:
                     print(f"⚠️  Failed to download {url}: {e}")
                 continue
@@ -498,8 +661,8 @@ class OllamaAnalyzer:
         # Extract explanation
         explanation = explanation_match.group(1).strip() if explanation_match else response.strip()
         
-        # Validate explanation
-        if not explanation or len(explanation.strip()) < 10:
-            explanation = f"Contenido clasificado como {category}."
+        # Clean up any format prefixes that the LLM might have added
+        explanation = re.sub(r'^CATEGORÍA:\s*[^\n]*\n?', '', explanation, flags=re.IGNORECASE | re.MULTILINE)
+        explanation = re.sub(r'^EXPLICACIÓN:\s*', '', explanation, flags=re.IGNORECASE | re.MULTILINE)
         
         return category, explanation
