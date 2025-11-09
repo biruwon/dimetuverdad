@@ -371,7 +371,7 @@ class ContentAnalysisRepository:
                     'username': tweet['username'],
                     'content': tweet['content'],
                     'media_links': tweet.get('media_links') or '',
-                    'original_content': getattr(tweet, 'original_content', '') or ''
+                    'original_content': tweet.get('original_content', '')
                 }
             return None
             
