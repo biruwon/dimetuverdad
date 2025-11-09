@@ -24,7 +24,7 @@ class OllamaAnalyzer:
     DEFAULT_TOP_P = 0.8 # Slightly more focused for speed
     DEFAULT_KEEP_ALIVE = "72h"
     DEFAULT_NUM_CTX = 8192  # Limit context window to prevent unbounded growth
-    #DETAULT_SEED = 42 # just a fixed number to force determinist responses
+    DEFAULT_SEED = 42 # Fixed seed for deterministic responses
     # Token limits by response type
     CATEGORY_TOKENS = 30      # Just a category word
     MEDIA_TOKENS = 100  # Short media description
@@ -112,7 +112,8 @@ class OllamaAnalyzer:
             options={
                 "temperature": self.DEFAULT_TEMPERATURE_TEXT,
                 "num_predict": self.CATEGORY_TOKENS,  # Just a category word
-                "top_p": self.DEFAULT_TOP_P
+                "top_p": self.DEFAULT_TOP_P,
+                "seed": self.DEFAULT_SEED  # Deterministic responses
             },
             timeout=self.CATEGORY_TIMEOUT
         )
@@ -189,7 +190,8 @@ class OllamaAnalyzer:
             options={
                 "temperature": self.DEFAULT_TEMPERATURE_TEXT,
                 "num_predict": self.MEDIA_TOKENS,  # Short media description
-                "top_p": self.DEFAULT_TOP_P
+                "top_p": self.DEFAULT_TOP_P,
+                "seed": self.DEFAULT_SEED  # Deterministic responses
             },
             timeout=self.MEDIA_TIMEOUT
         )
@@ -238,7 +240,8 @@ class OllamaAnalyzer:
             options={
                 "temperature": self.DEFAULT_TEMPERATURE_TEXT,
                 "num_predict": self.EXPLANATION_TOKENS,  # 1-2 sentence explanation
-                "top_p": self.DEFAULT_TOP_P
+                "top_p": self.DEFAULT_TOP_P,
+                "seed": self.DEFAULT_SEED  # Deterministic responses
             },
             timeout=self.EXPLANATION_TIMEOUT
         )
@@ -459,7 +462,8 @@ class OllamaAnalyzer:
                     "temperature": self.DEFAULT_TEMPERATURE_TEXT,
                     "num_predict": self.EXPLANATION_TOKENS,  # For explanation responses
                     "top_p": self.DEFAULT_TOP_P,
-                    "num_ctx": self.DEFAULT_NUM_CTX  # Limit context window
+                    "num_ctx": self.DEFAULT_NUM_CTX,  # Limit context window
+                    "seed": self.DEFAULT_SEED  # Deterministic responses
                 },
                 keep_alive=self.DEFAULT_KEEP_ALIVE,
                 timeout=self.EXPLANATION_TIMEOUT
@@ -500,7 +504,8 @@ class OllamaAnalyzer:
                     "temperature": self.DEFAULT_TEMPERATURE_TEXT,
                     "num_predict": self.EXPLANATION_TOKENS,  # For explanation responses
                     "top_p": self.DEFAULT_TOP_P,
-                    "num_ctx": self.DEFAULT_NUM_CTX  # Limit context window
+                    "num_ctx": self.DEFAULT_NUM_CTX,  # Limit context window
+                    "seed": self.DEFAULT_SEED  # Deterministic responses
                 },
                 keep_alive=self.DEFAULT_KEEP_ALIVE,
                 timeout=self.EXPLANATION_TIMEOUT

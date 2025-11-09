@@ -540,9 +540,10 @@ Clasifica este texto en UNA categoría: {categories}
             "- Responde SOLO con texto plano en español, sin markdown ni formato especial",
             "- NO uses negritas (**), títulos (##), listas numeradas, tablas, o símbolos",
             "- Escribe 2-3 oraciones claras explicando por qué pertenece a esta categoría",
-            "- Cita elementos específicos del texto que justifican la clasificación",
-            "- NO menciones por qué NO pertenece a otras categorías",
-            "- Enfócate ÚNICAMENTE en explicar por qué SÍ pertenece a la categoría detectada",
+            "- Cita elementos específicos del texto (entre comillas)",
+            "- NO incluyas prefijos como 'EXPLICACIÓN:' o 'CATEGORÍA:' en tu respuesta",
+            "- Comienza directamente con la explicación",
+            "",
             "EXPLICACIÓN:"
         ]
 
@@ -631,6 +632,8 @@ INSTRUCCIONES DE FORMATO:
 - Cita elementos específicos del TEXTO Y de las IMÁGENES que justifican la clasificación
 - Menciona cómo el contenido visual y textual se relacionan para crear la narrativa
 - NO menciones por qué NO pertenece a otras categorías
+- NO incluyas prefijos como 'EXPLICACIÓN:' o 'CATEGORÍA:' en tu respuesta
+- Comienza directamente con la explicación
 - Enfócate ÚNICAMENTE en explicar por qué SÍ pertenece a la categoría detectada
 
 EXPLICACIÓN:"""
@@ -860,9 +863,7 @@ Guía:
 • {questions[0] if len(questions) > 0 else '¿Qué elementos del texto y las imágenes justifican esta clasificación?'}
 • {questions[1] if len(questions) > 1 else '¿Cómo refuerzan las imágenes el mensaje del texto?'}
 
-Responde en 1-2 frases. Cita elementos específicos del texto (entre comillas) y menciona elementos visuales relevantes.
-
-EXPLICACIÓN:"""
+Responde en 1-2 frases. Cita elementos específicos del texto (entre comillas) y menciona elementos visuales relevantes."""
         else:
             # Text-only explanation
             prompt = f"""Texto: {content}
@@ -875,8 +876,6 @@ Guía:
 • {questions[0] if len(questions) > 0 else '¿Qué elementos del texto justifican esta clasificación?'}
 • {questions[1] if len(questions) > 1 else '¿Cómo se relaciona el contenido con esta categoría?'}
 
-Responde en 1-2 frases. Cita elementos específicos del texto (entre comillas).
-
-EXPLICACIÓN:"""
+Responde en 1-2 frases. Cita elementos específicos del texto (entre comillas)."""
         
         return prompt
