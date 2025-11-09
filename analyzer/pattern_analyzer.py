@@ -350,10 +350,23 @@ class PatternAnalyzer:
                     # Only match "gobierno" when it's clearly institutional/formal
                     re.compile(r'\b(?:gobierno\s+(?:de\s+)?(?:españa|nacional|central|autonómico))\b', re.IGNORECASE),
                     re.compile(r'\b(?:política\s+(?:exterior|interior|económica|social))\b', re.IGNORECASE),
+                    # PALESTINIAN SOLIDARITY AND HUMANITARIAN ISSUES - Critical for avoiding misclassification
+                    re.compile(r'\b(?:palestina|gaza|cisjordania|territorios\s+ocupados?|bloqueo\s+de\s+gaza)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:flotilla\s+(?:de\s+las?\s+)?(?:libertad|solidaridad|humanitaria|tentaciones)|freedom\s+flotilla)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:ayuda\s+humanitaria|bloqueo\s+humanitario|genocidio\s+en\s+gaza)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:apartheid\s+israelí|crímenes\s+de\s+guerra|ocupación\s+ilegal)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:derechos\s+humanos\s+en\s+palestina|solidaridad\s+con\s+palestina)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:boicot\s+a\s+israel| BDS |movimiento\s+BDS )\b', re.IGNORECASE),
+                    re.compile(r'\b(?:libertad\s+para\s+palestina|palestina\s+libre|free\s+palestine)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:intifada|resistencia\s+palestina|defensa\s+de\s+gaza)\b', re.IGNORECASE),
+                    # INTERNATIONAL SOLIDARITY AND HUMAN RIGHTS
+                    re.compile(r'\b(?:solidaridad\s+internacional|ayuda\s+humanitaria\s+internacional)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:derechos\s+humanos\s+internacionales?|convención\s+de\s+ginebra)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:crímenes\s+de\s+guerra|genocidio|corte\s+penal\s+internacional)\b', re.IGNORECASE),
                     # Remove overly broad single word patterns that catch everything
                 ],
-                'keywords': ['política', 'gobierno', 'democracia', 'elecciones'],
-                'description': 'General political content without extremist elements'
+                'keywords': ['política', 'gobierno', 'democracia', 'elecciones', 'palestina', 'gaza', 'solidaridad', 'humanitaria', 'derechos humanos'],
+                'description': 'General political content including international solidarity and humanitarian issues'
             }
         }
     
