@@ -254,9 +254,10 @@ class PatternAnalyzer:
                     # Subtle calls to action
                     re.compile(r'\b(?:hagan\s+algo|hay\s+que\s+hacer\s+algo)\b', re.IGNORECASE),
                     re.compile(r'\b(?:no\s+(?:podemos|podéis)\s+quedarnos?\s+(?:de\s+)?brazos\s+cruzados)\b', re.IGNORECASE),
-                    # Additional patterns from former secondary
+                    # Additional patterns from former secondary - more specific for mobilization
                     re.compile(r'\b(?:activismo|militancia|compromiso)\b', re.IGNORECASE),
-                    re.compile(r'\b(?:organización|coordinación|planificación)\b', re.IGNORECASE),
+                    # Only match "organización" when it's clearly about mobilizing people, not criminal organizations
+                    re.compile(r'\b(?:organización|coordinación|planificación)\s+(?:de\s+)?(?:protesta|manifestación|movilización|acción|resistencia)\b', re.IGNORECASE),
                 ],
                 'keywords': ['movilización', 'protesta', 'manifestación', 'boicot'],
                 'description': 'Calls to action and mobilization'

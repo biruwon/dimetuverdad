@@ -719,7 +719,8 @@ INSTRUCCIONES CRÍTICAS:
             Concise prompt for fast category detection
         """
         # Simplified category list with descriptions and key indicators
-        categories_simple = """hate_speech: Ataques/insultos directos a individuos ("rata", "mierda", "traidor", "psicópata", "basura")
+        categories_simple = """
+hate_speech: SOLO Y ÚNICAMENTE cuando contiene INSULTOS EXPLÍCITOS GRAVES como "rata", "mierda", "traidor", "psicópata", "basura", "escoria", "parásito", "animal", "monstruo" dirigidos directamente a individuos específicos - NUNCA para interpretaciones subjetivas, sarcasmo, expresiones culturales, amenazas veladas, o contenido sin insultos explícitos
 anti_immigration: Retórica xenófoba contra grupos ("invasión", "manadas", "ilegales", "ocupación")
 anti_lgbtq: Ataques al colectivo LGBTQ ("ideología de género", "adoctrinamiento", "imposición")
 anti_feminism: Retórica anti-feminista ("feminazis", "hembrismo", roles tradicionales)
@@ -728,8 +729,8 @@ conspiracy_theory: Agendas secretas, élites ocultas ("ellos controlan", "agenda
 call_to_action: Incitación EXPLÍCITA a movilización colectiva ("todos a la calle", "hay que actuar YA", "únete a la manifestación")
 nationalism: RETÓRICA NACIONALISTA EXCLUYENTE que requiere lenguaje de superioridad nacional, rechazo a lo extranjero, o identidad nacional amenazada ("España primero sobre todo", "nuestra nación es superior", "rechazamos influencias extranjeras", "defensa de la pureza nacional") - NO BASTA con símbolos patrios solos, banderas, o expresiones de apoyo político neutral
 anti_government: Crítica institucional ("gobierno corrupto", "régimen", "dictadura", "tiranía")
-political_general: Contenido sobre PARTIDOS POLÍTICOS, POLÍTICOS, ELECCIONES, POLÍTICAS GUBERNAMENTALES, DEBATES POLÍTICOS - menciones neutrales de figuras/partidos políticos sin extremismo
-general: Contenido NO POLÍTICO - entretenimiento, deportes, vida cotidiana, temas personales"""
+political_general: Contenido sobre ELECCIONES, PARTIDOS POLÍTICOS, CANDIDATOS, CAMPAÑAS ELECTORALES, DEBATES POLÍTICOS o POLÍTICAS PÚBLICAS - menciones neutrales de procesos democráticos sin extremismo
+general: Contenido NO POLÍTICO o temas cotidianos no relacionados con política, ideología, o asuntos sociales controvertidos"""
         
         # Critical rules with examples - ENHANCED
         key_rules = """Reglas críticas:
@@ -739,7 +740,7 @@ general: Contenido NO POLÍTICO - entretenimiento, deportes, vida cotidiana, tem
 • call_to_action: INCITACIÓN EXPLÍCITA a movilización colectiva ("sal a la calle YA", "únete a la manifestación") | political_general: OPINIÓN o invitación pasiva ("deberían cambiar", "os dejo el enlace")
 • anti_immigration: ATAQUE A GRUPO étnico | hate_speech: ATAQUE A INDIVIDUO concreto
 • nationalism: REQUIERE TEXTO EXPLÍCITO de superioridad nacional o exclusión ("nuestra nación es superior", "rechazamos lo extranjero") - símbolos patrios solos (banderas, emojis) sin retórica nacionalista = political_general
-• political_general: PARTIDOS/POLÍTICOS/ELECCIONES/POLÍTICAS | general: CRIMEN/DETENCIONES/ACCIDENTES/ENTRETENIMIENTO/VIDA COTIDIANA"""
+• political_general: PROCESOS ELECTORALES Y DEMOCRÁTICOS ("elecciones", "partidos", "candidatos", "campañas") | general: ACTIVIDADES OPERATIVAS GUBERNAMENTALES ("policía detiene", "justicia investiga", "administración funciona") SIN CONTEXTO POLÍTICO"""
         
         if pattern_category and pattern_category != Categories.GENERAL:
             # Pattern suggested a category - quick validation
