@@ -792,6 +792,7 @@ Responde ÚNICAMENTE con el nombre exacto de la categoría:"""
         Contains:
         - Objective observation instructions
         - What to identify (symbols, figures, text)
+        - WHO is creating/showing content (critical for attribution)
         - NO category information or classification guidance
         
         Returns:
@@ -800,14 +801,13 @@ Responde ÚNICAMENTE con el nombre exacto de la categoría:"""
         return """Describe objetivamente lo que ves en estas imágenes.
 
 Enfócate en:
-• Personas: número, características, acciones
+• Texto visible en pancartas/carteles: cita el mensaje Y especifica si ataca/menciona al autor del post
+• Personas y acciones: manifestantes, políticos, eventos
 • Símbolos políticos: banderas, insignias, logos
-• Figuras públicas: políticos reconocibles
-• Texto visible: carteles, pancartas, mensajes
-• Contexto: ubicación (manifestación, evento, entrevista)
-• Elementos gráficos: memes, montajes
+• Contexto: manifestación, evento, entrevista
 
-Describe solo hechos observables, sin interpretaciones. Sé conciso: 1-2 frases.
+
+Sé conciso: 2-3 frases.
 
 DESCRIPCIÓN:"""
     

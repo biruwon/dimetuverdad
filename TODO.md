@@ -2,20 +2,14 @@
 
 ## 🚀 High Priority
 
-Números con gemma3:4b y sin gemini:
-- Con 0.02 analisis/s
-- ~6.5 hours para 552 posts
-
-
 Top priority:
 
 - disinformation to display links or how it was verified
 - [M] Improve LLM explanation
-- Local multi modal do not process videos, have to implement the frame parsing
+- Local multi modal processing videos
 - Posts with links, to use retrieval to fetch their info
 - [M] Disinformation/political retrieval to get up to date data/checks
 - What categories do we need?
-- deteled posts should be shown, example post id 1962875705101869390
 - [L] **Additional platforms**: Extend beyond Twitter/X to Telegram, Facebook, Instagram. We need to use post_id instead of tweet_id
 - [L] **Newspaper integration**: Monitor news sources
 - [M] **Historical data import**: Import older tweets for trend analysis
@@ -30,6 +24,10 @@ Top priority:
 - Post deletion: Mostrar una sección de post eliminados, darle más visibilidad, que muestre el media o "hacer screenshoot", ex:  1962875705101869390
 - Improve styles and split css/js/html
 - Get ready to deploy to production and deploy it
+
+Fixes:
+- Post with sensitive data, not displayed because we can't verify age on web. Ex: 1976237480170213419
+- Post 1983640141207105603 it's a response but it seems we get content from original post
 
 Random ideas:
 
