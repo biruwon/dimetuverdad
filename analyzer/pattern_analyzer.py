@@ -92,9 +92,17 @@ class PatternAnalyzer:
                     re.compile(r'\b(?:armas?|armado|armamento)\b', re.IGNORECASE),
                     re.compile(r'\b(?:justicia|venganza)\s+(?:por\s+(?:su\s+)?propia\s+mano|popular)\b', re.IGNORECASE),
                     re.compile(r'\b(?:linchamiento|linchamient[oa])\b', re.IGNORECASE),
+                    # Sexual harassment and objectification patterns
+                    re.compile(r'\babr[óo]chate\s+las?\s+rodilleras?\b', re.IGNORECASE),
+                    re.compile(r'\b(?:chúpame|mamame|métete)\s+(?:la|el)\s+(?:polla|verga|pito|cipote)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:ven\s+aquí|acércate)\s+(?:que\s+te\s+)?(?:follo|cojo|tíro|cogo)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:eres\s+)?(?:una\s+)?(?:puta|zorra|guarra|perra)\s+(?:caliente|folable|cachonda)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:me\s+)?(?:gustar[íi]a|encantar[íi]a)\s+(?:follar|tirar|coger)\s+(?:contigo|con\s+ella|con\s+vos)\b', re.IGNORECASE),
+                    re.compile(r'\b(?:tienes?\s+)?(?:un\s+)?(?:culo|tetitas|pechugas|tetas)\s+(?:que\s+)?(?:está\s+)?(?:para\s+)?(?:follar|chupar|lamer)\b', re.IGNORECASE),
+                    re.compile(r'@\w+\s+.*\b(?:abróchate|rodilleras?|polla|follar|coger|tirar)\b', re.IGNORECASE),
                 ],
-                'keywords': ['odio', 'racismo', 'discriminación', 'xenofobia', 'violencia', 'amenaza'],
-                'description': 'Hate speech, xenophobia, and violent threats targeting specific groups'
+                'keywords': ['odio', 'racismo', 'discriminación', 'xenofobia', 'violencia', 'amenaza', 'acoso', 'sexual', 'objeticación', 'innuendo'],
+                'description': 'Hate speech, xenophobia, violent threats, and sexual harassment targeting specific groups or individuals'
             },
             
             Categories.DISINFORMATION: {
