@@ -63,6 +63,8 @@ class ConfigDefaults:
     DATABASE_TIMEOUT: Final[float] = 30.0
     DOWNLOAD_TIMEOUT: Final[float] = 120.0
     REQUEST_TIMEOUT: Final[float] = 30.0
+    VERIFICATION_TIMEOUT: Final[float] = 120.0  # Overall verification timeout
+    CONTEXT_RESET_TIMEOUT: Final[float] = 30.0  # Model context reset timeout
     MAX_CONCURRENCY: Final[int] = 1  # Sequential processing to avoid context accumulation in single model
     MAX_LLM_CONCURRENCY: Final[int] = 1  # Must be 1 for single-model setups to prevent context pollution
 

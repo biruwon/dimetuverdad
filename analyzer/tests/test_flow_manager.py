@@ -596,3 +596,114 @@ class TestAnalyzeFull:
             assert "🌐 External analysis triggered" in captured.out
             assert "✅ Analysis complete:" in captured.out
             assert "Stages: pattern,category_detection,explanation,external" in captured.out
+
+
+class TestVerificationTimeout:
+    """Test verification timeout functionality."""
+    
+    @pytest.mark.asyncio
+    async def test_verification_timeout_enforced(self):
+        """Test that verification has 120s timeout."""
+        with patch('analyzer.flow_manager.PatternAnalyzer') as mock_pattern_class, \
+             patch('analyzer.flow_manager.OllamaAnalyzer') as mock_ollama_class, \
+             patch('analyzer.flow_manager.ExternalAnalyzer') as mock_external_class, \
+             patch('analyzer.flow_manager.create_analyzer_hooks') as mock_hooks_factory:
+            
+            # Setup mocks
+            mock_pattern = Mock()
+            mock_pattern.analyze_content.return_value = AnalysisResult(
+                categories=[Categories.ANTI_GOVERNMENT],
+                pattern_matches=[],
+                primary_category=Categories.ANTI_GOVERNMENT,
+                political_context=["anti-government"],
+                keywords=["gobierno"]
+            )
+            mock_pattern_class.return_value = mock_pattern
+            
+            mock_text_llm = Mock()
+            mock_text_llm.detect_category_only = AsyncMock(return_value=Categories.ANTI_GOVERNMENT)
+            mock_text_llm.generate_explanation_with_context = AsyncMock(return_value="Explanation")
+            
+            mock_vision_llm = Mock()
+            mock_vision_llm.describe_media = AsyncMock(return_value="")
+            
+            mock_ollama_class.side_effect = [mock_text_llm, mock_vision_llm]
+            
+            mock_external = Mock()
+            mock_external.analyze = AsyncMock(return_value=ExternalAnalysisResult(
+                category=None,
+                explanation="External explanation"
+            ))
+            mock_external_class.return_value = mock_external
+            
+            # Mock analyzer hooks with slow verification
+            mock_hooks = Mock()
+            
+            async def slow_verification(*args, **kwargs):
+                """Simulate slow verification that times out."""
+                await asyncio.sleep(200)  # Longer than 120s timeout
+                return Mock()
+            
+            mock_hooks.analyze_with_verification = slow_verification
+            mock_hooks.should_trigger_verification = Mock(return_value=(True, "test trigger"))
+            mock_hooks._extract_political_event_claim = Mock(return_value=None)
+            mock_hooks_factory.return_value = mock_hooks
+            
+            manager = AnalysisFlowManager(verbose=False)
+            
+            # Should not hang, should timeout after 120s
+            start_time = asyncio.get_event_loop().time()
+            result = await manager.analyze_full(
+                "Test content about gobierno"
+            )
+            elapsed = asyncio.get_event_loop().time() - start_time
+            
+            # Should complete much faster than 200s (the mock delay)
+            assert elapsed < 125  # Allow small buffer over 120s timeout
+            assert result.category is not None  # Should still return results
+            assert result.local_explanation is not None  # Should have local explanation
+    
+    @pytest.mark.asyncio
+    async def test_verification_timeout_continues_with_local_results(self):
+        """Test that timeout allows analysis to continue with local results."""
+        with patch('analyzer.flow_manager.PatternAnalyzer') as mock_pattern_class, \
+             patch('analyzer.flow_manager.OllamaAnalyzer') as mock_ollama_class, \
+             patch('analyzer.flow_manager.ExternalAnalyzer') as mock_external_class, \
+             patch('analyzer.flow_manager.create_analyzer_hooks') as mock_hooks_factory:
+            
+            # Setup mocks
+            mock_pattern = Mock()
+            mock_pattern.analyze_content.return_value = AnalysisResult(
+                categories=[Categories.DISINFORMATION],
+                pattern_matches=[],
+                primary_category=Categories.DISINFORMATION,
+                political_context=[],
+                keywords=[]
+            )
+            mock_pattern_class.return_value = mock_pattern
+            
+            mock_text_llm = Mock()
+            mock_text_llm.detect_category_only = AsyncMock(return_value=Categories.DISINFORMATION)
+            mock_text_llm.generate_explanation_with_context = AsyncMock(return_value="Local explanation")
+            
+            mock_vision_llm = Mock()
+            mock_ollama_class.side_effect = [mock_text_llm, mock_vision_llm]
+            
+            mock_external = Mock()
+            mock_external_class.return_value = mock_external
+            
+            # Mock analyzer hooks with timeout
+            mock_hooks = Mock()
+            mock_hooks.analyze_with_verification = AsyncMock(side_effect=asyncio.TimeoutError)
+            mock_hooks.should_trigger_verification = Mock(return_value=(True, "test"))
+            mock_hooks._extract_political_event_claim = Mock(return_value=None)
+            mock_hooks_factory.return_value = mock_hooks
+            
+            manager = AnalysisFlowManager(verbose=False)
+            
+            result = await manager.analyze_full("Test content")
+            
+            # Should still return local results
+            assert result.category == Categories.DISINFORMATION
+            assert result.local_explanation == "Local explanation"
+            assert result.external_explanation is None  # No external analysis

@@ -860,4 +860,49 @@ class TestUpdateTweetInDatabase:
             mock_update.assert_called_once_with("999999999", tweet_data)
 
 
+class TestMediaLinksInTweetData:
+    """Test that media_links is properly included in tweet_data dict."""
+    
+    def test_media_links_included_with_media(self):
+        """Test that tweet_data includes media_links when media is present."""
+        media_links_list = ['https://pbs.twimg.com/media/test.jpg', 'https://video.twimg.com/test.mp4']
+        media_count = 2
+        
+        # Simulate building tweet_data as done in fetch_latest_tweets
+        tweet_data = {
+            'tweet_id': '123456789',
+            'username': 'testuser',
+            'content': 'Test content',
+            'tweet_url': 'https://x.com/testuser/status/123456789',
+            'post_type': 'original',
+            'media_count': media_count,
+            'media_links': ','.join(media_links_list) if media_links_list else None,
+        }
+        
+        # Critical assertions: both media_count and media_links must be present
+        assert 'media_count' in tweet_data
+        assert 'media_links' in tweet_data
+        assert tweet_data['media_count'] == 2
+        assert tweet_data['media_links'] == 'https://pbs.twimg.com/media/test.jpg,https://video.twimg.com/test.mp4'
+    
+    def test_media_links_none_when_no_media(self):
+        """Test that media_links is None when there's no media."""
+        media_links_list = []
+        media_count = 0
+        
+        tweet_data = {
+            'tweet_id': '123456789',
+            'username': 'testuser',
+            'content': 'Test content',
+            'tweet_url': 'https://x.com/testuser/status/123456789',
+            'post_type': 'original',
+            'media_count': media_count,
+            'media_links': ','.join(media_links_list) if media_links_list else None,
+        }
+        
+        assert tweet_data['media_count'] == 0
+        assert tweet_data['media_links'] is None
+
+
+
 

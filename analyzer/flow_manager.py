@@ -9,10 +9,12 @@ Stage 3: External Analysis (Gemini, admin-triggered only)
 from typing import List, Optional
 from dataclasses import dataclass
 import time
+import asyncio
 from .pattern_analyzer import PatternAnalyzer
 from .ollama_analyzer import OllamaAnalyzer
 from .external_analyzer import ExternalAnalyzer, ExternalAnalysisResult
 from .categories import Categories
+from .constants import ConfigDefaults
 from retrieval.integration.analyzer_hooks import create_analyzer_hooks
 
 @dataclass
@@ -267,6 +269,7 @@ class AnalysisFlowManager:
         # STAGE 5: Verification (for disinformation category or political event claims)
         verification_data = {}
         should_run_verification = primary_category == Categories.DISINFORMATION
+        political_event_claim = None  # Initialize to None
 
         # Also check for political event claims that need verification
         if not should_run_verification:
@@ -291,9 +294,12 @@ class AnalysisFlowManager:
 
                 start_time = time.time()
                 try:
-                    analysis_result = await self.analyzer_hooks.analyze_with_verification(
-                        content,
-                        original_result=analyzer_result
+                    analysis_result = await asyncio.wait_for(
+                        self.analyzer_hooks.analyze_with_verification(
+                            content,
+                            original_result=analyzer_result
+                        ),
+                        timeout=ConfigDefaults.VERIFICATION_TIMEOUT
                     )
 
                     stage_timings['verification'] = time.time() - start_time
@@ -315,6 +321,10 @@ class AnalysisFlowManager:
                     elif verification_data and verification_data.get('sources_cited'):
                         local_explanation = analysis_result.explanation_with_verification
 
+                except asyncio.TimeoutError:
+                    stage_timings['verification'] = time.time() - start_time
+                    if self.verbose:
+                        print(f"⚠️  Verification timed out after {ConfigDefaults.VERIFICATION_TIMEOUT}s - continuing with original analysis")
                 except Exception as e:
                     stage_timings['verification'] = time.time() - start_time
                     if self.verbose:

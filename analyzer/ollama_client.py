@@ -6,6 +6,7 @@ Low-level interface for interacting with Ollama models.
 import asyncio
 from typing import List, Optional, Dict
 import ollama
+from .constants import ConfigDefaults
 
 
 class OllamaEmptyResponseError(Exception):
@@ -291,7 +292,7 @@ class OllamaClient:
         
         return any(pattern in error_msg for pattern in retryable_patterns)
     
-    async def reset_model_context(self, model: str, keep_alive: str = "72h"):
+    async def reset_model_context(self, model: str, keep_alive: str = "72h", timeout: float = ConfigDefaults.CONTEXT_RESET_TIMEOUT):
         """
         Reset model context without unloading the model.
         Sends a minimal request to clear conversation history while keeping model hot.
@@ -299,21 +300,28 @@ class OllamaClient:
         Args:
             model: Model name to reset
             keep_alive: How long to keep model loaded after reset
+            timeout: Maximum time to wait for context reset (default: from ConfigDefaults.CONTEXT_RESET_TIMEOUT)
         """
         if self.verbose:
             print(f"🔄 Resetting context for model: {model}")
         
         try:
-            # Send minimal request to reset context
-            await self.client.generate(
-                model=model,
-                prompt=".",  # Minimal input
-                system="",   # Empty system prompt
-                options={"num_predict": 1},  # Generate just 1 token
-                keep_alive=keep_alive  # Keep model loaded
+            # Wrap context reset with timeout to prevent hanging
+            await asyncio.wait_for(
+                self.client.generate(
+                    model=model,
+                    prompt=".",  # Minimal input
+                    system="",   # Empty system prompt
+                    options={"num_predict": 1},  # Generate just 1 token
+                    keep_alive=keep_alive  # Keep model loaded
+                ),
+                timeout=timeout
             )
             if self.verbose:
                 print(f"✅ Context reset complete")
+        except asyncio.TimeoutError:
+            if self.verbose:
+                print(f"⚠️  Context reset timed out after {timeout}s - continuing anyway")
         except Exception as e:
             if self.verbose:
                 print(f"⚠️  Context reset failed: {e}")

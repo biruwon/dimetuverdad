@@ -162,6 +162,7 @@ class PoliticalEventVerifier:
     async def _search_multiple_sources(self, claim: PoliticalEventClaim) -> List[VerificationEvidence]:
         """
         Search across multiple sources for evidence about the claim.
+        Uses parallel execution to search all sources simultaneously.
         
         Args:
             claim: The claim to verify
@@ -171,32 +172,79 @@ class PoliticalEventVerifier:
         """
         evidence_list = []
 
-        # Search fact-checking sites
+        # Create tasks for parallel execution
+        tasks = []
+        
+        # Add fact-checking site searches
         for source in self.fact_checking_sources:
-            try:
-                evidence = await self._search_fact_checking_site(claim, source)
-                if evidence:
-                    evidence_list.extend(evidence)
-            except Exception as e:
-                self.logger.warning(f"Error searching {source['name']}: {e}")
-
-        # Search official sources
+            tasks.append(self._search_fact_checking_site_safe(claim, source))
+        
+        # Add official sources search
+        tasks.append(self._search_official_sources_safe(claim))
+        
+        # Add recent news search
+        tasks.append(self._search_recent_news_safe(claim))
+        
+        # Execute all searches in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Collect all evidence from successful searches
+        for result in results:
+            if isinstance(result, list) and result:
+                evidence_list.extend(result)
+            elif isinstance(result, Exception):
+                self.logger.warning(f"Search task failed: {result}")
+        
+        return evidence_list
+    
+    async def _search_fact_checking_site_safe(self, claim: PoliticalEventClaim, source: Dict[str, str]) -> List[VerificationEvidence]:
+        """
+        Wrapper for _search_fact_checking_site that handles exceptions.
+        
+        Args:
+            claim: The claim to verify
+            source: Source configuration
+            
+        Returns:
+            List of evidence found (empty list on error)
+        """
         try:
-            evidence = await self._search_official_sources(claim)
-            if evidence:
-                evidence_list.extend(evidence)
+            return await self._search_fact_checking_site(claim, source)
+        except Exception as e:
+            self.logger.warning(f"Error searching {source['name']}: {e}")
+            return []
+    
+    async def _search_official_sources_safe(self, claim: PoliticalEventClaim) -> List[VerificationEvidence]:
+        """
+        Wrapper for _search_official_sources that handles exceptions.
+        
+        Args:
+            claim: The claim to verify
+            
+        Returns:
+            List of evidence found (empty list on error)
+        """
+        try:
+            return await self._search_official_sources(claim)
         except Exception as e:
             self.logger.warning(f"Error searching official sources: {e}")
-
-        # Search recent news (last 30 days)
+            return []
+    
+    async def _search_recent_news_safe(self, claim: PoliticalEventClaim) -> List[VerificationEvidence]:
+        """
+        Wrapper for _search_recent_news that handles exceptions.
+        
+        Args:
+            claim: The claim to verify
+            
+        Returns:
+            List of evidence found (empty list on error)
+        """
         try:
-            evidence = await self._search_recent_news(claim)
-            if evidence:
-                evidence_list.extend(evidence)
+            return await self._search_recent_news(claim)
         except Exception as e:
             self.logger.warning(f"Error searching recent news: {e}")
-
-        return evidence_list
+            return []
 
     async def _search_fact_checking_site(self, claim: PoliticalEventClaim, source: Dict[str, str]) -> List[VerificationEvidence]:
         """
@@ -516,12 +564,13 @@ class PoliticalEventVerifier:
         """
         if not evidence_list:
             return VerificationResult(
-                overall_verdict=VerificationVerdict.QUESTIONABLE,
-                confidence_score=0.3,
+                claim=claim.context,
+                verdict=VerificationVerdict.QUESTIONABLE,
+                confidence=0.3,
                 evidence_sources=[],
-                contradictions_found=[],
-                claims_verified=[],
-                temporal_consistency=True
+                explanation="No evidence found for this claim",
+                claim_type="political_event",
+                extracted_value=claim.person_name
             )
 
         # Count verdicts

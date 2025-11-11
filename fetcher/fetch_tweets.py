@@ -271,6 +271,7 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
                         'tweet_timestamp': time_elem.get_attribute('datetime') if (time_elem := article.query_selector('time')) else None,
                         'post_type': post_analysis['post_type'],
                         'media_count': media_count,
+                        'media_links': ','.join(media_links) if media_links else None,
                         'hashtags': content_elements.get('hashtags'),
                         'mentions': content_elements.get('mentions'),
                         'profile_pic_url': profile_pic_url,

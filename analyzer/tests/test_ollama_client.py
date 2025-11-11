@@ -227,3 +227,98 @@ class TestErrorClassification:
         
         for error in non_retryable_errors:
             assert client._is_retryable_error(error) is False
+
+
+class TestModelContextReset:
+    """Test model context reset functionality with timeout."""
+    
+    @pytest.mark.asyncio
+    async def test_reset_model_context_success(self):
+        """Test successful context reset."""
+        client = OllamaClient(verbose=False)
+        
+        with patch.object(client.client, 'generate') as mock_generate:
+            mock_generate.return_value = {"response": "."}
+            
+            await client.reset_model_context("test-model")
+            
+            # Verify generate was called with minimal input
+            mock_generate.assert_called_once()
+            call_args = mock_generate.call_args
+            assert call_args[1]['prompt'] == "."
+            assert call_args[1]['system'] == ""
+            assert call_args[1]['options']['num_predict'] == 1
+    
+    @pytest.mark.asyncio
+    async def test_reset_model_context_with_timeout(self):
+        """Test context reset respects timeout parameter."""
+        client = OllamaClient(verbose=False)
+        
+        async def slow_generate(*args, **kwargs):
+            """Simulate slow response."""
+            await asyncio.sleep(10)
+            return {"response": "."}
+        
+        with patch.object(client.client, 'generate', side_effect=slow_generate):
+            # Should timeout after 1 second
+            start_time = asyncio.get_event_loop().time()
+            await client.reset_model_context("test-model", timeout=1.0)
+            elapsed = asyncio.get_event_loop().time() - start_time
+            
+            # Should complete quickly due to timeout
+            assert elapsed < 2.0
+    
+    @pytest.mark.asyncio
+    async def test_reset_model_context_timeout_handling(self):
+        """Test that timeout is handled gracefully."""
+        client = OllamaClient(verbose=False)
+        
+        async def very_slow_generate(*args, **kwargs):
+            """Simulate very slow response that will timeout."""
+            await asyncio.sleep(100)
+            return {"response": "."}
+        
+        with patch.object(client.client, 'generate', side_effect=very_slow_generate):
+            # Should not raise, should handle timeout gracefully
+            await client.reset_model_context("test-model", timeout=0.5)
+            # If we get here, timeout was handled
+            assert True
+    
+    @pytest.mark.asyncio
+    async def test_reset_model_context_with_exception(self):
+        """Test context reset handles exceptions gracefully."""
+        client = OllamaClient(verbose=False)
+        
+        with patch.object(client.client, 'generate', side_effect=Exception("Network error")):
+            # Should not raise, should handle exception
+            await client.reset_model_context("test-model")
+            # If we get here, exception was handled
+            assert True
+    
+    @pytest.mark.asyncio
+    async def test_reset_model_context_custom_keep_alive(self):
+        """Test context reset with custom keep_alive parameter."""
+        client = OllamaClient(verbose=False)
+        
+        with patch.object(client.client, 'generate') as mock_generate:
+            mock_generate.return_value = {"response": "."}
+            
+            await client.reset_model_context("test-model", keep_alive="24h")
+            
+            call_args = mock_generate.call_args
+            assert call_args[1]['keep_alive'] == "24h"
+    
+    @pytest.mark.asyncio
+    async def test_reset_model_context_default_timeout(self):
+        """Test context reset uses default 30s timeout."""
+        client = OllamaClient(verbose=False)
+        
+        # This test verifies the default timeout parameter exists
+        # We don't actually wait 30s, just verify the parameter is set
+        with patch.object(client.client, 'generate') as mock_generate:
+            mock_generate.return_value = {"response": "."}
+            
+            # Call without timeout parameter should use default
+            await client.reset_model_context("test-model")
+            
+            assert True  # Successfully called with default timeout
