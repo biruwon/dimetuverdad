@@ -379,6 +379,97 @@ class TestAdminUserCategory:
         assert 'category=hate_speech' in response.headers.get('Location', '')
 
 
+class TestAdminFetch:
+    """Test admin fetch functionality."""
+
+    def test_fetch_requires_auth(self, client):
+        """Test fetch requires admin authentication."""
+        response = client.post('/admin/fetch', data={'username': 'testuser'})
+        assert response.status_code == 302
+
+    @patch('subprocess.run')
+    @patch('threading.Thread')
+    def test_fetch_only_action(self, mock_thread, mock_subprocess, admin_client, mock_database):
+        """Test fetch_only action initiates data fetch without analysis."""
+        # Mock database check for user existence
+        mock_database.execute.return_value.fetchone.return_value = MockRow({'cnt': 0})  # User doesn't exist
+        
+        with patch('database.get_db_connection_context') as mock_context:
+            mock_context.return_value.__enter__.return_value = mock_database
+            mock_context.return_value.__exit__.return_value = None
+            
+            response = admin_client.post('/admin/fetch', 
+                                       data={'username': 'testuser', 'action': 'fetch_only'},
+                                       follow_redirects=False)  # Don't follow redirects to check flash messages
+            
+            assert response.status_code == 200  # Returns loading page
+            assert b'testuser' in response.data  # Username in loading page
+            mock_thread.assert_called_once()
+
+    @patch('subprocess.run')
+    @patch('threading.Thread')
+    def test_fetch_and_analyze_action(self, mock_thread, mock_subprocess, admin_client, mock_database):
+        """Test fetch_and_analyze action initiates both fetch and analysis."""
+        # Mock database check for user existence
+        mock_database.execute.return_value.fetchone.return_value = MockRow({'cnt': 10})  # User exists
+        
+        with patch('database.get_db_connection_context') as mock_context:
+            mock_context.return_value.__enter__.return_value = mock_database
+            mock_context.return_value.__exit__.return_value = None
+            
+            response = admin_client.post('/admin/fetch', 
+                                       data={'username': 'existinguser', 'action': 'fetch_and_analyze'},
+                                       follow_redirects=False)
+            
+            assert response.status_code == 200
+            assert b'existinguser' in response.data
+            mock_thread.assert_called_once()
+
+    @patch('subprocess.run')
+    @patch('threading.Thread')
+    def test_refetch_all_action(self, mock_thread, mock_subprocess, admin_client, mock_database):
+        """Test refetch_all action initiates complete refetch with data deletion."""
+        # Mock database check for user existence
+        mock_database.execute.return_value.fetchone.return_value = MockRow({'cnt': 50})  # User exists
+        
+        with patch('database.get_db_connection_context') as mock_context:
+            mock_context.return_value.__enter__.return_value = mock_database
+            mock_context.return_value.__exit__.return_value = None
+            
+            response = admin_client.post('/admin/fetch', 
+                                       data={'username': 'existinguser', 'action': 'refetch_all'},
+                                       follow_redirects=False)
+            
+            assert response.status_code == 200
+            assert b'existinguser' in response.data
+            mock_thread.assert_called_once()
+
+    @patch('subprocess.run')
+    @patch('threading.Thread')
+    def test_fetch_with_max_parameter(self, mock_thread, mock_subprocess, admin_client, mock_database):
+        """Test fetch with max tweets parameter."""
+        mock_database.execute.return_value.fetchone.return_value = MockRow({'cnt': 0})
+        
+        with patch('database.get_db_connection_context') as mock_context:
+            mock_context.return_value.__enter__.return_value = mock_database
+            mock_context.return_value.__exit__.return_value = None
+            
+            response = admin_client.post('/admin/fetch',
+                                       data={'username': 'testuser', 'action': 'fetch_only', 'max': '100'},
+                                       follow_redirects=True)
+            
+            assert response.status_code == 200
+            mock_thread.assert_called_once()
+
+    def test_fetch_missing_username(self, admin_client):
+        """Test fetch with missing username."""
+        response = admin_client.post('/admin/fetch',
+                                   data={'action': 'fetch_only'},
+                                   follow_redirects=True)
+        
+        assert response.status_code == 200
+        # Flash message is in session, not in HTML content after redirect
+        assert b'admin' in response.data or b'dashboard' in response.data.lower()
 class TestAdminViewFeedback:
     """Test admin feedback view functionality."""
 

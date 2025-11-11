@@ -16,7 +16,6 @@ import concurrent.futures
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, List, Any
 
 from analyzer.external_analyzer import ExternalAnalyzer
 from database import get_db_connection_context
@@ -204,8 +203,12 @@ def admin_fetch() -> str:
                 user_exists_row = conn.execute("SELECT COUNT(*) AS cnt FROM tweets WHERE username = ?", (username,)).fetchone()
                 user_exists = user_exists_row['cnt'] if user_exists_row else 0
 
-            # Choose fetch strategy based on user existence
-            if user_exists:
+            # Choose fetch strategy based on action
+            if action == 'refetch_all':
+                # Force complete refetch - delete and refetch all
+                cmd = ["./run_in_venv.sh", "fetch", "--refetch-all", username]
+                strategy = "complete refetch (deleting existing data)"
+            elif user_exists:
                 # User exists, fetch latest content
                 cmd = ["./run_in_venv.sh", "fetch", "--user", username, "--latest"]
                 strategy = "latest content"
@@ -244,10 +247,15 @@ def admin_fetch() -> str:
     thread = threading.Thread(target=run_user_fetch, daemon=True)
     thread.start()
 
+    # Provide clear feedback based on action
     if action == 'fetch_only':
-        flash(f'Fetch de usuario "@{username}" iniciado (solo datos)', 'success')
+        flash(f'📥 Obtención de datos de "@{username}" iniciada (sin análisis)', 'info')
+    elif action == 'refetch_all':
+        flash(f'⚠️ Recarga completa de "@{username}" iniciada - eliminando y reobteniendo todos los datos', 'warning')
+    elif action == 'fetch_and_analyze':
+        flash(f'📥 Obtención y análisis de "@{username}" iniciado - esto puede tardar varios minutos', 'success')
     else:
-        flash(f'Fetch de usuario "@{username}" iniciado (con análisis automático)', 'success')
+        flash(f'Operación de "@{username}" iniciada', 'info')
 
     # Return loading page instead of immediate redirect
     return render_template('loading.html',

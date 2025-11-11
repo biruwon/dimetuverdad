@@ -5,6 +5,7 @@ This module handles re-fetching individual tweets or entire accounts,
 including database operations and content extraction for updates.
 """
 
+import time
 import traceback
 from typing import Optional, Tuple
 from playwright.sync_api import sync_playwright
@@ -47,12 +48,14 @@ class RefetchManager:
             
             return row['username'], row['tweet_url']
 
-    def refetch_single_tweet(self, tweet_id: str) -> bool:
+    def refetch_single_tweet(self, tweet_id: str, max_retries: int = 3) -> bool:
         """
         Re-fetch a specific tweet by ID, extracting complete content including quoted tweets.
+        Includes retry logic for handling intermittent network errors and page load issues.
         
         Args:
             tweet_id: The tweet ID to refetch
+            max_retries: Maximum number of retry attempts (default: 3)
             
         Returns:
             bool: True if successful, False otherwise
@@ -74,47 +77,70 @@ class RefetchManager:
             print(f"❌ Database error: {e}")
             return False
         
-        # Use shared browser setup and extraction logic
-        try:
-            with sync_playwright() as p:
-                browser, context, page = self.session_manager.create_browser_context(p)
-                
-                # Navigate to tweet page
-                try:
-                    page.goto(tweet_url, wait_until="domcontentloaded", timeout=30000)
-                    print(f"📄 Page loaded: {tweet_url}")
-                    # Add delay to let dynamic content load
-                    self.scroller.delay(2.0, 3.0)
-                except Exception as e:
-                    print(f"⚠️ Page load warning: {e}")
-                
-                # Extract tweet data using shared parsing logic (includes media monitoring)
-                tweet_data = fetcher_parsers.extract_tweet_with_media_monitoring(
-                    page, tweet_id, username, tweet_url, self.media_monitor, self.scroller
-                )
-                
-                if not tweet_data:
-                    print(f"❌ Failed to extract tweet data")
-                    context.close()
-                    browser.close()
-                    return False
-                
-                # Update database with DOM-extracted data
-                success = fetcher_db.update_tweet_in_database(tweet_id, tweet_data)
-                
-                if success:
-                    print(f"✅ Successfully updated tweet {tweet_id}")
+        # Retry logic with exponential backoff
+        for attempt in range(1, max_retries + 1):
+            try:
+                with sync_playwright() as p:
+                    browser, context, page = self.session_manager.create_browser_context(p)
+                    
+                    # Navigate to tweet page
+                    try:
+                        page.goto(tweet_url, wait_until="domcontentloaded", timeout=30000)
+                        print(f"📄 Page loaded: {tweet_url}")
+                        # Add delay to let dynamic content load
+                        self.scroller.delay(2.0, 3.0)
+                    except Exception as e:
+                        print(f"⚠️ Page load warning: {e}")
+                        if attempt < max_retries:
+                            backoff = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
+                            print(f"  🔄 Retry {attempt}/{max_retries} after {backoff}s...")
+                            self.session_manager.cleanup_session(browser, context)
+                            time.sleep(backoff)
+                            continue
+                        else:
+                            self.session_manager.cleanup_session(browser, context)
+                            return False
+                    
+                    # Extract tweet data using shared parsing logic (includes media monitoring)
+                    tweet_data = fetcher_parsers.extract_tweet_with_media_monitoring(
+                        page, tweet_id, username, tweet_url, self.media_monitor, self.scroller
+                    )
+                    
+                    if not tweet_data:
+                        print(f"❌ Failed to extract tweet data")
+                        if attempt < max_retries:
+                            backoff = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
+                            print(f"  🔄 Retry {attempt}/{max_retries} after {backoff}s...")
+                            self.session_manager.cleanup_session(browser, context)
+                            time.sleep(backoff)
+                            continue
+                        else:
+                            self.session_manager.cleanup_session(browser, context)
+                            return False
+                    
+                    # Update database with DOM-extracted data
+                    success = fetcher_db.update_tweet_in_database(tweet_id, tweet_data)
+                    
+                    if success:
+                        print(f"✅ Successfully updated tweet {tweet_id}")
+                    else:
+                        print(f"❌ Failed to update tweet {tweet_id} in database")
+                    
+                    self.session_manager.cleanup_session(browser, context)
+                    
+                    return success
+                    
+            except Exception as e:
+                print(f"❌ Error during refetch attempt {attempt}: {e}")
+                if attempt < max_retries:
+                    backoff = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
+                    print(f"  🔄 Retry {attempt}/{max_retries} after {backoff}s...")
+                    time.sleep(backoff)
                 else:
-                    print(f"❌ Failed to update tweet {tweet_id} in database")
-                
-                self.session_manager.cleanup_session(browser, context)
-                
-                return success
-                
-        except Exception as e:
-            print(f"❌ Error during refetch: {e}")
-            traceback.print_exc()
-            return False
+                    traceback.print_exc()
+                    return False
+        
+        return False
 
     def refetch_account_all(self, username: str, max_tweets: int = None) -> bool:
         """

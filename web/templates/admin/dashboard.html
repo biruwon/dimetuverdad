@@ -133,28 +133,52 @@
                             <small class="text-muted">Reanaliza todos los tweets del usuario especificado</small>
                         </form>
 
-                        <form method="POST" action="{{ url_for('admin.admin_fetch') }}" class="mb-3">
+                        <form method="POST" action="{{ url_for('admin.admin_fetch') }}" class="mb-3 border rounded p-3 bg-light">
+                            <label class="form-label fw-bold text-secondary">
+                                <i class="fas fa-download me-1"></i>Obtener Solo Datos (sin análisis)
+                            </label>
                             <div class="input-group mb-2">
                                 <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
                                 <input type="number" name="max" class="form-control" placeholder="Máx. tweets (opcional)" min="1" max="10000">
                                 <input type="hidden" name="action" value="fetch_only">
                                 <button type="submit" class="btn btn-outline-secondary" onclick="return confirm('Esto obtendrá tweets del usuario especificado SIN analizarlos.\n\n• Si el usuario ya existe: obtendrá solo contenido nuevo\n• Si es nuevo: obtendrá todo el historial disponible\n\n¿Continuar?')">
-                                    <i class="fas fa-download me-1"></i>Obtener Solo Datos
+                                    <i class="fas fa-download me-1"></i>Ejecutar
                                 </button>
                             </div>
-                            <small class="text-muted">Obtiene tweets del usuario sin análisis automático</small>
+                            <small class="text-muted">Obtiene tweets del usuario sin análisis automático (actualización incremental)</small>
                         </form>
 
-                        <form method="POST" action="{{ url_for('admin.admin_fetch') }}" class="mb-3">
+                        <form method="POST" action="{{ url_for('admin.admin_fetch') }}" class="mb-3 border rounded p-3 bg-light">
+                            <label class="form-label fw-bold text-primary">
+                                <i class="fas fa-user-plus me-1"></i>Obtener y Analizar
+                            </label>
                             <div class="input-group mb-2">
                                 <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
                                 <input type="number" name="max" class="form-control" placeholder="Máx. tweets (opcional)" min="1" max="10000">
                                 <input type="hidden" name="action" value="fetch_and_analyze">
                                 <button type="submit" class="btn btn-outline-primary" onclick="return confirm('Esto obtendrá tweets del usuario especificado Y los analizará automáticamente.\n\n• Si el usuario ya existe: obtendrá solo contenido nuevo\n• Si es nuevo: obtendrá todo el historial disponible\n• Se analizarán automáticamente los tweets obtenidos\n\n¿Continuar?')">
-                                    <i class="fas fa-user-plus me-1"></i>Obtener y Analizar
+                                    <i class="fas fa-play me-1"></i>Ejecutar
                                 </button>
                             </div>
-                            <small class="text-muted">Obtiene tweets del usuario y los analiza automáticamente</small>
+                            <small class="text-muted">Obtiene tweets del usuario y los analiza automáticamente (actualización incremental)</small>
+                        </form>
+
+                        <form method="POST" action="{{ url_for('admin.admin_fetch') }}" class="mb-3 border rounded p-3 bg-warning bg-opacity-10">
+                            <label class="form-label fw-bold text-danger">
+                                <i class="fas fa-sync-alt me-1"></i>Recargar Usuario Completo
+                            </label>
+                            <div class="input-group mb-2">
+                                <input type="text" name="username" class="form-control username-input" placeholder="Nombre de usuario (sin @)" required list="usernames-list">
+                                <input type="number" name="max" class="form-control" placeholder="Máx. tweets (opcional)" min="1" max="10000">
+                                <input type="hidden" name="action" value="refetch_all">
+                                <button type="submit" class="btn btn-danger" onclick="return confirm('⚠️ ADVERTENCIA: Esto ELIMINARÁ todos los datos existentes del usuario y los reobtendrá desde cero.\n\n• Se borrarán TODOS los tweets del usuario\n• Se borrarán TODOS los análisis del usuario\n• Se reobtendrá todo el historial disponible\n• Esta acción NO se puede deshacer\n\n¿Estás seguro de continuar?')">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Recargar Todo
+                                </button>
+                            </div>
+                            <small class="text-danger">
+                                <i class="fas fa-exclamation-circle me-1"></i>
+                                <strong>¡CUIDADO!</strong> Elimina todos los datos existentes del usuario y los vuelve a descargar desde cero
+                            </small>
                         </form>
                     </div>
                 </div>
