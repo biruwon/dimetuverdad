@@ -138,20 +138,19 @@ class TestAnalyzerAnalysis(unittest.TestCase):
         """Test analysis when patterns are detected."""
         analyzer = Analyzer(config=AnalyzerConfig(enable_external_analysis=True))
 
-        # Mock the flow manager's pattern analyzer
-        mock_pattern_result = Mock()
-        mock_pattern_result.categories = [Categories.HATE_SPEECH]
-        mock_pattern_result.pattern_matches = [Mock(matched_text="test", category="hate_speech", description="test")]
-        analyzer.flow_manager.pattern_analyzer.analyze_content = Mock(return_value=mock_pattern_result)
-
-        # Mock the text LLM to avoid needing Ollama
-        analyzer.flow_manager.text_llm.explain_only = AsyncMock(return_value="Mock explanation")
-
-        # Mock the external analyzer to avoid needing Gemini
-        analyzer.flow_manager.external.analyze = AsyncMock(return_value=ExternalAnalysisResult(
-            category=None,
-            explanation="Mock external explanation"
-        ))
+        # Mock the entire flow manager analyze_full method to avoid real LLM calls
+        mock_result = Mock()
+        mock_result.category = Categories.HATE_SPEECH
+        mock_result.local_explanation = "Mock explanation"
+        mock_result.external_explanation = "Mock external explanation"
+        mock_result.stages.to_string.return_value = "pattern,category_detection,explanation,external"
+        mock_result.pattern_data = {
+            'pattern_matches': [{"matched_text": "test", "category": "hate_speech", "description": "test"}],
+            'topic_classification': {'categories': [Categories.HATE_SPEECH], 'primary_category': Categories.HATE_SPEECH}
+        }
+        mock_result.verification_data = None
+        mock_result.media_description = ""
+        analyzer.flow_manager.analyze_full = AsyncMock(return_value=mock_result)
 
         async def test_async():
             result = await analyzer.analyze_content(
@@ -168,6 +167,14 @@ class TestAnalyzerAnalysis(unittest.TestCase):
         self.assertEqual(result.category, Categories.HATE_SPEECH)
         self.assertEqual(result.analysis_stages, "pattern,category_detection,explanation,external")
         self.assertEqual(len(result.categories_detected), 1)
+        
+        # Verify the flow manager was called correctly
+        analyzer.flow_manager.analyze_full.assert_called_once_with(
+            content="Test content with hate speech",
+            media_urls=None,
+            admin_override=False,
+            force_disable_external=False
+        )
 
 
 class TestAnalyzerUtilityMethods(unittest.TestCase):

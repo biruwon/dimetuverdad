@@ -603,11 +603,12 @@ class TestVerificationTimeout:
     
     @pytest.mark.asyncio
     async def test_verification_timeout_enforced(self):
-        """Test that verification has 120s timeout."""
+        """Test that verification has timeout enforced."""
         with patch('analyzer.flow_manager.PatternAnalyzer') as mock_pattern_class, \
              patch('analyzer.flow_manager.OllamaAnalyzer') as mock_ollama_class, \
              patch('analyzer.flow_manager.ExternalAnalyzer') as mock_external_class, \
-             patch('analyzer.flow_manager.create_analyzer_hooks') as mock_hooks_factory:
+             patch('analyzer.flow_manager.create_analyzer_hooks') as mock_hooks_factory, \
+             patch('analyzer.flow_manager.ConfigDefaults.VERIFICATION_TIMEOUT', 2.0):  # Short timeout for tests
             
             # Setup mocks
             mock_pattern = Mock()
@@ -641,7 +642,7 @@ class TestVerificationTimeout:
             
             async def slow_verification(*args, **kwargs):
                 """Simulate slow verification that times out."""
-                await asyncio.sleep(200)  # Longer than 120s timeout
+                await asyncio.sleep(5)  # Longer than 2s timeout but much faster than 200s
                 return Mock()
             
             mock_hooks.analyze_with_verification = slow_verification
@@ -651,15 +652,15 @@ class TestVerificationTimeout:
             
             manager = AnalysisFlowManager(verbose=False)
             
-            # Should not hang, should timeout after 120s
+            # Should not hang, should timeout after 2s
             start_time = asyncio.get_event_loop().time()
             result = await manager.analyze_full(
                 "Test content about gobierno"
             )
             elapsed = asyncio.get_event_loop().time() - start_time
             
-            # Should complete much faster than 200s (the mock delay)
-            assert elapsed < 125  # Allow small buffer over 120s timeout
+            # Should complete much faster than 5s (the mock delay)
+            assert elapsed < 3  # Allow small buffer over 2s timeout
             assert result.category is not None  # Should still return results
             assert result.local_explanation is not None  # Should have local explanation
     

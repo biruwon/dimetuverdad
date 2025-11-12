@@ -8,7 +8,6 @@ import time
 import base64
 import requests
 import ollama
-from analyzer.prompts import EnhancedPromptGenerator
 
 async def test_model_simple(model_name: str):
     """Test a single model with image + text analysis task."""

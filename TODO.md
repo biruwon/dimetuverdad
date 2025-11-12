@@ -8,7 +8,7 @@ Top priority:
 - disinformation to display links or how it was verified
 - [M] Improve LLM explanation
 - Local multi modal processing videos
-- Posts with links, to use retrieval to fetch their info
+- Posts with links, to use retrieval to fetch their info, and to get preview info embedded, for example: 1977022185383641348
 - [M] Disinformation/political retrieval to get up to date data/checks
 - What categories do we need?
 - [L] **Additional platforms**: Extend beyond Twitter/X to Telegram, Facebook, Instagram. We need to use post_id instead of tweet_id

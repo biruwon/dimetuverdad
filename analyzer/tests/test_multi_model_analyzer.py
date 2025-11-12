@@ -96,30 +96,29 @@ class TestAnalyzeWithSpecificModel:
     
     @pytest.mark.asyncio
     async def test_text_only_analysis(self):
-        """Test text-only analysis with specific model."""
+        """Test text-only analysis with multi-stage approach."""
         analyzer = MultiModelAnalyzer(verbose=False)
         
         with patch('analyzer.multi_model_analyzer.OllamaAnalyzer') as MockAnalyzer:
             mock_instance = MockAnalyzer.return_value
-            mock_instance.client.generate_text = AsyncMock(return_value="CATEGORÍA: hate_speech\nEXPLICACIÓN: Test")
-            mock_instance._parse_category_and_explanation = Mock(
-                return_value=(Categories.HATE_SPEECH, "Test explanation")
-            )
-            mock_instance.prompt_generator = Mock()
-            mock_instance.prompt_generator.build_ollama_categorization_prompt = Mock(return_value="prompt")
-            mock_instance.prompt_generator.build_ollama_text_analysis_system_prompt = Mock(return_value="system")
-            mock_instance.DEFAULT_TEMPERATURE_TEXT = 0.3
-            mock_instance.DEFAULT_MAX_TOKENS = 512
+            # Mock the multi-stage methods
+            mock_instance.detect_category_only = AsyncMock(return_value=Categories.HATE_SPEECH)
+            mock_instance.generate_explanation_with_context = AsyncMock(return_value="Test explanation")
             
             category, explanation, time_taken = await analyzer._analyze_with_specific_model(
                 "Test content",
                 prepared_media_content=None,
+                original_media_urls=None,
                 model="gpt-oss:20b"
             )
             
             assert category == Categories.HATE_SPEECH
             assert explanation == "Test explanation"
             assert time_taken > 0
+            
+            # Verify the multi-stage methods were called
+            mock_instance.detect_category_only.assert_called_once()
+            mock_instance.generate_explanation_with_context.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_multimodal_analysis(self):
@@ -127,32 +126,30 @@ class TestAnalyzeWithSpecificModel:
         analyzer = MultiModelAnalyzer(verbose=False)
         
         prepared_media = [{"type": "image_url", "image_url": {"url": "base64data"}}]
+        original_urls = ["https://example.com/image.jpg"]
         
         with patch('analyzer.multi_model_analyzer.OllamaAnalyzer') as MockAnalyzer:
             mock_instance = MockAnalyzer.return_value
-            mock_instance.client.generate_multimodal = AsyncMock(
-                return_value="CATEGORÍA: anti_immigration\nEXPLICACIÓN: Test"
-            )
-            mock_instance._parse_category_and_explanation = Mock(
-                return_value=(Categories.ANTI_IMMIGRATION, "Test explanation")
-            )
-            mock_instance.prompt_generator = Mock()
-            mock_instance.prompt_generator.build_multimodal_categorization_prompt = Mock(return_value="prompt")
-            mock_instance.prompt_generator.build_ollama_multimodal_system_prompt = Mock(return_value="system")
-            mock_instance.DEFAULT_TEMPERATURE_MULTIMODAL = 0.2
-            mock_instance.DEFAULT_TOP_P_MULTIMODAL = 0.7
-            mock_instance.DEFAULT_NUM_PREDICT_MULTIMODAL = 250
-            mock_instance.DEFAULT_KEEP_ALIVE = "24h"
+            # Mock the multi-stage methods
+            mock_instance.detect_category_only = AsyncMock(return_value=Categories.ANTI_IMMIGRATION)
+            mock_instance.describe_media = AsyncMock(return_value="Test media description")
+            mock_instance.generate_explanation_with_context = AsyncMock(return_value="Test explanation")
             
             category, explanation, time_taken = await analyzer._analyze_with_specific_model(
                 "Test content",
                 prepared_media_content=prepared_media,
+                original_media_urls=original_urls,
                 model="gemma3:4b"
             )
             
             assert category == Categories.ANTI_IMMIGRATION
             assert explanation == "Test explanation"
             assert time_taken > 0
+            
+            # Verify the multi-stage methods were called
+            mock_instance.detect_category_only.assert_called_once()
+            mock_instance.describe_media.assert_called_once()
+            mock_instance.generate_explanation_with_context.assert_called_once()
 
 
 class TestGetAnalyzer:
