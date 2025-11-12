@@ -738,7 +738,7 @@ general: Contenido NO POLÍTICO o temas cotidianos no relacionados con política
         
         # Critical rules with examples - ENHANCED
         key_rules = """Reglas críticas:
-• hate_speech: INSULTO PERSONAL, ACOSO SEXUAL, OBJECTIFICACIÓN, insinuaciones sexuales degradantes o referencias a prostitución dirigidas a individuos específicos ("X es un traidor/rata", apodos despectivos relacionados con apariencia física, insinuaciones sexuales humillantes, referencias a servicios sexuales) | • anti_government: CRÍTICA SISTEMA ("el gobierno es corrupto") - REQUIERE CRÍTICA DIRECTA DEL AUTOR, no reportar opiniones ajenas (ejemplos: "algunos opinan que...", "se dice que..." = political_general)
+• hate_speech: INSULTO PERSONAL, ACOSO SEXUAL, OBJECTIFICACIÓN, insinuaciones sexuales degradantes o referencias a prostitución dirigidas a individuos específicos ("X es un traidor/rata", apodos despectivos relacionados con apariencia física, insinuaciones sexuales humillantes, referencias a servicios sexuales) | anti_government: CRÍTICA SISTEMA ("el gobierno es corrupto")
 • disinformation: FALSO EN EL TEXTO DEL POST sobre situación actual ("X está en prisión", "X ha dimitido") sin fuente oficial | political_general: INFORMATIVO con fuente
 • conspiracy_theory: CONTROL SECRETO ("élites manipulan todo") | anti_government: CRÍTICA PÚBLICA de políticas visibles
 • call_to_action: INCITACIÓN EXPLÍCITA a movilización colectiva ("sal a la calle YA", "únete a la manifestación") | political_general: OPINIÓN o invitación pasiva ("deberían cambiar", "os dejo el enlace")

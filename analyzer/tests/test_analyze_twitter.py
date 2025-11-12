@@ -398,7 +398,7 @@ class TestCLIFunctions(unittest.TestCase):
     @patch('scripts.analyzer_cli._setup_analyzer_and_get_tweets')
     @patch('builtins.print')
     def test_analyze_tweets_cli_analysis_error(self, mock_print, mock_setup):
-        """Test that analysis errors stop the entire pipeline."""
+        """Test that analysis errors are handled gracefully and saved to database."""
         mock_analyzer = Mock()
         mock_setup.return_value = (mock_analyzer, [
             ('123', 'https://twitter.com/test/status/123', 'testuser', 'Test content', '', '')
@@ -406,13 +406,15 @@ class TestCLIFunctions(unittest.TestCase):
 
         mock_analyzer.analyze_content = AsyncMock(side_effect=Exception("Analysis failed"))
 
-        # Should re-raise the exception and stop the pipeline
-        with self.assertRaises(RuntimeError) as context:
-            asyncio.run(analyze_tweets_cli(max_tweets=1))
+        # Should handle error gracefully and continue (not raise exception)
+        asyncio.run(analyze_tweets_cli(max_tweets=1))
         
-        self.assertIn("Analysis failed for tweet 123", str(context.exception))
-        # save_failed_analysis should NOT be called since we re-raise exceptions
-        mock_analyzer.repository.save_failed_analysis.assert_not_called()
+        # Verify that save_failed_analysis was called
+        mock_analyzer.repository.save_failed_analysis.assert_called_once()
+        call_args = mock_analyzer.repository.save_failed_analysis.call_args
+        assert call_args[1]['post_id'] == '123'
+        assert call_args[1]['author_username'] == 'testuser'
+        assert 'Analysis failed' in call_args[1]['error_message']
 
     @patch('scripts.analyzer_cli._setup_analyzer_and_get_tweets')
     @patch('builtins.print')

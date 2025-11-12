@@ -234,7 +234,7 @@ class TestModelContextReset:
     
     @pytest.mark.asyncio
     async def test_reset_model_context_success(self):
-        """Test successful context reset."""
+        """Test successful model context reset."""
         client = OllamaClient(verbose=False)
         
         with patch.object(client.client, 'generate') as mock_generate:
@@ -242,12 +242,22 @@ class TestModelContextReset:
             
             await client.reset_model_context("test-model")
             
-            # Verify generate was called with minimal input
-            mock_generate.assert_called_once()
-            call_args = mock_generate.call_args
-            assert call_args[1]['prompt'] == "."
-            assert call_args[1]['system'] == ""
-            assert call_args[1]['options']['num_predict'] == 1
+            # Verify generate was called twice: once to unload, once to reload
+            assert mock_generate.call_count == 2
+            
+            # Check first call (unload)
+            first_call = mock_generate.call_args_list[0]
+            assert first_call[1]['model'] == "test-model"
+            assert first_call[1]['prompt'] == "."
+            assert first_call[1]['options']['num_predict'] == 1
+            assert first_call[1]['keep_alive'] == "0"
+            
+            # Check second call (reload)
+            second_call = mock_generate.call_args_list[1]
+            assert second_call[1]['model'] == "test-model"
+            assert second_call[1]['prompt'] == "Reset"
+            assert second_call[1]['options']['num_predict'] == 1
+            assert second_call[1]['keep_alive'] == "5m"
     
     @pytest.mark.asyncio
     async def test_reset_model_context_with_timeout(self):

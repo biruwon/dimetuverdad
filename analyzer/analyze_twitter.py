@@ -300,17 +300,27 @@ async def reanalyze_tweet(tweet_id: str, verbose: bool = False, analyzer: Option
 
     # Reanalyze FIRST (before deleting old analysis)
     # Add overall timeout to prevent runaway analysis (same as CLI)
-    # Max: category(60s) + media(100s) + explanation(60s) + verification(100s) = 320s
-    analysis_result = await asyncio.wait_for(
+    # Max: 5 minutes as requested by user
+    task = asyncio.create_task(
         analyzer.analyze_content(
             tweet_id=tweet_data['tweet_id'],
             tweet_url=f"https://twitter.com/placeholder/status/{tweet_data['tweet_id']}",
             username=tweet_data['username'],
             content=analysis_content,
             media_urls=media_urls
-        ),
-        timeout=ConfigDefaults.ANALYSIS_TIMEOUT
+        )
     )
+    
+    try:
+        analysis_result = await asyncio.wait_for(task, timeout=ConfigDefaults.ANALYSIS_TIMEOUT)
+    except asyncio.TimeoutError:
+        # Force cancel the task
+        task.cancel()
+        try:
+            await task  # Allow cancellation to propagate
+        except asyncio.CancelledError:
+            pass
+        raise asyncio.TimeoutError(f"Analysis timed out after {ConfigDefaults.ANALYSIS_TIMEOUT}s")
 
     # Preserve original tweet text in stored analysis for consistency with batch pipeline
     analysis_result.post_content = tweet_data['content']

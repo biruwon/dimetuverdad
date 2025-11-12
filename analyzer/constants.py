@@ -65,7 +65,7 @@ class ConfigDefaults:
     EXPLANATION_TIMEOUT: Final[float] = 60.0  # Explanation generation
     VERIFICATION_TIMEOUT: Final[float] = 80.0  # Evidence verification
     # Overall analysis timeout (sum of typical stages: category + media + explanation + verification)
-    ANALYSIS_TIMEOUT: Final[float] = 320.0  # 60 + 100 + 60 + 100 = 320s (5.3 minutes max per attempt)
+    ANALYSIS_TIMEOUT: Final[float] = 300.0  # 5 minutes max per attempt (as requested by user)
     DATABASE_TIMEOUT: Final[float] = 30.0
     DOWNLOAD_TIMEOUT: Final[float] = 120.0
     REQUEST_TIMEOUT: Final[float] = 30.0

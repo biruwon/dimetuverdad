@@ -4,6 +4,7 @@
 
 Top priority:
 
+- threads to be analyzed in a row, instead of post by post, ex: 1976556710522429549
 - disinformation to display links or how it was verified
 - [M] Improve LLM explanation
 - Local multi modal processing videos

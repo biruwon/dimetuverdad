@@ -182,240 +182,246 @@ def _setup_concurrency_config(analyzer_instance):
     return analysis_sema, llm_sema, max_retries, retry_delay
 
 
+async def _analyze_single_tweet(
+    entry, analyzer_instance, analysis_sema, llm_sema, max_retries, retry_delay,
+    verbose=False, total_pending=0, processed_count=0
+):
+    """Analyze a single tweet with retry logic and timeout protection."""
+    (tw_id, tw_url, tw_user, content, media_links, original_content) = entry
+
+    # Show progress with tweet ID and overall progress
+    progress_info = f"[{processed_count:3d}]"
+    if total_pending > 0:
+        progress_info += f" ({total_pending - processed_count + 1:3d} remaining)"
+
+    ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+    print(f"{ts} 📝 {progress_info} Analyzing: {tw_id}")
+
+    logger.info(f"Starting analysis of tweet {tw_id} by @{tw_user}")
+
+    # Combine content with quoted content if available
+    analysis_content = content
+    if original_content and original_content.strip():
+        analysis_content = f"{content}\n\n[Contenido citado]: {original_content}"
+        if verbose:
+            print("    📎 Including quoted tweet content")
+            logger.info(f"Tweet {tw_id}: Including quoted content")
+
+    # Parse media URLs
+    media_urls = []
+    if media_links:
+        media_urls = [u.strip() for u in media_links.split(',') if u.strip()]
+    if media_urls and verbose:
+        print(f"    🖼️ Found {len(media_urls)} media files")
+        logger.info(f"Tweet {tw_id}: Found {len(media_urls)} media files: {media_urls}")
+
+    try:
+        async with analysis_sema:
+            async with llm_sema:
+                # Basic retry honoring config
+                attempts = 0
+                last_exc = None
+                while attempts <= max_retries:
+                    try:
+                        logger.info(f"Tweet {tw_id}: Starting analysis attempt {attempts + 1}")
+
+                        # Run analysis with timeout protection
+                        result = await asyncio.wait_for(
+                            analyzer_instance.analyze_content(
+                                tweet_id=tw_id,
+                                tweet_url=tw_url,
+                                username=tw_user,
+                                content=analysis_content,
+                                media_urls=media_urls
+                            ),
+                            timeout=ConfigDefaults.ANALYSIS_TIMEOUT
+                        )
+                        logger.info(f"Tweet {tw_id}: Analysis completed successfully - category: {result.category}")
+                        break
+
+                    except asyncio.TimeoutError:
+                        last_exc = asyncio.TimeoutError(f"Analysis timed out after {ConfigDefaults.ANALYSIS_TIMEOUT}s")
+                        attempts += 1
+                        logger.warning(f"Tweet {tw_id}: Analysis attempt {attempts} timed out after {ConfigDefaults.ANALYSIS_TIMEOUT}s")
+
+                        if attempts > max_retries:
+                            logger.error(f"Tweet {tw_id}: All {max_retries + 1} analysis attempts timed out")
+                            raise last_exc
+
+                        await asyncio.sleep(retry_delay)
+
+                    except Exception as inner_e:
+                        last_exc = inner_e
+                        attempts += 1
+                        logger.warning(f"Tweet {tw_id}: Analysis attempt {attempts} failed: {str(inner_e)}")
+
+                        if attempts > max_retries:
+                            logger.error(f"Tweet {tw_id}: All {max_retries + 1} analysis attempts failed")
+                            raise inner_e
+
+                        await asyncio.sleep(retry_delay)
+
+        # Create ContentAnalysis object for saving
+        analysis = ContentAnalysis(
+            post_id=tw_id,
+            post_url=tw_url,
+            author_username=tw_user,
+            post_content=content,
+            analysis_timestamp=datetime.now().isoformat(),
+            category=result.category,
+            categories_detected=getattr(result, 'categories_detected', []),
+            local_explanation=result.local_explanation,
+            external_explanation=result.external_explanation,
+            analysis_stages=result.analysis_stages,
+            external_analysis_used=result.external_analysis_used,
+            media_urls=getattr(result, 'media_urls', []),
+            media_type=getattr(result, 'media_type', ''),
+            pattern_matches=getattr(result, 'pattern_matches', []),
+            topic_classification=getattr(result, 'topic_classification', {}),
+            analysis_json=getattr(result, 'analysis_json', '')
+        )
+
+        analyzer_instance.save_analysis(analysis)
+        logger.info(f"Tweet {tw_id}: Analysis saved to database - category: {result.category}")
+        if verbose:
+            ts_done = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+            print(f"{ts_done} 💾 Saved analysis for {tw_id}")
+
+        # Show result (only in verbose mode)
+        if verbose:
+            category_emoji = {
+                Categories.HATE_SPEECH: '🚫',
+                Categories.DISINFORMATION: '❌',
+                Categories.CONSPIRACY_THEORY: '🕵️',
+                Categories.ANTI_IMMIGRATION: '🌍',
+                Categories.ANTI_LGBTQ: '🏳️‍🌈',
+                Categories.ANTI_FEMINISM: '👩',
+                Categories.CALL_TO_ACTION: '📢',
+                Categories.GENERAL: '✅'
+            }.get(result.category, '❓')
+            print(f"    {category_emoji} {result.category}")
+
+            # Display best available explanation
+            best_explanation = result.external_explanation if result.external_explanation else result.local_explanation
+            if best_explanation and isinstance(best_explanation, str) and len(best_explanation.strip()) > 0:
+                explanation = best_explanation[:120] + "..." if len(best_explanation) > 120 else best_explanation
+                print(f"    💭 {explanation}")
+
+            # Show analysis stages
+            stages_display = result.analysis_stages or "pattern"
+            if result.external_analysis_used:
+                print(f"    🌐 Stages: {stages_display} (with external)")
+            else:
+                print(f"    🔍 Stages: {stages_display}")
+
+            # Show stage timings if available
+            if hasattr(result, 'verification_data') and result.verification_data:
+                stage_timings = result.verification_data.get('stage_timings', {})
+                if stage_timings:
+                    total_time = sum(stage_timings.values())
+                    print(f"    ⏱️  Timings: Total={total_time:.1f}s", end="")
+                    if 'pattern_detection' in stage_timings:
+                        print(f" | Pattern={stage_timings['pattern_detection']:.2f}s", end="")
+                    if 'category_detection' in stage_timings:
+                        print(f" | Category={stage_timings['category_detection']:.1f}s", end="")
+                    if 'media_analysis' in stage_timings:
+                        print(f" | Media={stage_timings['media_analysis']:.1f}s", end="")
+                    if 'explanation' in stage_timings:
+                        print(f" | Explanation={stage_timings['explanation']:.1f}s", end="")
+                    print()
+        else:
+            # Non-verbose mode: show category and brief content/explanation
+            category_emoji = {
+                Categories.HATE_SPEECH: '🚫',
+                Categories.DISINFORMATION: '❌',
+                Categories.CONSPIRACY_THEORY: '🕵️',
+                Categories.ANTI_IMMIGRATION: '🌍',
+                Categories.ANTI_LGBTQ: '🏳️‍🌈',
+                Categories.ANTI_FEMINISM: '👩',
+                Categories.CALL_TO_ACTION: '📢',
+                Categories.GENERAL: '✅'
+            }.get(result.category, '❓')
+
+            # Show content preview (first 60 chars)
+            content_preview = content[:60] + "..." if len(content) > 60 else content
+            print(f"    📝 {content_preview}")
+
+            # Show category
+            print(f"    {category_emoji} {result.category}")
+
+            # Show explanation preview (first 80 chars)
+            best_explanation = result.external_explanation if result.external_explanation else result.local_explanation
+            if best_explanation and isinstance(best_explanation, str) and len(best_explanation.strip()) > 0:
+                explanation_preview = best_explanation[:80] + "..." if len(best_explanation) > 80 else best_explanation
+                print(f"    💭 {explanation_preview}")
+
+            # Show timing summary
+            if hasattr(result, 'verification_data') and result.verification_data:
+                stage_timings = result.verification_data.get('stage_timings', {})
+                if stage_timings:
+                    total_time = sum(stage_timings.values())
+                    print(f"    ⏱️  {total_time:.1f}s", end="")
+                    if 'media_analysis' in stage_timings:
+                        print(f" (media: {stage_timings['media_analysis']:.1f}s)", end="")
+                    print()
+
+        return ("ok", tw_id, result.category, stage_timings if hasattr(result, 'verification_data') and result.verification_data and result.verification_data.get('stage_timings') else {})
+
+    except Exception as e:
+        # Log the error
+        error_msg = str(e)
+        logger.error(f"Tweet {tw_id}: Analysis failed - {error_msg}")
+
+        # Save failed analysis to database for debugging
+        media_urls_list = []
+        if media_links:
+            media_urls_list = [u.strip() for u in media_links.split(',') if u.strip()]
+
+        try:
+            analyzer_instance.repository.save_failed_analysis(
+                post_id=tw_id,
+                post_url=tw_url,
+                author_username=tw_user,
+                content=content,
+                error_message=error_msg,
+                media_urls=media_urls_list
+            )
+            logger.info(f"Tweet {tw_id}: Failed analysis saved to database")
+            if verbose:
+                print(f"💾 Saved failed analysis for {tw_id}: {error_msg[:50]}...")
+        except Exception as save_error:
+            logger.error(f"Tweet {tw_id}: Failed to save error analysis: {save_error}")
+            if verbose:
+                print(f"❌ Failed to save error for {tw_id}: {save_error}")
+
+        # Return error result instead of raising exception
+        return ("error", tw_id, "ERROR", error_msg)
+    finally:
+        print()
+
+
 async def _execute_analysis_tasks(tweets, analyzer_instance, analysis_sema, llm_sema, max_retries, retry_delay, tracker, verbose=False, total_pending=0):
     """Execute concurrent analysis tasks and return results."""
 
     results = []
     category_counts = {}
-    processed_count = 0
 
-    async def analyze_one(idx: int, entry):
-        nonlocal processed_count
-        (tw_id, tw_url, tw_user, content, media_links, original_content) = entry
-        
-        # Update progress counter
-        processed_count += 1
-        
-        # Show progress with tweet ID and overall progress
-        progress_info = f"[{processed_count:3d}/{len(tweets):3d}]"
-        if total_pending > 0 and total_pending != len(tweets):
-            progress_info += f" ({total_pending - processed_count + 1:3d} remaining)"
-        
-        ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-        print(f"{ts} 📝 {progress_info} Analyzing: {tw_id}")
-        
-        logger.info(f"Starting analysis of tweet {tw_id} by @{tw_user}")
+    # Create tasks for concurrent execution
+    tasks = []
+    for idx, entry in enumerate(tweets, 1):
+        task = _analyze_single_tweet(
+            entry, analyzer_instance, analysis_sema, llm_sema, max_retries, retry_delay,
+            verbose, total_pending, idx
+        )
+        tasks.append(task)
 
-        # Combine content with quoted content if available
-        analysis_content = content
-        if original_content and original_content.strip():
-            analysis_content = f"{content}\n\n[Contenido citado]: {original_content}"
-            if verbose:
-                print("    📎 Including quoted tweet content")
-                logger.info(f"Tweet {tw_id}: Including quoted content")
-
-        # Parse media URLs
-        media_urls = []
-        if media_links:
-            media_urls = [u.strip() for u in media_links.split(',') if u.strip()]
-        if media_urls and verbose:
-            print(f"    🖼️ Found {len(media_urls)} media files")
-            logger.info(f"Tweet {tw_id}: Found {len(media_urls)} media files: {media_urls}")
-
-        try:
-            async with analysis_sema:
-                async with llm_sema:
-                    # Basic retry honoring config
-                    attempts = 0
-                    last_exc = None
-                    while attempts <= max_retries:
-                        try:
-                            logger.info(f"Tweet {tw_id}: Starting analysis attempt {attempts + 1}")
-                            # Add overall timeout to prevent infinite retries from multiplying timeouts
-                            # Max single attempt: category(60s) + media(100s) + explanation(60s) + verification(100s) = 320s
-                            result = await asyncio.wait_for(
-                                analyzer_instance.analyze_content(
-                                    tweet_id=tw_id,
-                                    tweet_url=tw_url,
-                                    username=tw_user,
-                                    content=analysis_content,
-                                    media_urls=media_urls
-                                ),
-                                timeout=ConfigDefaults.ANALYSIS_TIMEOUT
-                            )
-                            logger.info(f"Tweet {tw_id}: Analysis completed successfully - category: {result.category}")
-                            break
-                        except asyncio.TimeoutError:
-                            last_exc = asyncio.TimeoutError(f"Analysis timed out after {ConfigDefaults.ANALYSIS_TIMEOUT}s")
-                            attempts += 1
-                            logger.warning(f"Tweet {tw_id}: Analysis attempt {attempts} timed out after {ConfigDefaults.ANALYSIS_TIMEOUT}s")
-                            if attempts > max_retries:
-                                logger.error(f"Tweet {tw_id}: All {max_retries + 1} analysis attempts timed out")
-                                raise last_exc
-                            await asyncio.sleep(retry_delay)
-                        except Exception as inner_e:
-                            last_exc = inner_e
-                            attempts += 1
-                            logger.warning(f"Tweet {tw_id}: Analysis attempt {attempts} failed: {str(inner_e)}")
-                            if attempts > max_retries:
-                                logger.error(f"Tweet {tw_id}: All {max_retries + 1} analysis attempts failed")
-                                raise inner_e
-                            await asyncio.sleep(retry_delay)
-
-            # Count categories
-            category = result.category
-            category_counts[category] = category_counts.get(category, 0) + 1
-
-            # Create ContentAnalysis object for saving
-            analysis = ContentAnalysis(
-                post_id=tw_id,
-                post_url=tw_url,
-                author_username=tw_user,
-                post_content=content,
-                analysis_timestamp=datetime.now().isoformat(),
-                category=result.category,
-                categories_detected=getattr(result, 'categories_detected', []),
-                local_explanation=result.local_explanation,
-                external_explanation=result.external_explanation,
-                analysis_stages=result.analysis_stages,
-                external_analysis_used=result.external_analysis_used,
-                media_urls=getattr(result, 'media_urls', []),
-                media_type=getattr(result, 'media_type', ''),
-                pattern_matches=getattr(result, 'pattern_matches', []),
-                topic_classification=getattr(result, 'topic_classification', {}),
-                analysis_json=getattr(result, 'analysis_json', '')
-            )
-
-            analyzer_instance.save_analysis(analysis)
-            logger.info(f"Tweet {tw_id}: Analysis saved to database - category: {category}")
-            if verbose:
-                ts_done = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-                print(f"{ts_done} 💾 Saved analysis for {tw_id}")
-
-            # Increment performance counter
-            tracker.increment_operations(1)
-
-            # Show result (only in verbose mode)
-            if verbose:
-                category_emoji = {
-                    Categories.HATE_SPEECH: '🚫',
-                    Categories.DISINFORMATION: '❌',
-                    Categories.CONSPIRACY_THEORY: '🕵️',
-                    Categories.ANTI_IMMIGRATION: '🌍',
-                    Categories.ANTI_LGBTQ: '🏳️‍🌈',
-                    Categories.ANTI_FEMINISM: '👩',
-                    Categories.CALL_TO_ACTION: '📢',
-                    Categories.GENERAL: '✅'
-                }.get(category, '❓')
-                print(f"    {category_emoji} {category}")
-
-                # Display best available explanation
-                best_explanation = result.external_explanation if result.external_explanation else result.local_explanation
-                if best_explanation and isinstance(best_explanation, str) and len(best_explanation.strip()) > 0:
-                    explanation = best_explanation[:120] + "..." if len(best_explanation) > 120 else best_explanation
-                    print(f"    💭 {explanation}")
-
-                # Show analysis stages
-                stages_display = result.analysis_stages or "pattern"
-                if result.external_analysis_used:
-                    print(f"    🌐 Stages: {stages_display} (with external)")
-                else:
-                    print(f"    🔍 Stages: {stages_display}")
-                
-                # Show stage timings if available
-                if hasattr(result, 'verification_data') and result.verification_data:
-                    stage_timings = result.verification_data.get('stage_timings', {})
-                    if stage_timings:
-                        total_time = sum(stage_timings.values())
-                        print(f"    ⏱️  Timings: Total={total_time:.1f}s", end="")
-                        if 'pattern_detection' in stage_timings:
-                            print(f" | Pattern={stage_timings['pattern_detection']:.2f}s", end="")
-                        if 'category_detection' in stage_timings:
-                            print(f" | Category={stage_timings['category_detection']:.1f}s", end="")
-                        if 'media_analysis' in stage_timings:
-                            print(f" | Media={stage_timings['media_analysis']:.1f}s", end="")
-                        if 'explanation' in stage_timings:
-                            print(f" | Explanation={stage_timings['explanation']:.1f}s", end="")
-                        print()
-            else:
-                # Non-verbose mode: show category and brief content/explanation
-                category_emoji = {
-                    Categories.HATE_SPEECH: '🚫',
-                    Categories.DISINFORMATION: '❌',
-                    Categories.CONSPIRACY_THEORY: '🕵️',
-                    Categories.ANTI_IMMIGRATION: '🌍',
-                    Categories.ANTI_LGBTQ: '🏳️‍🌈',
-                    Categories.ANTI_FEMINISM: '👩',
-                    Categories.CALL_TO_ACTION: '📢',
-                    Categories.GENERAL: '✅'
-                }.get(category, '❓')
-
-                # Show content preview (first 60 chars)
-                content_preview = content[:60] + "..." if len(content) > 60 else content
-                print(f"    📝 {content_preview}")
-
-                # Show category
-                print(f"    {category_emoji} {category}")
-
-                # Show explanation preview (first 80 chars)
-                best_explanation = result.external_explanation if result.external_explanation else result.local_explanation
-                if best_explanation and isinstance(best_explanation, str) and len(best_explanation.strip()) > 0:
-                    explanation_preview = best_explanation[:80] + "..." if len(best_explanation) > 80 else best_explanation
-                    print(f"    💭 {explanation_preview}")
-                
-                # Show timing summary
-                if hasattr(result, 'verification_data') and result.verification_data:
-                    stage_timings = result.verification_data.get('stage_timings', {})
-                    if stage_timings:
-                        total_time = sum(stage_timings.values())
-                        print(f"    ⏱️  {total_time:.1f}s", end="")
-                        if 'media_analysis' in stage_timings:
-                            print(f" (media: {stage_timings['media_analysis']:.1f}s)", end="")
-                        print()
-
-            return ("ok", tw_id, category, stage_timings if hasattr(result, 'verification_data') and result.verification_data and result.verification_data.get('stage_timings') else {})
-
-        except Exception as e:
-            # Log the error
-            error_msg = str(e)
-            logger.error(f"Tweet {tw_id}: Analysis failed - {error_msg}")
-            
-            # Save failed analysis to database for debugging
-            media_urls_list = []
-            if media_links:
-                media_urls_list = [u.strip() for u in media_links.split(',') if u.strip()]
-            
-            try:
-                analyzer_instance.repository.save_failed_analysis(
-                    post_id=tw_id,
-                    post_url=tw_url,
-                    author_username=tw_user,
-                    content=content,
-                    error_message=error_msg,
-                    media_urls=media_urls_list
-                )
-                logger.info(f"Tweet {tw_id}: Failed analysis saved to database")
-                if verbose:
-                    print(f"💾 Saved failed analysis for {tw_id}: {error_msg[:50]}...")
-            except Exception as save_error:
-                logger.error(f"Tweet {tw_id}: Failed to save error analysis: {save_error}")
-                if verbose:
-                    print(f"❌ Failed to save error for {tw_id}: {save_error}")
-            
-            # Return error result instead of raising exception
-            return ("error", tw_id, "ERROR", error_msg)
-        finally:
-            print()
-
-    # Kick off tasks and wait for all to complete
-    tasks = [analyze_one(i, entry) for i, entry in enumerate(tweets, 1)]
+    # Execute all tasks concurrently
     outcomes = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Collect successful and failed results (don't stop on individual failures)
-    results = []
     failed_results = []
     all_timings = []
-    
+
     for out in outcomes:
         if isinstance(out, Exception):
             # This shouldn't happen now since analyze_one handles exceptions internally
@@ -438,6 +444,9 @@ async def _execute_analysis_tasks(tweets, analyzer_instance, analysis_sema, llm_
                 if "ERROR" not in category_counts:
                     category_counts["ERROR"] = 0
                 category_counts["ERROR"] += 1
+
+    # Update performance counter for all successful operations
+    tracker.increment_operations(len(results))
 
     logger.info(f"Analysis run completed: {len(results)} successful analyses, {len(failed_results)} failed analyses out of {len(tweets)} tweets")
     return results, category_counts, all_timings
