@@ -13,10 +13,10 @@ The multi-model analysis system enables parallel analysis of content using multi
    - `content_analyses` extensions: Tracks multi-model consensus
    - Functions for saving, retrieving, and analyzing model comparisons
 
-2. **Analyzer Layer** (`analyzer/local_analyzer.py`)
-   - `analyze_with_multiple_models()`: Parallel analysis with multiple models
-   - `_analyze_with_specific_model()`: Per-model analysis execution
-   - Automatic consensus calculation
+2. **Analyzer Layer** (`analyzer/multi_model_analyzer.py`)
+   - `MultiModelAnalyzer`: Orchestrates parallel analysis with multiple models
+   - Multi-stage analysis approach: category detection → media description → explanation generation
+   - Model selection and sequential execution management
 
 3. **CLI Layer** (`scripts/analyze_multi_model.py`)
    - Command-line interface for multi-model analysis
@@ -113,19 +113,12 @@ model_consensus_category TEXT
 - **Speed**: ~25-35 seconds per analysis
 - **Best for**: Quick initial analysis, high-throughput scenarios
 
-### gemma3:27b-it-qat (Accurate)
+### gemma3:27b-it-q4_K_M (Accurate)
 - **Type**: Large multimodal model with quantization
 - **Parameters**: 27 billion
 - **Capabilities**: Text + images
 - **Speed**: ~60-90 seconds per analysis
 - **Best for**: Detailed analysis, complex content
-
-### gpt-oss:20b (Balanced)
-- **Type**: Balanced text-only model
-- **Parameters**: 20 billion
-- **Capabilities**: Text only
-- **Speed**: ~45-60 seconds per analysis
-- **Best for**: Text-focused analysis, balanced accuracy/speed
 
 ## Consensus Calculation
 
@@ -178,8 +171,7 @@ The system tracks:
 ```bash
 # Ensure models are pulled
 ollama pull gemma3:4b
-ollama pull gemma3:27b-it-qat
-ollama pull gpt-oss:20b
+ollama pull gemma3:27b-it-q4_K_M
 
 # Keep models loaded for faster analysis
 ollama run gemma3:4b --keepalive 24h

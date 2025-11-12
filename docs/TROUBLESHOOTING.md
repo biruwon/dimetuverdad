@@ -82,15 +82,16 @@ Error: pull model manifest: Get "https://...": dial tcp: lookup registry.ollama.
 # Check internet connection
 ping google.com
 
-# Pull model again
-ollama pull gpt-oss:20b
+# Pull current models
+ollama pull gemma3:27b-it-q4_K_M  # Accurate analysis model
+ollama pull gemma3:4b             # Fast development model
 
 # List available models
 ollama list
 
 # Remove and re-download if corrupted
-ollama rm gpt-oss:20b
-ollama pull gpt-oss:20b
+ollama rm gemma3:27b-it-q4_K_M
+ollama pull gemma3:27b-it-q4_K_M
 ```
 
 ### Memory Issues
@@ -103,7 +104,7 @@ ERROR: LLM analysis failed - CUDA out of memory
 
 **Solutions**:
 - Close other applications
-- Use smaller models: `ollama pull llama3.1:8b`
+- Use smaller models: `ollama pull gemma3:4b`
 - Increase system memory (32GB+ recommended)
 - Use pattern-only analysis: `--patterns-only` flag
 
@@ -117,13 +118,13 @@ Analysis taking too long
 **Solutions**:
 ```bash
 # Preload model in memory
-ollama run gpt-oss:20b --keepalive 24h
+ollama run gemma3:27b-it-q4_K_M --keepalive 24h
 
 # Check model status
 ollama ps
 
 # Use faster models for development
-ollama pull llama3.1:8b
+ollama pull gemma3:4b
 ```
 
 ## Database Issues
@@ -139,7 +140,7 @@ Database is locked
 - Close other Python processes using the database
 - Restart Python interpreter
 - Check for hanging connections: `lsof accounts.db`
-- Use database migration: `python scripts/init_database.py --force`
+- Use database migration: `./run_in_venv.sh init-db --force`
 
 ### Schema Mismatches
 
@@ -365,13 +366,14 @@ Coverage is below required threshold
 
 **Solutions**:
 ```bash
-# Generate coverage report
-./run_in_venv.sh test-coverage
+# Run test suite to check coverage
+./run_in_venv.sh test-suite
 
-# Check coverage details
-open htmlcov/index.html
+# Run unit tests specifically
+./run_in_venv.sh test-unit
 
-# Add missing tests for uncovered code
+# Check coverage details (if available)
+# Coverage reports are generated during test runs
 # Focus on public methods and error paths
 ```
 

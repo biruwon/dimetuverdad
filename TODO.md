@@ -14,6 +14,7 @@ Top priority:
 - [L] **Additional platforms**: Extend beyond Twitter/X to Telegram, Facebook, Instagram. We need to use post_id instead of tweet_id
 - [L] **Newspaper integration**: Monitor news sources
 - [M] **Historical data import**: Import older tweets for trend analysis
+- [L] **Multi-category support**: Allow tweets to belong to multiple categories
 - [L] Edited recent posts, how will affect fetching? And show the original
 - [L] Allow people to submit account to analyze or post to analyze
 - [M] Automate fetcher between new accounts vs latest

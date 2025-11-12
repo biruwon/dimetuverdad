@@ -78,29 +78,23 @@ Complete reference of all available commands for dimetuverdad operations.
 ## Testing Commands
 
 ```bash
-# Full test suite with parallel execution
-./run_in_venv.sh test-all
+# Run complete test suite (unit + integration tests)
+./run_in_venv.sh test-suite
 
-# Quick integration test (2 cases per category, ~1 minute)
-./run_in_venv.sh test-analyzer-integration --quick
+# Run all unit tests only
+./run_in_venv.sh test-unit
 
-# Full integration test suite (all cases, ~6 minutes)
-./run_in_venv.sh test-analyzer-integration --full
+# Run all integration tests
+./run_in_venv.sh test-integration
 
-# Pattern-only tests (fast, ~10 seconds)
-./run_in_venv.sh test-analyzer-integration --patterns-only
+# Run analyzer integration tests specifically
+./run_in_venv.sh test-analyzer-integration
 
-# LLM-only tests
-./run_in_venv.sh test-analyzer-integration --llm-only
-
-# Test specific categories
-./run_in_venv.sh test-analyzer-integration --categories hate_speech disinformation
-
-# Test fetch integration (requires Twitter/X credentials)
+# Run fetch integration tests (requires Twitter/X credentials)
 ./run_in_venv.sh test-fetch-integration
 
-# Generate test coverage report
-./run_in_venv.sh test-coverage
+# Run retrieval integration tests
+./run_in_venv.sh test-retrieval-integration
 ```
 
 ## Application Commands
@@ -152,21 +146,17 @@ The test suite supports parallel execution for improved performance:
 
 ```bash
 # Run tests with automatic parallelization (recommended)
-./run_in_venv.sh test-all  # Uses -n auto for optimal core utilization
+./run_in_venv.sh test-suite  # Uses optimized parallel execution
 
-# Manual parallel control
-pytest -n 4  # Use 4 worker processes
-pytest -n auto  # Automatic worker count based on CPU cores
-
-# Run specific test modules in parallel
-pytest analyzer/tests/ fetcher/tests/ -n auto
+# Test execution is automatically optimized for performance
+# Parallel execution provides 2.2x speedup on multi-core systems
 ```
 
 **Performance Improvements**:
 - **Sequential execution**: ~50 seconds
 - **Parallel execution**: ~23 seconds (2.2x speedup)
-- **Test isolation**: Thread-safe database connections with unique test databases
-- **Coverage**: 75%+ test coverage maintained across all modules
+- **Test isolation**: Thread-safe database connections
+- **Coverage**: Comprehensive test coverage maintained across all modules
 
 ## Database Backup System
 

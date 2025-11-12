@@ -80,8 +80,8 @@ After starting the services, initialize the required LLM models:
 docker-compose exec ollama bash
 
 # Pull the required models
-ollama pull gpt-oss:20b
-ollama pull llama3.1:8b
+ollama pull gemma3:4b
+ollama pull gemma3:27b-it-q4_K_M
 
 # List available models
 ollama list
@@ -120,7 +120,7 @@ docker-compose exec dimetuverdad ./run_in_venv.sh analyze-twitter
 - **Health Check:** `ollama list` command
 - **Volumes:**
   - `ollama_data` - Model storage and cache
-- **Models:** gpt-oss:20b, llama3.1:8b
+- **Models:** gemma3:4b, gemma3:27b-it-q4_K_M
 
 ## Management Commands
 
@@ -170,7 +170,7 @@ docker cp $(docker-compose ps -q dimetuverdad):/app/accounts.db.backup ./backup.
 ERROR: LLM analysis failed - CUDA out of memory
 ```
 - Increase Docker memory limit to 16GB+
-- Use smaller models: `ollama pull llama3.1:8b` instead of `gpt-oss:20b`
+- Use smaller models: `ollama pull gemma3:4b` instead of `gemma3:27b-it-q4_K_M`
 
 **Database Locked**
 ```

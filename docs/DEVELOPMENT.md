@@ -99,15 +99,11 @@ python scripts/init_database.py --force
    - **NEVER proceed** with additional changes while tests are failing
 
 2. **Test Identification by Module** (Run Targeted Tests IMMEDIATELY):
-   - `analyzer/analyzer_twitter.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/analyze_twitter.py -v`
-   - `analyzer/gemini_multimodal.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_gemini_multimodal.py -v`
-   - `analyzer/prompts.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_prompts.py -v`
-   - `analyzer/llm_models.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest analyzer/tests/test_llm_models.py -v`
-   - `fetcher/db.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_db.py -v`
-   - `fetcher/parsers.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_parsers.py -v`
-   - `fetcher/fetch_tweets.py` changes → **IMMEDIATELY** run `source venv/bin/activate && python -m pytest fetcher/tests/test_fetch_tweets.py -v`
-   - Database schema changes → **IMMEDIATELY** run all database tests
-   - Cross-module changes → **IMMEDIATELY** run `./run_in_venv.sh test-all`
+   - `analyzer/` module changes → **IMMEDIATELY** run `./run_in_venv.sh test-analyzer-integration`
+   - `fetcher/` module changes → **IMMEDIATELY** run `./run_in_venv.sh test-fetch-integration`
+   - `retrieval/` module changes → **IMMEDIATELY** run `./run_in_venv.sh test-retrieval-integration`
+   - Database schema changes → **IMMEDIATELY** run `./run_in_venv.sh test-integration`
+   - Cross-module changes → **IMMEDIATELY** run `./run_in_venv.sh test-suite`
 
 ### Test Coverage Requirements
 
@@ -120,17 +116,19 @@ python scripts/init_database.py --force
 ### Running Tests
 
 ```bash
-# Individual content testing
-python quick_test.py "Test content here"
+# Complete test suite (unit + integration)
+./run_in_venv.sh test-suite
 
-# Fast pattern analysis
-python quick_test.py --patterns-only "Content to analyze"
+# Unit tests only
+./run_in_venv.sh test-unit
 
-# Full LLM analysis
-python quick_test.py --llm "Complex content requiring deep analysis"
+# Integration tests only
+./run_in_venv.sh test-integration
 
-# JSON output for integration
-python quick_test.py --llm --json "Content to analyze"
+# Individual component tests
+./run_in_venv.sh test-analyzer-integration
+./run_in_venv.sh test-fetch-integration
+./run_in_venv.sh test-retrieval-integration
 ```
 
 ### Model Comparison
@@ -163,8 +161,8 @@ Edit `analyzer/pattern_analyzer.py` to add detection patterns:
 1. Fork the repository
 2. Create feature branch: `git checkout -b feature-name`
 3. Add comprehensive tests for new functionality
-4. Ensure all tests pass: `./run_in_venv.sh test-all`
-5. Ensure test coverage remains above 70%: `./run_in_venv.sh test-coverage`
+4. Ensure all tests pass: `./run_in_venv.sh test-suite`
+5. Ensure test coverage remains above 70%: Run tests and verify they pass
 6. Submit pull request with detailed description
 
 ### Code Standards

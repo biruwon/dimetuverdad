@@ -55,7 +55,7 @@ async def analyze_full(
 
 ---
 
-## 🔍 3-Stage Analysis Pipeline
+## 🔍 Multi-Stage Analysis Pipeline
 
 ### Stage 1: Pattern Detection
 **Component:** `PatternAnalyzer`
@@ -97,35 +97,31 @@ Output: PatternResult with categories, pattern_matches, political_context
 - **General**: Neutral content, no problematic patterns detected
 
 ### Stage 2: Local LLM Analysis
-**Component:** `LocalMultimodalAnalyzer` (Ollama gpt-oss:20b)
+**Component:** `LocalMultimodalAnalyzer` (Ollama gemma3:4b/gpt-oss:20b)
 
 ```
 Pattern Results Available?
   ↓
-YES → LLM Explanation Only (for known category)
+Category Detection + Media Analysis + Explanation Generation
   ↓
-NO → LLM Categorization + Explanation
+Multi-Stage LLM Processing:
+  • Category Detection/Validation
+  • Media Content Analysis (if images present)
+  • Final Explanation Generation
   ↓
 Enhanced Prompt Generation (Spanish-optimized)
   ↓
-Ollama API Call (gpt-oss:20b, ~30-60s)
+Ollama API Call (gemma3:4b primary, gpt-oss:20b fallback, ~10-30s)
   ↓
-Structured Response Parsing:
-  "CATEGORÍA: category_name
-   EXPLICACIÓN: explanation_text"
+Structured Response Parsing
   ↓
 Output: Local category + explanation (Spanish, 2-3 sentences)
 ```
 
-**LLM Operation Modes:**
-- **Categorize + Explain**: When patterns insufficient (full analysis)
-- **Explain Only**: When patterns found specific category (targeted explanation)
-
-**Model Configuration:**
-- **Primary Model**: `gemma3:4b` (fast, multimodal-capable)
-- **Fallback Model**: `gpt-oss:20b` (quality explanations)
-- **Temperature**: 0.3 (consistent categorization)
-- **Max Tokens**: 512 (concise explanations)
+**LLM Processing Stages:**
+- **Category Detection**: Validate/refine pattern-based categorization
+- **Media Analysis**: Vision model processing of images/videos
+- **Explanation Generation**: Final human-readable explanation
 
 ### Stage 3: External Analysis (Conditional)
 **Component:** `ExternalAnalyzer` (Gemini 2.5 Flash)
@@ -431,12 +427,26 @@ class AnalysisResult:
 ```python
 @dataclass
 class AnalysisStages:
-    pattern: bool = False      # Pattern detection executed
-    local_llm: bool = False    # Local LLM analysis executed
-    external: bool = False     # External analysis executed
+    pattern: bool = False              # Pattern detection executed
+    category_detection: bool = False   # LLM category detection/validation
+    media_analysis: bool = False       # Vision model media description
+    explanation: bool = False          # Final explanation generation
+    external: bool = False             # External analysis executed
     
     def to_string(self) -> str:
-        """Convert to database format: 'pattern,local_llm,external'"""
+        """Convert to comma-separated string for database storage"""
+        stages = []
+        if self.pattern:
+            stages.append("pattern")
+        if self.category_detection:
+            stages.append("category_detection")
+        if self.media_analysis:
+            stages.append("media_analysis")
+        if self.explanation:
+            stages.append("explanation")
+        if self.external:
+            stages.append("external")
+        return ",".join(stages)
 ```
 
 ### Database ContentAnalysis Record
@@ -641,13 +651,13 @@ Content → Pattern Detection (2-5s) → Local LLM Analysis (10-30s)
 
 **Critical Success Factors:**
 1. **Pattern-First Approach**: Fast, rule-based detection for obvious cases
-2. **LLM Fallback**: Handles nuanced content with Spanish-optimized prompts
+2. **Multi-Stage LLM Processing**: Category detection, media analysis, explanation generation
 3. **External Validation**: Independent verification for high-confidence cases
 4. **Evidence Enhancement**: Fact-checking integration for factual claims
 5. **Dual Explanations**: Multiple perspectives for comprehensive analysis
 
 ---
 
-**Last Updated:** October 29, 2025
-**Version:** 2.0
+**Last Updated:** November 12, 2025
+**Version:** 2.1
 **Author:** dimetuverdad development team
