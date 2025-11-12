@@ -185,6 +185,7 @@ ollama pull gpt-oss:20b
 3. **CURRENT PROMPT SIZE**: Category detection prompts are ~3,800-4,000 characters (content + categories + rules). This is OPTIMAL and should NOT be increased much.
 4. **PERFORMANCE BASELINE**: LLM calls take 25-40s with gemma3:27b-it-q4_K_M on M1 Pro. This is NORMAL and expected.
 5. **SCALABLE IMPROVEMENTS**: Focus on generalized LLM intelligence improvements rather than hardcoded post-specific fixes.
+6. **VIOLATION CONSEQUENCES**: Adding specific post content to prompts creates unmaintainable, brittle solutions. Always generalize fixes instead.
 
 **PROMPT IMPROVEMENT WORKFLOW**:
 - Reference `analyzer/prompts.py` for all LLM prompt modifications

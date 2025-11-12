@@ -377,9 +377,33 @@ async def _execute_analysis_tasks(tweets, analyzer_instance, analysis_sema, llm_
 
         except Exception as e:
             # Log the error
-            logger.error(f"Tweet {tw_id}: Analysis failed - {str(e)}")
-            # Re-raise all errors to stop the entire analysis pipeline
-            raise RuntimeError(f"Analysis failed for tweet {tw_id}: {str(e)}") from e
+            error_msg = str(e)
+            logger.error(f"Tweet {tw_id}: Analysis failed - {error_msg}")
+            
+            # Save failed analysis to database for debugging
+            media_urls_list = []
+            if media_links:
+                media_urls_list = [u.strip() for u in media_links.split(',') if u.strip()]
+            
+            try:
+                analyzer_instance.repository.save_failed_analysis(
+                    post_id=tw_id,
+                    post_url=tw_url,
+                    author_username=tw_user,
+                    content=content,
+                    error_message=error_msg,
+                    media_urls=media_urls_list
+                )
+                logger.info(f"Tweet {tw_id}: Failed analysis saved to database")
+                if verbose:
+                    print(f"💾 Saved failed analysis for {tw_id}: {error_msg[:50]}...")
+            except Exception as save_error:
+                logger.error(f"Tweet {tw_id}: Failed to save error analysis: {save_error}")
+                if verbose:
+                    print(f"❌ Failed to save error for {tw_id}: {save_error}")
+            
+            # Return error result instead of raising exception
+            return ("error", tw_id, "ERROR", error_msg)
         finally:
             print()
 
@@ -387,22 +411,35 @@ async def _execute_analysis_tasks(tweets, analyzer_instance, analysis_sema, llm_
     tasks = [analyze_one(i, entry) for i, entry in enumerate(tweets, 1)]
     outcomes = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Check for exceptions and re-raise the first one encountered
+    # Collect successful and failed results (don't stop on individual failures)
+    results = []
+    failed_results = []
+    all_timings = []
+    
     for out in outcomes:
         if isinstance(out, Exception):
-            logger.error(f"Analysis run failed: {str(out)}")
-            raise out
+            # This shouldn't happen now since analyze_one handles exceptions internally
+            logger.error(f"Unexpected exception in analysis task: {str(out)}")
+            continue
+        elif isinstance(out, tuple):
+            status, tw_id, category_or_error, extra_data = out
+            if status == "ok":
+                results.append(out)
+                # Extract timing data if available
+                if len(out) > 3 and isinstance(out[3], dict):
+                    all_timings.append(out[3])
+                # Count successful categories
+                if category_or_error not in category_counts:
+                    category_counts[category_or_error] = 0
+                category_counts[category_or_error] += 1
+            elif status == "error":
+                failed_results.append(out)
+                # Count failed analyses
+                if "ERROR" not in category_counts:
+                    category_counts["ERROR"] = 0
+                category_counts["ERROR"] += 1
 
-    # Collect successful results for reporting compatibility
-    results = []
-    all_timings = []
-    for out in outcomes:
-        if isinstance(out, tuple) and out[0] == "ok":
-            results.append(out)
-            if len(out) > 3:  # Has timing data
-                all_timings.append(out[3])
-
-    logger.info(f"Analysis run completed: {len(results)} successful analyses out of {len(tweets)} tweets")
+    logger.info(f"Analysis run completed: {len(results)} successful analyses, {len(failed_results)} failed analyses out of {len(tweets)} tweets")
     return results, category_counts, all_timings
 
 

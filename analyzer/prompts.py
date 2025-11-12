@@ -215,7 +215,7 @@ PRINCIPIOS FUNDAMENTALES DE CLASIFICACIÓN:
 
 1. IDENTIFICA EL ELEMENTO PROBLEMÁTICO PRINCIPAL:
    - hate_speech: Ataques PERSONALES directos con insultos individuales
-   - anti_government: Crítica INSTITUCIONAL al gobierno/sistema político
+   - anti_government: Crítica INSTITUCIONAL al gobierno/sistema político - REQUIERE CRÍTICA DIRECTA DEL AUTOR, no reportar opiniones ajenas
    - disinformation: Información FALSA presentada como cierta sobre hechos verificables
    - conspiracy_theory: Narrativas de CONSPIRACIÓN OCULTA y control secreto
    - anti_immigration: Retórica XENÓFOBA colectiva contra inmigrantes
@@ -241,6 +241,7 @@ ANTI_GOVERNMENT:
 - "Gobierno corrupto", "políticas erróneas", "instituciones fallidas"
 - Acusaciones de corrupción institucional, abuso de poder
 - Crítica a sistemas políticos, no ataques personales
+- REQUIERE CRÍTICA DIRECTA DEL AUTOR - no reportar opiniones ajenas ("algunos dicen que..." = political_general)
 
 DISINFORMATION:
 - Claims falsos sobre hechos verificables: decretos, leyes, nombramientos sin fuente oficial
@@ -291,7 +292,7 @@ INSTRUCCIONES PARA CLASIFICACIÓN PRECISA:
 
 1. IDENTIFICA EL ELEMENTO PROBLEMÁTICO PRINCIPAL:
    - hate_speech: Ataques PERSONALES directos con insultos individuales
-   - anti_government: Crítica INSTITUCIONAL al gobierno/sistema político
+   - anti_government: Crítica INSTITUCIONAL al gobierno/sistema político - REQUIERE CRÍTICA DIRECTA DEL AUTOR, no reportar opiniones ajenas
    - disinformation: Información FALSA presentada como cierta sobre hechos verificables
    - conspiracy_theory: Narrativas de CONSPIRACIÓN OCULTA y control secreto
    - anti_immigration: Retórica XENÓFOBA colectiva contra inmigrantes
@@ -737,7 +738,7 @@ general: Contenido NO POLÍTICO o temas cotidianos no relacionados con política
         
         # Critical rules with examples - ENHANCED
         key_rules = """Reglas críticas:
-• hate_speech: INSULTO PERSONAL, ACOSO SEXUAL, OBJECTIFICACIÓN, insinuaciones sexuales degradantes o referencias a prostitución dirigidas a individuos específicos ("X es un traidor/rata", apodos despectivos relacionados con apariencia física, insinuaciones sexuales humillantes, referencias a servicios sexuales) | anti_government: CRÍTICA SISTEMA ("el gobierno es corrupto")
+• hate_speech: INSULTO PERSONAL, ACOSO SEXUAL, OBJECTIFICACIÓN, insinuaciones sexuales degradantes o referencias a prostitución dirigidas a individuos específicos ("X es un traidor/rata", apodos despectivos relacionados con apariencia física, insinuaciones sexuales humillantes, referencias a servicios sexuales) | • anti_government: CRÍTICA SISTEMA ("el gobierno es corrupto") - REQUIERE CRÍTICA DIRECTA DEL AUTOR, no reportar opiniones ajenas (ejemplos: "algunos opinan que...", "se dice que..." = political_general)
 • disinformation: FALSO EN EL TEXTO DEL POST sobre situación actual ("X está en prisión", "X ha dimitido") sin fuente oficial | political_general: INFORMATIVO con fuente
 • conspiracy_theory: CONTROL SECRETO ("élites manipulan todo") | anti_government: CRÍTICA PÚBLICA de políticas visibles
 • call_to_action: INCITACIÓN EXPLÍCITA a movilización colectiva ("sal a la calle YA", "únete a la manifestación") | political_general: OPINIÓN o invitación pasiva ("deberían cambiar", "os dejo el enlace")

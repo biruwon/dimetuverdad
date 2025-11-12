@@ -178,9 +178,10 @@ class OllamaClient:
         import os
         import sys
         
-        # DEBUG: Force print to verify verbose flag
-        print(f"🐛 DEBUG: OllamaClient._retry_ollama_call - verbose={self.verbose}, operation={operation}", flush=True)
-        sys.stdout.flush()
+        # Only print debug info if verbose is enabled
+        if self.verbose:
+            print(f"🐛 DEBUG: OllamaClient._retry_ollama_call - verbose={self.verbose}, operation={operation}", flush=True)
+            sys.stdout.flush()
         
         for attempt in range(self.MAX_RETRIES):
             attempt_start = time.time()
@@ -202,7 +203,7 @@ class OllamaClient:
                     prompt_text = kwargs['prompt']
                     print(f"   📏 Prompt length: {len(prompt_text)} chars, {len(prompt_text.split())} words")
                     # Check for problematic patterns
-                    if len(prompt_text) > 2000:
+                    if len(prompt_text) > 4000:
                         print(f"   ⚠️  LONG PROMPT detected ({len(prompt_text)} chars)")
                     if prompt_text.count('\n') > 50:
                         print(f"   ⚠️  Many newlines detected ({prompt_text.count('\\n')})")
@@ -215,8 +216,14 @@ class OllamaClient:
                     print(f"   ⏱️  Starting retry attempt {attempt + 1} at {time.strftime('%H:%M:%S')}")
             
             try:
+                # ALWAYS log operation start time for tracking
+                operation_start_wall_time = time.strftime('%H:%M:%S')
+                
                 if self.verbose:
                     print(f"   📡 Calling Ollama API with {timeout}s timeout...")
+                else:
+                    # Even in non-verbose mode, log the start time for slow operations tracking
+                    print(f"⏱️  {operation} starting at {operation_start_wall_time}", flush=True)
                 
                 # Make the Ollama API call with timeout
                 api_call_start = time.time()
@@ -236,6 +243,22 @@ class OllamaClient:
                     raise asyncio.TimeoutError(f"{operation} timed out after {timeout}s")
                 
                 api_call_duration = time.time() - api_call_start
+                
+                # ALWAYS log operation completion with timing
+                if not self.verbose:
+                    if api_call_duration > 120:
+                        print(f"⚠️  {operation} completed in {api_call_duration:.1f}s (SLOW, >120s threshold)", flush=True)
+                    else:
+                        print(f"✅ {operation} completed in {api_call_duration:.1f}s", flush=True)
+                
+                # Log detailed info for slow calls
+                if api_call_duration > 120:
+                    print(f"   ⚠️  SLOW API CALL DETAILS:", flush=True)
+                    print(f"      Model: {kwargs.get('model', 'unknown')}", flush=True)
+                    if 'prompt' in kwargs:
+                        print(f"      Prompt length: {len(kwargs['prompt'])} chars", flush=True)
+                    if 'images' in kwargs:
+                        print(f"      Images: {len(kwargs['images'])} items", flush=True)
                 
                 if self.verbose:
                     print(f"   ✅ Ollama API call completed in {api_call_duration:.2f}s")

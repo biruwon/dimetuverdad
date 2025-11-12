@@ -57,13 +57,13 @@ class ErrorMessages:
 class ConfigDefaults:
     """Default configuration values."""
     VERBOSE: Final[bool] = False
-    MAX_RETRIES: Final[int] = 3
+    MAX_RETRIES: Final[int] = 0
     RETRY_DELAY: Final[int] = 1
     # Timeout for individual stages
     CATEGORY_TIMEOUT: Final[float] = 60.0  # Category detection
     MEDIA_TIMEOUT: Final[float] = 100.0    # Media analysis
     EXPLANATION_TIMEOUT: Final[float] = 60.0  # Explanation generation
-    VERIFICATION_TIMEOUT: Final[float] = 100.0  # Evidence verification
+    VERIFICATION_TIMEOUT: Final[float] = 80.0  # Evidence verification
     # Overall analysis timeout (sum of typical stages: category + media + explanation + verification)
     ANALYSIS_TIMEOUT: Final[float] = 320.0  # 60 + 100 + 60 + 100 = 320s (5.3 minutes max per attempt)
     DATABASE_TIMEOUT: Final[float] = 30.0

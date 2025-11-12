@@ -251,7 +251,7 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
     Categories.ANTI_GOVERNMENT: CategoryInfo(
         name=Categories.ANTI_GOVERNMENT,
         display_name="Anti-Gubernamental",
-        description="Comunicación que retrata al gobierno como ilegítimo, abusivo o persecutor. Características: denuncias de persecución política, acusaciones de censura estatal, narrativas que presentan a los medios públicos como propaganda oficial y llamados a desconocer la autoridad gubernamental.",
+        description="Comunicación que retrata al gobierno como ilegítimo, abusivo o persecutor. REQUIERE CRÍTICA DIRECTA DEL AUTOR - no reportar opiniones ajenas. Características: denuncias de persecución política, acusaciones de censura estatal, narrativas que presentan a los medios públicos como propaganda oficial y llamados a desconocer la autoridad gubernamental.",
         focus_area="detección de retórica anti-gubernamental, denuncias de abuso institucional y persecución política",
         analysis_questions=[
             "¿El mensaje describe al gobierno como ilegítimo, autoritario o represivo?",
@@ -260,10 +260,12 @@ CATEGORY_INFO: Dict[str, CategoryInfo] = {
         ],
         classification_rules=[
             "SOLO si retrata al gobierno como ILEGÍTIMO, ABUSIVO, PERSECUTOR o AUTORITARIO",
+            "REQUIERE CRÍTICA DIRECTA DEL AUTOR - no reportar opiniones ajenas",
             "INCLUYE: 'Gobierno ilegítimo', 'dictadura encubierta', 'nos persiguen por pensar diferente'",
             "INCLUYE: 'Censuran a la oposición', 'Estado policial', 'silencian voces disidentes'",
             "EXCLUYE: crítica política normal ('Feijóo/Sánchez no cumple', 'mienten constantemente')",
             "EXCLUYE: desacuerdo con políticas ('malas decisiones', 'gestión incompetente')",
+            "EXCLUYE: reportar opiniones ajenas",
             "Si solo crítica política sin acusaciones de ilegitimidad/persecución → political_general"
         ],
         system_prompt=f"{BASE_SYSTEM_CONTEXT} Analiza específicamente contenido anti-gubernamental, denuncias de persecución del Estado, acusaciones de censura o manipulación institucional."
