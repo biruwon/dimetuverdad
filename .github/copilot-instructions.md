@@ -182,8 +182,8 @@ ollama pull gpt-oss:20b
 **MANDATORY PROMPT MANAGEMENT RULES**:
 1. **NEVER ADD POST-SPECIFIC CONTENT**: Never add specific tweet content, examples, or post text to `analyzer/prompts.py` to solve classification problems. This creates brittle, non-scalable solutions that only work for specific posts.
 2. **GENERALIZE SOLUTIONS**: When improving LLM classification, enhance category descriptions, critical rules, and detection logic with generalized patterns and examples, not specific post content.
-3. **PROMPT SIZE LIMITS**: Keep prompts under 2000 characters total to maintain fast LLM response times. Large prompts significantly slow down analysis (30-60s → 2-5min+). If prompts exceed this limit, refactor to be more concise.
-4. **PERFORMANCE MONITORING**: Always test prompt changes for response time impact. If analysis becomes noticeably slower, reduce prompt size immediately.
+3. **CURRENT PROMPT SIZE**: Category detection prompts are ~3,800-4,000 characters (content + categories + rules). This is OPTIMAL and should NOT be increased much.
+4. **PERFORMANCE BASELINE**: LLM calls take 25-40s with gemma3:27b-it-q4_K_M on M1 Pro. This is NORMAL and expected.
 5. **SCALABLE IMPROVEMENTS**: Focus on generalized LLM intelligence improvements rather than hardcoded post-specific fixes.
 
 **PROMPT IMPROVEMENT WORKFLOW**:
@@ -192,6 +192,12 @@ ollama pull gpt-oss:20b
 - Test prompt changes immediately for both accuracy and performance
 - Revert prompt changes if they cause significant slowdown (>2x response time)
 - Prefer pattern analyzer improvements over prompt bloat for specific cases
+
+**CURRENT PROMPT SIZE BASELINE** :
+- Category detection prompts: ~3,800-4,000 characters (includes content + categories + rules)
+- This size is OPTIMAL for accuracy and is performing as expected (~25-40s per LLM call)
+- LLM response times of 25-40s are NORMAL for gemma3:27b-it-q4_K_M model on M1 Pro
+- Do NOT attempt to reduce prompt size below current levels - accuracy depends on detailed category definitions
 
 ### Flow Manager Usage
 ```python

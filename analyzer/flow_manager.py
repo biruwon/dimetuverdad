@@ -103,6 +103,7 @@ class AnalysisFlowManager:
             print("🔄 AnalysisFlowManager initialized")
             print("   📝 Text LLM: gemma3:27b-it-q4_K_M")
             print("   🖼️  Vision LLM: gemma3:27b-it-q4_K_M (multimodal capable)")
+            print("   ℹ️  Note: Using stateless Ollama calls (no context accumulation)")
     
     async def analyze_local(
         self,
@@ -129,15 +130,9 @@ class AnalysisFlowManager:
         stage_timings = {}
         media_description = None
         
-        # Reset model context before analysis (except for first analysis)
-        if self.analysis_count > 0:
-            if self.verbose:
-                print(f"🔄 Resetting model context before analysis #{self.analysis_count + 1}")
-            try:
-                await self.text_llm.reset_model_context()
-            except Exception as e:
-                if self.verbose:
-                    print(f"⚠️  Context reset failed: {e}")
+        # Note: We use stateless Ollama generate() calls (no context parameter)
+        # Each analysis is independent, no context accumulation occurs
+        # The 'keep_alive' only keeps model in memory for performance
         
         self.analysis_count += 1
         

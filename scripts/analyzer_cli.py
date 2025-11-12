@@ -231,15 +231,28 @@ async def _execute_analysis_tasks(tweets, analyzer_instance, analysis_sema, llm_
                     while attempts <= max_retries:
                         try:
                             logger.info(f"Tweet {tw_id}: Starting analysis attempt {attempts + 1}")
-                            result = await analyzer_instance.analyze_content(
-                                tweet_id=tw_id,
-                                tweet_url=tw_url,
-                                username=tw_user,
-                                content=analysis_content,
-                                media_urls=media_urls
+                            # Add overall timeout to prevent infinite retries from multiplying timeouts
+                            # Max single attempt: category(60s) + media(100s) + explanation(60s) + verification(100s) = 320s
+                            result = await asyncio.wait_for(
+                                analyzer_instance.analyze_content(
+                                    tweet_id=tw_id,
+                                    tweet_url=tw_url,
+                                    username=tw_user,
+                                    content=analysis_content,
+                                    media_urls=media_urls
+                                ),
+                                timeout=ConfigDefaults.ANALYSIS_TIMEOUT
                             )
                             logger.info(f"Tweet {tw_id}: Analysis completed successfully - category: {result.category}")
                             break
+                        except asyncio.TimeoutError:
+                            last_exc = asyncio.TimeoutError(f"Analysis timed out after {ConfigDefaults.ANALYSIS_TIMEOUT}s")
+                            attempts += 1
+                            logger.warning(f"Tweet {tw_id}: Analysis attempt {attempts} timed out after {ConfigDefaults.ANALYSIS_TIMEOUT}s")
+                            if attempts > max_retries:
+                                logger.error(f"Tweet {tw_id}: All {max_retries + 1} analysis attempts timed out")
+                                raise last_exc
+                            await asyncio.sleep(retry_delay)
                         except Exception as inner_e:
                             last_exc = inner_e
                             attempts += 1

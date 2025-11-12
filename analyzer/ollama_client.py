@@ -35,17 +35,28 @@ class OllamaClient:
     
     def __init__(self, verbose: bool = False):
         """
-        Initialize Ollama client.
+        Initialize Ollama client with proper timeout configuration.
         
         Args:
             verbose: Enable detailed logging
         """
-        self.client = ollama.AsyncClient()
-        self.sync_client = ollama.Client()  # Synchronous client for to_thread
+        # Configure httpx timeout for the Ollama client
+        # This ensures HTTP requests don't hang indefinitely
+        import httpx
+        timeout_config = httpx.Timeout(
+            connect=30.0,  # 30s to establish connection
+            read=300.0,    # 5 minutes to read response (for slow LLM generation)
+            write=30.0,    # 30s to write request
+            pool=10.0      # 10s to get connection from pool
+        )
+        
+        # Initialize Ollama clients with timeout configuration
+        self.client = ollama.AsyncClient(timeout=timeout_config)
+        self.sync_client = ollama.Client(timeout=timeout_config)
         self.verbose = verbose
         
         if self.verbose:
-            print("🔌 OllamaClient initialized")
+            print("🔌 OllamaClient initialized with timeout protection")
     
     async def generate_text(
         self,
@@ -163,47 +174,101 @@ class OllamaClient:
             OllamaRetryError: When all retries are exhausted or non-retryable error occurs
         """
         import time
+        import psutil
+        import os
+        import sys
+        
+        # DEBUG: Force print to verify verbose flag
+        print(f"🐛 DEBUG: OllamaClient._retry_ollama_call - verbose={self.verbose}, operation={operation}", flush=True)
+        sys.stdout.flush()
         
         for attempt in range(self.MAX_RETRIES):
             attempt_start = time.time()
             
+            # Debug: Log system resources before attempt
+            process = psutil.Process(os.getpid())
+            mem_info = process.memory_info()
+            cpu_percent = process.cpu_percent(interval=0.1)
+            system_mem = psutil.virtual_memory()
+            
             if self.verbose:
-                print(f"🔄 Attempt {attempt + 1}/{self.MAX_RETRIES} for {operation}")
+                print(f"🔄 Attempt {attempt + 1}/{self.MAX_RETRIES} for {operation}", flush=True)
+                print(f"   💾 Process RAM: {mem_info.rss / 1024 / 1024:.1f} MB", flush=True)
+                print(f"   🖥️  System RAM: {system_mem.percent:.1f}% used ({system_mem.available / 1024 / 1024 / 1024:.1f} GB available)", flush=True)
+                print(f"   ⚡ CPU: {cpu_percent:.1f}%", flush=True)
+                
+                # Log prompt details
+                if 'prompt' in kwargs:
+                    prompt_text = kwargs['prompt']
+                    print(f"   📏 Prompt length: {len(prompt_text)} chars, {len(prompt_text.split())} words")
+                    # Check for problematic patterns
+                    if len(prompt_text) > 2000:
+                        print(f"   ⚠️  LONG PROMPT detected ({len(prompt_text)} chars)")
+                    if prompt_text.count('\n') > 50:
+                        print(f"   ⚠️  Many newlines detected ({prompt_text.count('\\n')})")
+                    
+                if 'system' in kwargs and kwargs['system']:
+                    system_text = kwargs['system']
+                    print(f"   📋 System prompt: {len(system_text)} chars")
+                    
                 if attempt > 0:
-                    print(f"⏱️  Starting attempt {attempt + 1} at {time.strftime('%H:%M:%S')}")
+                    print(f"   ⏱️  Starting retry attempt {attempt + 1} at {time.strftime('%H:%M:%S')}")
             
             try:
                 if self.verbose:
-                    print(f"📡 Calling Ollama API with {timeout}s timeout...")
+                    print(f"   📡 Calling Ollama API with {timeout}s timeout...")
                 
                 # Make the Ollama API call with timeout
                 api_call_start = time.time()
                 
-                # Use direct async call for proper cancellation support
-                response = await asyncio.wait_for(
-                    call_func(*args, **kwargs),
-                    timeout=timeout
-                )
+                # Create task with explicit cancellation on timeout
+                task = asyncio.create_task(call_func(*args, **kwargs))
+                
+                try:
+                    response = await asyncio.wait_for(task, timeout=timeout)
+                except asyncio.TimeoutError:
+                    # Explicitly cancel the task on timeout
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                    raise asyncio.TimeoutError(f"{operation} timed out after {timeout}s")
                 
                 api_call_duration = time.time() - api_call_start
                 
                 if self.verbose:
-                    print(f"✅ Ollama API call completed in {api_call_duration:.2f}s")
+                    print(f"   ✅ Ollama API call completed in {api_call_duration:.2f}s")
+                    
+                    # Debug: Log system resources after completion
+                    mem_info_after = process.memory_info()
+                    cpu_percent_after = process.cpu_percent(interval=0.1)
+                    print(f"   💾 RAM after: {mem_info_after.rss / 1024 / 1024:.1f} MB (Δ {(mem_info_after.rss - mem_info.rss) / 1024 / 1024:.1f} MB)")
+                    print(f"   ⚡ CPU after: {cpu_percent_after:.1f}%")
                 
                 # Extract and validate response
                 response_extraction_start = time.time()
                 generated_text = response.get("response", "").strip()
                 
                 if self.verbose:
-                    print(f"📄 Response extracted in {time.time() - response_extraction_start:.3f}s")
-                    print(f"📏 Response length: {len(generated_text)} chars")
+                    print(f"   📄 Response extracted in {time.time() - response_extraction_start:.3f}s")
+                    print(f"   📏 Response length: {len(generated_text)} chars")
+                    
+                    # Debug: Check response characteristics
+                    if len(generated_text) > 1000:
+                        print(f"   ⚠️  LONG RESPONSE: {len(generated_text)} chars")
+                    
+                    # Log if API call was unusually slow
+                    if api_call_duration > 30:
+                        print(f"   ⚠️  SLOW API CALL: {api_call_duration:.1f}s (threshold: 30s)")
+                        print(f"   🔍 Consider investigating this specific content pattern")
                 
                 if not generated_text:
                     raise OllamaEmptyResponseError("Model returned empty response")
                 
                 total_attempt_duration = time.time() - attempt_start
                 if self.verbose:
-                    print(f"🎯 Attempt {attempt + 1} succeeded in {total_attempt_duration:.2f}s")
+                    print(f"   🎯 Attempt {attempt + 1} succeeded in {total_attempt_duration:.2f}s")
                 
                 return generated_text
                 
@@ -292,36 +357,50 @@ class OllamaClient:
         
         return any(pattern in error_msg for pattern in retryable_patterns)
     
-    async def reset_model_context(self, model: str, keep_alive: str = "72h", timeout: float = ConfigDefaults.CONTEXT_RESET_TIMEOUT):
+    async def reset_model_context(self, model: str, keep_alive: str = "5m", timeout: float = ConfigDefaults.CONTEXT_RESET_TIMEOUT):
         """
-        Reset model context without unloading the model.
-        Sends a minimal request to clear conversation history while keeping model hot.
+        Reset model context by unloading and reloading the model.
+        This fully clears accumulated context to prevent slowdowns.
         
         Args:
             model: Model name to reset
-            keep_alive: How long to keep model loaded after reset
+            keep_alive: How long to keep model loaded after reset (default: 5m for batch processing)
             timeout: Maximum time to wait for context reset (default: from ConfigDefaults.CONTEXT_RESET_TIMEOUT)
         """
         if self.verbose:
-            print(f"🔄 Resetting context for model: {model}")
+            print(f"🔄 Fully unloading and reloading model: {model}")
         
         try:
-            # Wrap context reset with timeout to prevent hanging
+            # First, unload the model completely by setting keep_alive to 0
             await asyncio.wait_for(
                 self.client.generate(
                     model=model,
-                    prompt=".",  # Minimal input
-                    system="",   # Empty system prompt
-                    options={"num_predict": 1},  # Generate just 1 token
-                    keep_alive=keep_alive  # Keep model loaded
+                    prompt=".",
+                    options={"num_predict": 1},
+                    keep_alive="0"  # Unload immediately
                 ),
                 timeout=timeout
             )
+            
+            # Wait a moment for unload to complete
+            await asyncio.sleep(1)
+            
+            # Then reload with a fresh context
+            await asyncio.wait_for(
+                self.client.generate(
+                    model=model,
+                    prompt="Reset",
+                    options={"num_predict": 1},
+                    keep_alive=keep_alive  # Keep loaded for next batch of analyses (5 minutes default)
+                ),
+                timeout=timeout
+            )
+            
             if self.verbose:
-                print(f"✅ Context reset complete")
+                print(f"✅ Model fully reset and reloaded (keep_alive: {keep_alive})")
         except asyncio.TimeoutError:
             if self.verbose:
-                print(f"⚠️  Context reset timed out after {timeout}s - continuing anyway")
+                print(f"⚠️  Model reset timed out after {timeout}s - continuing anyway")
         except Exception as e:
             if self.verbose:
-                print(f"⚠️  Context reset failed: {e}")
+                print(f"⚠️  Model reset failed: {e}")

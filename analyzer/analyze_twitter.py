@@ -6,9 +6,9 @@ CLI functionality has been moved to analyzer.cli module.
 """
 
 import time
+import asyncio
 import warnings
 import logging
-import traceback
 from typing import List, Optional
 from datetime import datetime
 from .categories import Categories
@@ -17,6 +17,7 @@ from .metrics import MetricsCollector
 from .repository import ContentAnalysisRepository
 from .flow_manager import AnalysisFlowManager
 from .models import ContentAnalysis
+from .constants import ConfigDefaults
 from database import get_db_connection_context
 
 # Suppress warnings for cleaner output
@@ -298,12 +299,17 @@ async def reanalyze_tweet(tweet_id: str, verbose: bool = False, analyzer: Option
             print(f"      {i+1}. {url[:50]}...")
 
     # Reanalyze FIRST (before deleting old analysis)
-    analysis_result = await analyzer.analyze_content(
-        tweet_id=tweet_data['tweet_id'],
-        tweet_url=f"https://twitter.com/placeholder/status/{tweet_data['tweet_id']}",
-        username=tweet_data['username'],
-        content=analysis_content,
-        media_urls=media_urls
+    # Add overall timeout to prevent runaway analysis (same as CLI)
+    # Max: category(60s) + media(100s) + explanation(60s) + verification(100s) = 320s
+    analysis_result = await asyncio.wait_for(
+        analyzer.analyze_content(
+            tweet_id=tweet_data['tweet_id'],
+            tweet_url=f"https://twitter.com/placeholder/status/{tweet_data['tweet_id']}",
+            username=tweet_data['username'],
+            content=analysis_content,
+            media_urls=media_urls
+        ),
+        timeout=ConfigDefaults.ANALYSIS_TIMEOUT
     )
 
     # Preserve original tweet text in stored analysis for consistency with batch pipeline

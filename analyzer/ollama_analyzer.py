@@ -11,6 +11,7 @@ from typing import Tuple, Optional, List
 from .ollama_client import OllamaClient, OllamaRetryError
 from .categories import Categories
 from .prompts import EnhancedPromptGenerator
+from .constants import ConfigDefaults
 
 class OllamaAnalyzer:
     """
@@ -22,7 +23,7 @@ class OllamaAnalyzer:
     DEFAULT_TEMPERATURE_TEXT = 0.1 # Lower for faster convergence
     DEFAULT_TEMPERATURE_MULTIMODAL = 0.1
     DEFAULT_TOP_P = 0.8 # Slightly more focused for speed
-    DEFAULT_KEEP_ALIVE = "72h"
+    DEFAULT_KEEP_ALIVE = "5m"  # Keep model loaded for 5 minutes during active processing
     DEFAULT_NUM_CTX = 8192  # Limit context window to prevent unbounded growth
     DEFAULT_SEED = 42 # Fixed seed for deterministic responses
     # Token limits by response type
@@ -33,10 +34,10 @@ class OllamaAnalyzer:
     DEFAULT_MEDIA_TIMEOUT = 5.0
     DEFAULT_MAX_MEDIA_SIZE = 10 * 1024 * 1024  # 10MB
     MAX_MEDIA_ITEMS = 3  # Process up to 3 media files
-    # LLM operation timeouts
-    CATEGORY_TIMEOUT = 60.0  # Fast category detection
-    MEDIA_TIMEOUT = 120.0    # Media description (Gemma3 vision)
-    EXPLANATION_TIMEOUT = 120.0  # Explanation generation
+    # LLM operation timeouts - use constants from ConfigDefaults
+    CATEGORY_TIMEOUT = ConfigDefaults.CATEGORY_TIMEOUT
+    MEDIA_TIMEOUT = ConfigDefaults.MEDIA_TIMEOUT
+    EXPLANATION_TIMEOUT = ConfigDefaults.EXPLANATION_TIMEOUT
     
     def __init__(self, model: str = "gemma3:27b-it-q4_K_M", verbose: bool = False, fast_mode: bool = False):
         """

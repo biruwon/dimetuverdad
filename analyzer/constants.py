@@ -59,11 +59,16 @@ class ConfigDefaults:
     VERBOSE: Final[bool] = False
     MAX_RETRIES: Final[int] = 3
     RETRY_DELAY: Final[int] = 1
-    ANALYSIS_TIMEOUT: Final[float] = 300.0
+    # Timeout for individual stages
+    CATEGORY_TIMEOUT: Final[float] = 60.0  # Category detection
+    MEDIA_TIMEOUT: Final[float] = 100.0    # Media analysis
+    EXPLANATION_TIMEOUT: Final[float] = 60.0  # Explanation generation
+    VERIFICATION_TIMEOUT: Final[float] = 100.0  # Evidence verification
+    # Overall analysis timeout (sum of typical stages: category + media + explanation + verification)
+    ANALYSIS_TIMEOUT: Final[float] = 320.0  # 60 + 100 + 60 + 100 = 320s (5.3 minutes max per attempt)
     DATABASE_TIMEOUT: Final[float] = 30.0
     DOWNLOAD_TIMEOUT: Final[float] = 120.0
     REQUEST_TIMEOUT: Final[float] = 30.0
-    VERIFICATION_TIMEOUT: Final[float] = 120.0  # Overall verification timeout
     CONTEXT_RESET_TIMEOUT: Final[float] = 30.0  # Model context reset timeout
     MAX_CONCURRENCY: Final[int] = 1  # Sequential processing to avoid context accumulation in single model
     MAX_LLM_CONCURRENCY: Final[int] = 1  # Must be 1 for single-model setups to prevent context pollution
