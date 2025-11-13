@@ -258,8 +258,8 @@ htop  # Check CPU/memory usage
 
 **LLM Not Loading**:
 ```bash
-# Check Ollama service
-ollama serve
+# Check Ollama service with debug logging
+ollama serve --debug
 
 # Pull model again
 ollama pull gpt-oss:20b

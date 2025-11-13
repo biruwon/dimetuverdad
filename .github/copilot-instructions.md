@@ -321,7 +321,7 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 
 ### LLM Not Loading
 ```bash
-ollama serve  # Ensure service is running
+ollama serve --debug  # Run with debug logging for troubleshooting
 ollama pull gpt-oss:20b  # Re-download model if corrupted
 ```
 

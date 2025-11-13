@@ -60,8 +60,8 @@ Connection refused to Ollama
 
 **Solutions**:
 ```bash
-# Start Ollama service
-ollama serve
+# Start Ollama service with debug logging for troubleshooting
+ollama serve --debug
 
 # Check service status
 ollama ps
