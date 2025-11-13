@@ -166,172 +166,151 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
     """
     Strategy 1: Fetch latest tweets with proper stopping logic.
     Stops after finding 10 consecutive existing tweets in a row (latest mode).
-    
+
+    Uses the same extraction method as refetch/collector for consistent media handling,
+    but implements latest-mode logic at the application level.
+
     Args:
         page: Playwright page object
         username: Twitter username
         max_tweets: Maximum number of tweets to fetch
-        
+
     Returns:
         List of collected tweets
     """
     print(f"🎯 Fetching latest tweets for @{username} (max: {max_tweets})")
-    
+
     # Navigate to profile page
     url = f"https://x.com/{username}"
     print(f"🌐 Loading profile page: {url}")
     page.goto(url, wait_until="domcontentloaded", timeout=30000)
-    
+
     # Wait for tweets to load
     try:
         page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
     except TimeoutError:
         print(f"❌ No tweets found for @{username} or page failed to load")
         return []
-    
+
     scroller.delay(2.0, 4.0)
-    
+
     # Extract profile picture
     print(f"🖼️  Extracting profile picture for @{username}...")
     profile_pic_url = fetcher_parsers.extract_profile_picture(page, username)
-    
+
     # Initialize database connection
     conn = fetcher_db.init_db()
-    
+
     try:
         tweets_collected = []
         saved_count = 0
         consecutive_existing = 0
         scroll_count = 0
         max_consecutive_existing = config.max_consecutive_existing_tweets  # Use config value (10)
-        
+
         print(f"📊 Latest mode: will stop after {max_consecutive_existing} consecutive existing tweets")
-        
+
         while saved_count < max_tweets and consecutive_existing < max_consecutive_existing:
             scroll_count += 1
             tweets_saved_this_scroll = 0
-            
+
             # Get all tweet articles currently visible
             articles = page.query_selector_all('[data-testid="tweet"]')
-            
+
             for article in articles:
                 if saved_count >= max_tweets:
                     break
-                    
+
                 try:
                     # Extract basic tweet info
                     tweet_link = article.query_selector('a[href*="/status/"]')
                     if not tweet_link:
                         continue
-                        
+
                     href = tweet_link.get_attribute('href')
                     if not href:
                         continue
-                    
+
                     # Parse author and tweet_id from URL using shared utility
                     should_process, actual_author, tweet_id = fetcher_parsers.should_process_tweet_by_author(href, username)
-                    
+
                     if not should_process:
                         continue
-                    
-                    if not tweet_id:
-                        continue
-                    
+
                     # Check if we already processed this tweet in this session
                     if any(t.get('tweet_id') == tweet_id for t in tweets_collected):
                         continue
-                    
+
                     # Check if tweet exists in database (for latest mode stopping logic)
                     exists_in_db = fetcher_db.check_if_tweet_exists(username, tweet_id)
                     if exists_in_db:
                         print(f"  ⏭️ Existing tweet: {tweet_id}")
-                        continue  # Skip existing tweets but don't count toward consecutive existing
-                    
-                    # Extract content
-                    content = fetcher_parsers.extract_full_tweet_content(article)
-                    if not content:
-                        continue
-                    
-                    # Analyze post type
-                    post_analysis = fetcher_parsers.analyze_post_type(article, username)
+                        consecutive_existing += 1
+                        if consecutive_existing >= max_consecutive_existing:
+                            print(f"  🛑 Stopped: Found {max_consecutive_existing} consecutive existing tweets (latest mode)")
+                            return tweets_collected
+                        continue  # Skip existing tweets
+
+                    # Reset consecutive counter when we find a new tweet
+                    consecutive_existing = 0
+
                     tweet_url = f"https://x.com{href}"
-                    
-                    # Extract media information
-                    media_links, media_count, media_types = fetcher_parsers.extract_media_data(article)
-                    
-                    # Extract content elements (hashtags, mentions, links)
-                    content_elements = fetcher_parsers.extract_content_elements(article)
-                    
-                    # Build tweet data
-                    tweet_data = {
-                        'tweet_id': tweet_id,
-                        'username': actual_author,
-                        'content': content,
-                        'tweet_url': tweet_url,
-                        'tweet_timestamp': time_elem.get_attribute('datetime') if (time_elem := article.query_selector('time')) else None,
-                        'post_type': post_analysis['post_type'],
-                        'media_count': media_count,
-                        'media_links': ','.join(media_links) if media_links else None,
-                        'hashtags': content_elements.get('hashtags'),
-                        'mentions': content_elements.get('mentions'),
-                        'profile_pic_url': profile_pic_url,
-                        'engagement_likes': 0,
-                        'engagement_retweets': 0,
-                        'engagement_replies': 0,
-                        'engagement_views': 0,
-                        'is_repost': 1 if 'repost' in post_analysis['post_type'] else 0,
-                        'is_comment': 1 if post_analysis['post_type'] == 'repost_reply' else 0,
-                        'parent_tweet_id': post_analysis.get('reply_to_tweet_id') or post_analysis.get('original_tweet_id')
-                    }
-                    
-                    # Try to save tweet
+
+                    # Use the same sophisticated extraction as refetch/collector to prevent media cross-contamination
+                    tweet_data = fetcher_parsers.extract_tweet_with_media_monitoring(
+                        page, tweet_id, actual_author, tweet_url, media_monitor, scroller
+                    )
+
+                    if not tweet_data:
+                        continue
+
+                    # Add profile picture
+                    tweet_data['profile_pic_url'] = profile_pic_url
+
+                    # Save tweet immediately (no batching needed for latest mode)
                     saved = fetcher_db.save_tweet(conn, tweet_data)
                     if saved:
                         saved_count += 1
                         tweets_saved_this_scroll += 1
-                        consecutive_existing = 0  # Reset counter on new tweet
                         tweets_collected.append(tweet_data)
-                        print(f"  💾 Saved [{saved_count}] {post_analysis['post_type']}: {tweet_id}")
+                        print(f"  💾 Saved [{saved_count}] {tweet_data.get('post_type', 'unknown')}: {tweet_id}")
                     else:
-                        print(f"  ⏭️ Existing tweet: {tweet_id}")
-                    
+                        print(f"  ⏭️ Failed to save: {tweet_id}")
+
                 except Exception as e:
                     print(f"  ❌ Error processing tweet: {e}")
                     continue
-            
-            # Check consecutive existing logic for latest mode
-            if tweets_saved_this_scroll == 0:
-                consecutive_existing += 1
-                print(f"  📊 No new tweets saved this scroll ({consecutive_existing}/{max_consecutive_existing})")
-            else:
-                print(f"  ✅ Saved {tweets_saved_this_scroll} new tweets this scroll")
-                # Reset consecutive counter when we find new tweets
-                consecutive_existing = 0
-            
-            # Check if we should stop
+
+            # Check if we should stop scrolling
             if saved_count >= max_tweets:
                 print(f"  ✅ Completed: Reached target of {max_tweets} tweets")
                 break
-            elif consecutive_existing >= max_consecutive_existing:
-                print(f"  🛑 Stopped: Found {max_consecutive_existing} consecutive scrolls with no new tweets (latest mode)")
-                break
-            
-            # Scroll for more content
-            scroller.random_scroll_pattern(page, deep_scroll=False)
-            scroller.delay(1.0, 2.0)
-        
+
+            # If no new tweets were saved this scroll, increment consecutive counter
+            if tweets_saved_this_scroll == 0:
+                consecutive_existing += 1
+                print(f"  📊 No new tweets saved this scroll ({consecutive_existing}/{max_consecutive_existing})")
+                if consecutive_existing >= max_consecutive_existing:
+                    print(f"  🛑 Stopped: Found {max_consecutive_existing} consecutive scrolls with no new tweets (latest mode)")
+                    break
+            else:
+                print(f"  ✅ Saved {tweets_saved_this_scroll} new tweets this scroll")
+
+            # Scroll for more content if we haven't reached our limits
+            if saved_count < max_tweets and consecutive_existing < max_consecutive_existing:
+                scroller.random_scroll_pattern(page, deep_scroll=False)
+                scroller.delay(1.0, 2.0)
+
         print(f"📊 Latest tweets collection complete: {saved_count} new tweets saved")
-        
+
         # Update profile info
         fetcher_db.save_account_profile_info(conn, username, profile_pic_url)
         print(f"  💾 Updated profile info for @{username}")
-        
+
         return tweets_collected
-        
+
     finally:
         conn.close()
-
-
 def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bool = True) -> List[Dict]:
     """
     Tweet fetching with comprehensive post type detection and smart resume.

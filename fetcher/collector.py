@@ -321,8 +321,7 @@ class TweetCollector:
                     if consecutive_empty_scrolls % 5 == 0 and consecutive_empty_scrolls <= 10:
                         recovery_attempt = consecutive_empty_scrolls // 5
                         if self.scroller.try_recovery_strategies(page, recovery_attempt):
-                            consecutive_empty_scrolls = max(0, consecutive_empty_scrolls - 3)
-                            logger.info("Recovery successful, continuing...")
+                            logger.info("Recovery attempted - checking if it helped...")
                         else:
                             logger.warning("Recovery failed")
                 else:

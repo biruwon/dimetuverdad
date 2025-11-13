@@ -294,22 +294,33 @@ class TestFetchLatestTweets:
         with patch.object(fetcher_db, 'init_db') as mock_init_db, \
              patch.object(fetcher_db, 'check_if_tweet_exists') as mock_exists, \
              patch.object(fetcher_db, 'save_tweet') as mock_save, \
-             patch.object(fetcher_parsers, 'extract_full_tweet_content') as mock_extract_content, \
-             patch.object(fetcher_parsers, 'analyze_post_type') as mock_analyze, \
+             patch.object(fetcher_parsers, 'extract_tweet_with_media_monitoring') as mock_extract_media, \
              patch.object(fetcher_parsers, 'extract_profile_picture') as mock_extract_pic, \
-             patch.object(fetcher_parsers, 'extract_media_data') as mock_extract_media, \
-             patch.object(fetcher_parsers, 'extract_content_elements') as mock_extract_elements, \
              patch.object(fetcher_db, 'save_account_profile_info') as mock_save_profile:
             
             mock_conn = Mock()
             mock_init_db.return_value = mock_conn
             mock_exists.return_value = False  # Tweets don't exist yet
             mock_save.return_value = True  # Successfully saved
-            mock_extract_content.side_effect = ['new tweet', 'old tweet']
-            mock_analyze.return_value = {'post_type': 'original'}
+            mock_extract_media.side_effect = [
+                {
+                    'tweet_id': '1',
+                    'content': 'new tweet',
+                    'username': 'testuser',
+                    'tweet_url': 'https://x.com/testuser/status/1',
+                    'post_type': 'original',
+                    'tweet_timestamp': '2024-01-02T00:00:00Z'
+                },
+                {
+                    'tweet_id': '2', 
+                    'content': 'old tweet',
+                    'username': 'testuser',
+                    'tweet_url': 'https://x.com/testuser/status/2',
+                    'post_type': 'original',
+                    'tweet_timestamp': '2024-01-01T00:00:00Z'
+                }
+            ]
             mock_extract_pic.return_value = 'https://example.com/pic.jpg'
-            mock_extract_media.return_value = ([], 0, [])
-            mock_extract_elements.return_value = {'hashtags': [], 'mentions': []}
             
             result = fetch_tweets.fetch_latest_tweets(mock_page, 'testuser', 5)
             
