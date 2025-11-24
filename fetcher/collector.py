@@ -214,6 +214,21 @@ class TweetCollector:
             articles = page.query_selector_all('article[data-testid="tweet"], [data-testid="tweet"]')
             logger.debug(f"Found {len(articles)} tweet elements on page")
 
+            # Debug: collect tweet_ids found this cycle
+            found_ids = []
+            for article in articles:
+                try:
+                    tweet_link = article.query_selector('a[href*="/status/"]')
+                    if tweet_link:
+                        href = tweet_link.get_attribute('href')
+                        if href:
+                            should_process, actual_author, tweet_id = fetcher_parsers.should_process_tweet_by_author(href, username)
+                            if should_process:
+                                found_ids.append(tweet_id)
+                except Exception:
+                    pass
+            logger.debug(f"DEBUG: Found tweet IDs this cycle: {found_ids[:10]}... (total {len(found_ids)})")
+
             tweets_found_this_cycle = 0
 
             # Process each article
@@ -330,6 +345,9 @@ class TweetCollector:
 
                 iteration += 1
 
+                # Record article count before scrolling
+                prev_article_count = len(articles)
+
                 try:
                     # Use aggressive scrolling when needed
                     if consecutive_empty_scrolls > 5:
@@ -343,6 +361,16 @@ class TweetCollector:
                     except Exception:
                         logger.error("All scrolling methods failed")
                         consecutive_empty_scrolls += 2
+
+                # Wait for new tweets to load after scrolling
+                try:
+                    logger.debug(f"Waiting for more tweets to load (was {prev_article_count})...")
+                    page.wait_for_function(f"document.querySelectorAll('article[data-testid=\"tweet\"]').length > {prev_article_count}", timeout=20000)
+                    new_count = page.evaluate("document.querySelectorAll('article[data-testid=\"tweet\"]').length")
+                    logger.debug(f"New tweets loaded: now {new_count} articles")
+                except Exception:
+                    new_count = page.evaluate("document.querySelectorAll('article[data-testid=\"tweet\"]').length")
+                    logger.debug(f"Timeout waiting for new tweets, continuing with {new_count} articles...")
 
                 # Check page height
                 try:

@@ -79,11 +79,11 @@ class Scroller:
             iteration: Current iteration number
         """
         scroll_patterns = [
-            lambda: page.evaluate("window.scrollBy(0, 800 + Math.random() * 600)"),  # Normal scroll
-            lambda: page.keyboard.press('PageDown'),  # Keyboard scroll
-            lambda: page.evaluate("window.scrollBy(0, 1200 + Math.random() * 800)"),  # Larger scroll
-            lambda: page.evaluate("window.scrollBy(0, 400 + Math.random() * 300)"),  # Smaller scroll
-            lambda: page.evaluate("window.scrollTo(0, window.scrollY + 1000)"),  # Absolute positioning
+            lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)"),  # Scroll to bottom
+            lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)"),  # Scroll to bottom
+            lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)"),  # Scroll to bottom
+            lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)"),  # Scroll to bottom
+            lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)"),  # Scroll to bottom
         ]
 
         try:

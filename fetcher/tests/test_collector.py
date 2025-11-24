@@ -513,7 +513,7 @@ class TestTweetCollector:
 
         # Should still complete despite scrolling failures
         assert isinstance(result, list)
-        mock_page.evaluate.assert_called_with("window.scrollBy(0, 1000)")
+        mock_page.evaluate.assert_any_call("window.scrollBy(0, 1000)")
 
     def test_get_collector(self):
         """Test get_collector function returns TweetCollector instance."""

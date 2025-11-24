@@ -597,3 +597,30 @@ def test_engagement_metrics_and_profile_picture():
     pic = parsers.extract_profile_picture(page, 'user')
     assert pic is not None
     assert '400x400' in pic or 'profile_images' in pic
+
+
+def test_find_and_extract_quoted_tweet_scroll_position_handling():
+    """Test that scroll position is saved during quoted tweet extraction."""
+    from unittest.mock import Mock
+
+    # Mock page with scroll position methods
+    mock_page = Mock()
+    mock_page.url = "https://x.com/user/status/123"
+    mock_page.evaluate.return_value = 100  # scrollY returns 100
+    mock_page.query_selector_all.return_value = []
+
+    # Mock main article
+    mock_main_article = Mock()
+    mock_main_article.query_selector_all.return_value = []
+
+    # Mock post analysis
+    post_analysis = {'tweet_id': '123'}
+
+    # Call the function (will fail but should save scroll position)
+    try:
+        parsers.find_and_extract_quoted_tweet(mock_page, mock_main_article, post_analysis)
+    except:
+        pass  # Expected to fail with mocks
+
+    # Verify scroll position was saved
+    mock_page.evaluate.assert_called_with("window.scrollY")
