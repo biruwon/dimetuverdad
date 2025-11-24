@@ -2,7 +2,7 @@
 
 ## ⚠️ CRITICAL TESTING REQUIREMENT ⚠️
 
-**MANDATORY**: EVERY code change MUST be tested IMMEDIATELY. No exceptions. See "MANDATORY Testing Workflow" section below for enforcement details.
+**MANDATORY**: Every completed feature/fix MUST be tested immediately after it’s finished. No exceptions. See "MANDATORY Testing Workflow" section below for enforcement details.
 
 **NEW FEATURES REQUIRE TESTS**: When adding new features, refactoring code, or deleting functionality, corresponding unit tests MUST be updated or added IMMEDIATELY. No feature is complete without proper test coverage.
 
@@ -271,19 +271,19 @@ python quick_test.py --llm "Complex content requiring deep analysis"
 
 ### MANDATORY Testing Workflow for Code Changes
 
-**ABSOLUTE REQUIREMENT**: ALL code changes MUST be tested IMMEDIATELY. No exceptions. See "MANDATORY Testing Workflow" section below for enforcement details.
+**ABSOLUTE REQUIREMENT**: Run the relevant tests as soon as a cohesive feature/fix or bug patch is complete. The goal is to validate meaningful change sets—not every single keystroke.
 
 **NEW FEATURES REQUIRE TESTS**: Every new feature, endpoint, function, or significant code change MUST include comprehensive tests before the feature is considered complete. No new functionality may be added without corresponding test coverage.
 
 **DOCUMENTATION CHANGES**: Documentation updates (.md files, comments, README files) do NOT require testing. Only run tests for actual code changes.
 
-**IMMEDIATE TESTING RULE**:
-- **EVERY CODE CHANGE** triggers immediate testing requirement
+**TESTING RULE**:
+- **EVERY COMPLETED CHANGE SET** triggers an immediate test run
 - **NO EXCEPTIONS**: Functions, refactors, bug fixes, new features, config changes
 - **NEW FEATURES**: Must include tests as part of the implementation - features without tests are incomplete
-- **IMMEDIATE**: Test right after the change, not later, not at the end of session
-- **BLOCKING**: Cannot continue to other work until tests pass
-- **COPILOT VIOLATION**: Failing to test immediately after code changes is a critical workflow violation
+- **TIMELY**: Test right after finishing the change set, not after unrelated work
+- **BLOCKING**: Do not start a new task until tests for the previous one pass
+- **COPILOT VIOLATION**: Skipping tests for a finished feature/fix is a critical workflow violation
 
 ## Performance Considerations
 
