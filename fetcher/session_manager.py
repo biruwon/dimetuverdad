@@ -4,6 +4,7 @@ Browser session management for the fetcher module.
 Handles browser setup, context creation, session persistence, login operations, and cleanup.
 """
 
+import json
 import os
 import random
 import time
@@ -26,6 +27,53 @@ class SessionManager:
         self.config = get_config()
         self.session_file = Path("x_session.json")
         self.scroller = Scroller()
+
+    def has_valid_session(self) -> bool:
+        """
+        Check if we have a valid session file with cookies.
+        
+        Returns:
+            bool: True if session file exists and has cookies, False otherwise
+        """
+        if not self.session_file.exists():
+            return False
+        
+        try:
+            with open(self.session_file, 'r') as f:
+                session_data = json.load(f)
+                cookies = session_data.get('cookies', [])
+                # Check for Twitter auth cookies
+                auth_cookies = [c for c in cookies if c.get('name') in ('auth_token', 'ct0', 'twid')]
+                return len(auth_cookies) >= 2  # Need at least auth_token and ct0
+        except (json.JSONDecodeError, IOError):
+            return False
+
+    def ensure_logged_in(self, page) -> bool:
+        """
+        Ensure the user is logged in. If not, trigger the login flow.
+        
+        Args:
+            page: Playwright page object
+            
+        Returns:
+            bool: True if logged in (or login succeeded), False otherwise
+        """
+        # First check if we have a valid session file
+        if self.has_valid_session():
+            logger.info("Valid session found in session file")
+            return True
+        
+        # No valid session - need to login
+        print("🔐 No valid session found - login required")
+        
+        cfg = self.config
+        if not cfg.username or not cfg.password:
+            print("❌ No credentials found in config. Set X_USERNAME and X_PASSWORD in .env")
+            return False
+        
+        # Perform login
+        success = self.login_and_save_session(page, cfg.username, cfg.password)
+        return success
 
     def login_and_save_session(self, page, username: str, password: str) -> bool:
         """
@@ -64,7 +112,34 @@ class SessionManager:
                 time.sleep(random.uniform(0.05, 0.15))
             
             self.scroller.delay(0.5, 1.5)
-            page.click('div[data-testid="LoginForm_Login_Button"], div[role="button"]:has-text("Siguiente"), button:has-text("Next")')
+            
+            # Click Next button - try multiple selectors
+            next_clicked = False
+            next_selectors = [
+                'button[type="button"]:has-text("Next")',
+                'button[type="button"]:has-text("Siguiente")', 
+                'div[role="button"]:has-text("Next")',
+                'div[role="button"]:has-text("Siguiente")',
+                '[data-testid="LoginForm_Login_Button"]',
+                'button:has-text("Next")',
+                'button:has-text("Siguiente")',
+            ]
+            for selector in next_selectors:
+                try:
+                    btn = page.locator(selector).first
+                    if btn.is_visible(timeout=1000):
+                        btn.click()
+                        next_clicked = True
+                        print(f"✅ Clicked Next with selector: {selector}")
+                        break
+                except Exception:
+                    continue
+            
+            if not next_clicked:
+                # Fallback: press Enter
+                print("⚠️ Next button not found, pressing Enter...")
+                username_field.press("Enter")
+            
             self.scroller.delay(2.0, 4.0)
             
         except TimeoutError:
@@ -81,11 +156,14 @@ class SessionManager:
                 confirmation_field.fill(self.config.email_or_phone or username)
             else:
                 print("🔄 Confirming username...")
-                username_field = page.locator('input[name="text"]') 
-                username_field.fill(username)
+                text_field = page.locator('input[name="text"]') 
+                text_field.fill(username)
             
             self.scroller.delay(1.0, 2.0)
-            page.click('div[data-testid="LoginForm_Login_Button"], div[role="button"]:has-text("Siguiente"), button:has-text("Next")')
+            
+            # Click Next - try Enter as primary method
+            text_field = page.locator('input[name="text"]')
+            text_field.press("Enter")
             self.scroller.delay(2.0, 4.0)
             
         except TimeoutError:
@@ -102,21 +180,57 @@ class SessionManager:
                 time.sleep(random.uniform(0.05, 0.12))
             
             self.scroller.delay(0.5, 1.5)
-            page.click('div[data-testid="LoginForm_Login_Button"], button:has-text("Iniciar sesión"), button:has-text("Log in")')
+            
+            # Click Log in button - try multiple selectors
+            login_clicked = False
+            login_selectors = [
+                '[data-testid="LoginForm_Login_Button"]',
+                'button[type="button"]:has-text("Log in")',
+                'button[type="button"]:has-text("Iniciar sesión")',
+                'div[role="button"]:has-text("Log in")',
+                'div[role="button"]:has-text("Iniciar sesión")',
+                'button:has-text("Log in")',
+                'button:has-text("Iniciar sesión")',
+            ]
+            for selector in login_selectors:
+                try:
+                    btn = page.locator(selector).first
+                    if btn.is_visible(timeout=1000):
+                        btn.click()
+                        login_clicked = True
+                        print(f"✅ Clicked Login with selector: {selector}")
+                        break
+                except Exception:
+                    continue
+            
+            if not login_clicked:
+                # Fallback: press Enter
+                print("⚠️ Login button not found, pressing Enter...")
+                password_field.press("Enter")
+            
             self.scroller.delay(3.0, 6.0)
             
         except TimeoutError:
             print("⚠️ Password field not found")
 
-        # Verify login success
+        # Verify login success - first try quick check
         try:
             page.wait_for_url("https://x.com/home", timeout=15000)
             print("✅ Login successful!")
             self.scroller.delay(2.0, 4.0)
             return True
         except TimeoutError:
-            print("❌ Login verification failed - check for CAPTCHA or 2FA")
-            return False
+            # Give user time to complete CAPTCHA/2FA manually
+            print("⚠️ Automated login needs help - please complete CAPTCHA/2FA in the browser window...")
+            print("⏳ Waiting up to 120 seconds for manual completion...")
+            try:
+                page.wait_for_url("https://x.com/home", timeout=120000)
+                print("✅ Login successful (manual completion)!")
+                self.scroller.delay(2.0, 4.0)
+                return True
+            except TimeoutError:
+                print("❌ Login verification failed - timeout waiting for login completion")
+                return False
 
     def create_browser_context(
         self,
@@ -134,10 +248,16 @@ class SessionManager:
             Tuple of (browser, context, page)
         """
 
-        # Launch browser
+        # Launch browser - use real Chrome to avoid automation detection
         browser = playwright_instance.chromium.launch(
+            channel="chrome",  # Use installed Chrome instead of Chromium
             headless=self.config.headless,
-            slow_mo=self.config.slow_mo
+            slow_mo=self.config.slow_mo,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-automation",
+                "--no-sandbox",
+            ]
         )
 
         # Select random user agent
@@ -150,8 +270,8 @@ class SessionManager:
                 "width": self.config.viewport_width,
                 "height": self.config.viewport_height
             },
-            "locale": "en-US",
-            "timezone_id": "America/New_York",
+            "locale": "es-ES",
+            "timezone_id": "Europe/Madrid",
             "color_scheme": "light",
             "java_script_enabled": True,
         }
@@ -163,6 +283,13 @@ class SessionManager:
         # Create context and page
         context = browser.new_context(**context_kwargs)
         page = context.new_page()
+        
+        # Remove webdriver property to avoid detection
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)
 
         # Save session state if requested
         if save_session:

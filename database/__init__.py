@@ -12,7 +12,8 @@ from .database import (
     create_fresh_database_schema,
     DatabaseConfig,
     get_tweet_data,
-    cleanup_test_databases
+    cleanup_test_databases,
+    ensure_schema_up_to_date,
 )
 
 # Re-export repository interfaces and factory

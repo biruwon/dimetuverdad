@@ -28,6 +28,8 @@ def mock_config():
 def mock_page():
     """Mock Playwright page object."""
     page = Mock()
+    # Set url as a property (string) so 'in' operator works
+    page.url = "https://x.com/testuser"
     return page
 
 
@@ -262,7 +264,7 @@ class TestTweetCollector:
         assert result['engagement_likes'] == 20
         mock_extract_tweet.assert_called_once_with(
             mock_page, '123456789', 'testuser', 'https://x.com/testuser/status/123456789',
-            collector.media_monitor, collector.scroller
+            collector.media_monitor, collector.scroller, mock_article
         )
 
     @patch('fetcher.collector.fetcher_parsers.extract_engagement_metrics')

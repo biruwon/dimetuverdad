@@ -43,32 +43,32 @@ class Scroller:
             page: Playwright page object
             deep_scroll: Whether to use aggressive scrolling for older content
         """
+        # Use conservative scroll amounts to avoid large jumps that skip visible tweets
         if deep_scroll:
-            # Extra aggressive scrolling for finding much older content
+            # Slightly larger steps for deep scroll but still conservative
             scroll_amounts = [
-                1500 + random.randint(0, 500),   # 1500-2000px
-                2000 + random.randint(0, 800),   # 2000-2800px
-                1200 + random.randint(0, 600),   # 1200-1800px
-                2500 + random.randint(0, 1000)   # 2500-3500px
+                900 + random.randint(0, 200),   # 900-1100px
+                1200 + random.randint(0, 300),  # 1200-1500px
+                800 + random.randint(0, 200),   # 800-1000px
             ]
         else:
-            # More aggressive scroll amounts for finding older content
+            # Gentle scroll amounts for normal operation
             scroll_amounts = [
-                800 + random.randint(0, 400),    # 800-1200px
-                1000 + random.randint(0, 500),   # 1000-1500px
-                600 + random.randint(0, 300),    # 600-900px
-                1200 + random.randint(0, 600)    # 1200-1800px
+                400 + random.randint(0, 200),   # 400-600px
+                600 + random.randint(0, 200),   # 600-800px
+                800 + random.randint(0, 200),   # 800-1000px
             ]
 
+        # Perform a small incremental scroll instead of jumping to the bottom
         scroll_js = f"window.scrollBy(0, {random.choice(scroll_amounts)})"
         page.evaluate(scroll_js)
 
-        # Sometimes scroll back up slightly (human behavior) - reduced frequency
-        if random.random() < 0.05:  # 5% chance
-            back_scroll = 100 + random.randint(0, 150)
+        # Slight upward adjustment occasionally to mimic natural browsing
+        if random.random() < 0.08:  # 8% chance
+            back_scroll = 50 + random.randint(0, 100)
             page.evaluate(f"window.scrollBy(0, -{back_scroll})")
 
-        self.delay(1.5, 4.0)
+        self.delay(1.0, 2.5)
 
     def event_scroll_cycle(self, page, iteration: int) -> None:
         """
@@ -78,12 +78,13 @@ class Scroller:
             page: Playwright page object
             iteration: Current iteration number
         """
+        # Use conservative incremental scrolls to avoid overshooting
         scroll_patterns = [
-            lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)"),  # Scroll to bottom
-            lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)"),  # Scroll to bottom
-            lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)"),  # Scroll to bottom
-            lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)"),  # Scroll to bottom
-            lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)"),  # Scroll to bottom
+            lambda: page.evaluate("window.scrollBy(0, 600 + Math.random() * 200)"),
+            lambda: page.evaluate("window.scrollBy(0, 450 + Math.random() * 200)"),
+            lambda: page.evaluate("window.scrollBy(0, 700 + Math.random() * 200)"),
+            lambda: page.evaluate("window.scrollBy(0, 500 + Math.random() * 200)"),
+            lambda: page.evaluate("window.scrollBy(0, 550 + Math.random() * 250)"),
         ]
 
         try:
@@ -91,17 +92,17 @@ class Scroller:
             pattern_index = iteration % len(scroll_patterns)
             scroll_patterns[pattern_index]()
         except Exception:
-            # Fallback to basic scroll
+            # Fallback to basic small scroll
             try:
-                page.evaluate("window.scrollBy(0, 800 + Math.random() * 400)")
+                page.evaluate("window.scrollBy(0, 500 + Math.random() * 200)")
             except Exception:
                 pass
 
         # Variable delays to seem more human
         if iteration % 10 == 0:
-            self.delay(2.0, 4.0)  # Longer pause occasionally
+            self.delay(2.0, 3.0)  # Longer pause occasionally
         else:
-            self.delay(0.8, 2.2)
+            self.delay(0.8, 1.8)
 
     def try_recovery_strategies(self, page, attempt_number: int) -> bool:
         """
@@ -114,18 +115,21 @@ class Scroller:
         Returns:
             bool: True if recovery successful
         """
+        # Safer recovery strategies: try non-disruptive actions first
         strategies = [
-            ("refresh_page", lambda: page.reload(wait_until="domcontentloaded")),
+            ("click_retry_button", lambda: (lambda: (page.locator('button:has-text("Retry")').click() if page.locator('button:has-text("Retry")') else None))()),
             ("clear_cache", lambda: page.evaluate("localStorage.clear(); sessionStorage.clear();")),
-            ("jump_to_bottom", lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight)")),
+            ("small_random_scroll", lambda: page.evaluate(f"window.scrollBy(0, {200 + random.randint(200, 400)})")),
+            ("jump_to_middle", lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight/2)")),
+            ("refresh_page", lambda: page.reload(wait_until="domcontentloaded")),
             ("force_reload_tweets", lambda: page.evaluate("window.location.reload(true)")),
-            ("random_scroll_pattern", lambda: page.evaluate(f"window.scrollBy(0, {1000 + random.randint(500, 2000)})")),
         ]
 
         if attempt_number <= len(strategies):
             strategy_name, strategy_func = strategies[attempt_number - 1]
             try:
                 logger.info(f"Trying recovery strategy {attempt_number}: {strategy_name}")
+                # Some strategies are lambdas that perform actions immediately
                 strategy_func()
                 self.delay(self.config.recovery_delay_min, self.config.recovery_delay_max)
 
@@ -183,21 +187,21 @@ class Scroller:
             page: Playwright page object
             consecutive_empty_scrolls: Number of consecutive empty scrolls
         """
-        # Increase scroll amount based on consecutive failures
-        base_scroll = 1500
-        multiplier = min(consecutive_empty_scrolls, 5)  # Cap at 5x
+        # Increase scroll amount cautiously based on consecutive failures
+        base_scroll = 800
+        multiplier = min(consecutive_empty_scrolls, 3)  # Cap at 3x
         scroll_amount = base_scroll * multiplier
 
         try:
-            # Try multiple aggressive scrolls
-            for _ in range(3):
+            # Try a couple of moderate aggressive scrolls
+            for _ in range(2):
                 page.evaluate(f"window.scrollBy(0, {scroll_amount})")
-                # Use shorter delays in aggressive mode
-                self.delay(0.1, 0.2)
+                # Use slightly longer delays to let content load
+                self.delay(0.2, 0.5)
         except Exception:
             # Fallback to basic scroll
             try:
-                page.evaluate("window.scrollBy(0, 2000)")
+                page.evaluate("window.scrollBy(0, 1000)")
             except Exception:
                 pass
 

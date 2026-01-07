@@ -49,6 +49,13 @@ class FetcherConfig:
     max_session_retries: int = 5
     max_sessions: int = 10
 
+    # Thread detection tuning
+    thread_detect_interval: int = 5  # number of scroll cycles between inline thread detection
+
+    # Feature flags
+    # Toggle thread collection (set to True to enable thread detection & collection)
+    collect_threads: bool = os.getenv("FETCHER_COLLECT_THREADS", "false").lower() in ("1","true","yes")
+
     # Session management
     session_size: int = 800
     large_collection_threshold: int = 800

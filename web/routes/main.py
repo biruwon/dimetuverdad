@@ -9,7 +9,7 @@ from web.utils.decorators import rate_limit, handle_db_errors, validate_input
 from web.utils.helpers import (
     get_all_accounts, get_user_profile_data,
     get_user_tweets_data, get_user_analysis_stats,
-    prepare_user_page_template_data
+    prepare_user_page_template_data, get_thread_tweets
 )
 import config
 
@@ -134,5 +134,52 @@ def user_page(username: str) -> str:
                              error_code=500,
                              error_title="Error interno del servidor",
                              error_message="Ocurrió un error al cargar los detalles del usuario.",
+                             error_icon="fas fa-exclamation-triangle",
+                             show_back_button=True), 500
+
+
+@main_bp.route('/thread/<username>/<thread_id>')
+@handle_db_errors
+@validate_input('username')
+@rate_limit(**config.get_rate_limit('user_pages'))
+def thread_page(username: str, thread_id: str) -> str:
+    """Thread detail page showing all tweets in a thread."""
+    try:
+        # Get user profile data
+        user_profile_data = get_user_profile_data(username)
+        if not user_profile_data:
+            return render_template('error.html',
+                                 error_code=404,
+                                 error_title="Usuario no encontrado",
+                                 error_message="El usuario solicitado no existe en la base de datos.",
+                                 error_icon="fas fa-user-times",
+                                 show_back_button=True), 404
+
+        user_profile_pic = user_profile_data['profile_pic_url']
+
+        # Get thread tweets
+        thread_tweets = get_thread_tweets(thread_id, username)
+        
+        if not thread_tweets:
+            return render_template('error.html',
+                                 error_code=404,
+                                 error_title="Hilo no encontrado",
+                                 error_message="El hilo solicitado no existe o no pertenece a este usuario.",
+                                 error_icon="fas fa-stream",
+                                 show_back_button=True), 404
+
+        return render_template('thread.html',
+                             username=username,
+                             user_profile_pic=user_profile_pic,
+                             thread_id=thread_id,
+                             tweets=thread_tweets,
+                             tweet_count=len(thread_tweets))
+
+    except Exception as e:
+        current_app.logger.error(f"Error in thread_page for {username}/{thread_id}: {str(e)}")
+        return render_template('error.html',
+                             error_code=500,
+                             error_title="Error interno del servidor",
+                             error_message="Ocurrió un error al cargar el hilo.",
                              error_icon="fas fa-exclamation-triangle",
                              show_back_button=True), 500

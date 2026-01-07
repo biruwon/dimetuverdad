@@ -36,8 +36,7 @@ Purpose: help AI agents be productive in this repo by summarizing architecture, 
   - Always run project tasks via `./run_in_venv.sh` (do not manually activate venv or run raw scripts in most cases).
   - Use `from database import get_db_connection()`; DB rows use `sqlite3.Row` and must be accessed by name (`row['column']`).
   - Do not add post-specific content into `analyzer/prompts.py` — prompts must remain generalized.
-  - Test discipline: run tests immediately after completing feature/fix. Test files live under `analyzer/tests`, `fetcher/tests`, and `tests/`.
-
+  - Test discipline: run tests immediately after completing feature/fix. Test files live under `analyzer/tests`, `fetcher/tests`, and `tests/`.  - **Testing convention**: Add or update unit tests in the existing test file for the component you modified (e.g., put tests for changes in `fetcher/thread_detector.py` into `fetcher/tests/test_thread_detector.py`). Avoid creating new test files unless you're adding tests for a brand-new module or a clearly separate test suite.
 - Integration notes and external deps:
   - Local LLM: Ollama (see `analyzer/ollama_client.py`) — preloading improves latency.
   - External LLM: Gemini (multimodal) via `analyzer/gemini_analyzer.py` / `analyzer/gemini_client.py`.

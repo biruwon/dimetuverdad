@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hilo de @{{ username }} - dimetuverdad</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Twitter Widgets -->
+    <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --dark-color: #34495e;
+            --thread-color: #9c27b0;
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            color: var(--primary-color) !important;
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+            transition: transform 0.2s ease-in-out;
+            margin-bottom: 1.5rem;
+        }
+        
+        .tweet-card {
+            border-left: 4px solid #1da1f2;
+            background: #fafafa;
+        }
+        
+        /* Thread connector line */
+        .thread-connector {
+            position: relative;
+        }
+        
+        .thread-connector::before {
+            content: '';
+            position: absolute;
+            left: 30px;
+            top: -1rem;
+            bottom: 100%;
+            width: 2px;
+            background: var(--thread-color);
+        }
+        
+        .thread-connector:first-child::before {
+            display: none;
+        }
+        
+        .thread-position-badge {
+            background-color: var(--thread-color);
+            color: white;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 50%;
+            min-width: 24px;
+            text-align: center;
+        }
+        
+        .thread-header {
+            background: linear-gradient(135deg, var(--thread-color), #7b1fa2);
+            color: white;
+            border-radius: 0.5rem;
+        }
+        
+        /* Category badge colors */
+        .category-badge {
+            font-size: 0.875rem;
+            padding: 0.375rem 0.75rem;
+            border-radius: 20px;
+        }
+        
+        .category-hate_speech { background-color: #dc3545; }
+        .category-disinformation { background-color: #fd7e14; }
+        .category-conspiracy_theory { background-color: #6f42c1; }
+        .category-anti_immigration { background-color: #dc3545; }
+        .category-anti_lgbtq { background-color: #dc3545; }
+        .category-anti_feminism { background-color: #dc3545; }
+        .category-nationalism { background-color: #007bff; }
+        .category-anti_government { background-color: #007bff; }
+        .category-historical_revisionism { background-color: #343a40; }
+        .category-political_general { background-color: #17a2b8; }
+        .category-call_to_action { background-color: #20c997; }
+        .category-general { background-color: #6c757d; }
+        
+        /* Tweet card analysis coloring */
+        .tweet-card.analysis-hate_speech { border-left-color: #dc3545; }
+        .tweet-card.analysis-disinformation { border-left-color: #fd7e14; }
+        .tweet-card.analysis-conspiracy_theory { border-left-color: #6f42c1; }
+        .tweet-card.analysis-anti_immigration { border-left-color: #dc3545; }
+        .tweet-card.analysis-anti_lgbtq { border-left-color: #dc3545; }
+        .tweet-card.analysis-anti_feminism { border-left-color: #dc3545; }
+        .tweet-card.analysis-nationalism { border-left-color: #007bff; }
+        .tweet-card.analysis-anti_government { border-left-color: #007bff; }
+        .tweet-card.analysis-historical_revisionism { border-left-color: #343a40; }
+        .tweet-card.analysis-political_general { border-left-color: #17a2b8; }
+        .tweet-card.analysis-call_to_action { border-left-color: #20c997; }
+        .tweet-card.analysis-general { border-left-color: #6c757d; }
+
+        @media (max-width: 768px) {
+            .thread-connector::before {
+                left: 20px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-search-dollar me-2"></i>
+                dimetuverdad
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <i class="fas fa-home me-1"></i>Inicio
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/user/{{ username }}">
+                            <i class="fas fa-user me-1"></i>@{{ username }}
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <!-- Thread Header -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card thread-header">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            {% if user_profile_pic %}
+                            <img src="{{ user_profile_pic }}" 
+                                 alt="@{{ username }}" 
+                                 class="rounded-circle me-3" 
+                                 width="60" 
+                                 height="60"
+                                 style="object-fit: cover; border: 2px solid white;">
+                            {% endif %}
+                            <div>
+                                <h1 class="h4 mb-1">
+                                    <i class="fas fa-stream me-2"></i>
+                                    Hilo de @{{ username }}
+                                </h1>
+                                <p class="mb-0 opacity-75">
+                                    <i class="fas fa-list-ol me-1"></i>
+                                    {{ tweet_count }} tweets en este hilo
+                                </p>
+                            </div>
+                            <div class="ms-auto">
+                                <a href="/user/{{ username }}" class="btn btn-light">
+                                    <i class="fas fa-arrow-left me-1"></i>
+                                    Volver al perfil
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Thread Tweets -->
+        <div class="row">
+            <div class="col-12">
+                {% for tweet in tweets %}
+                <div class="thread-connector mb-4">
+                    <div class="d-flex align-items-start">
+                        <!-- Thread position indicator -->
+                        <div class="me-3 d-flex flex-column align-items-center">
+                            <span class="thread-position-badge">{{ loop.index }}</span>
+                        </div>
+                        
+                        <!-- Tweet content -->
+                        <div class="flex-grow-1">
+                            {% from 'components/tweet_display.html' import render_tweet_display %}
+                            {{ render_tweet_display(tweet, show_admin_controls=session.admin_authenticated, referrer=request.url, tweet_id=tweet.tweet_id) }}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Back to profile -->
+        <div class="row mt-4">
+            <div class="col-12 text-center">
+                <a href="/user/{{ username }}" class="btn btn-outline-primary">
+                    <i class="fas fa-arrow-left me-2"></i>
+                    Volver al perfil de @{{ username }}
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-4 mt-5">
+        <div class="container text-center">
+            <p class="mb-0">
+                <i class="fas fa-search-dollar me-2"></i>
+                dimetuverdad - Análisis de Contenido Político
+            </p>
+        </div>
+    </footer>
+</body>
+</html>

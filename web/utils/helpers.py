@@ -446,19 +446,65 @@ def get_user_profile_data(username: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def get_thread_tweets(thread_id: str, username: str) -> list:
+    """Get all tweets in a thread, ordered by thread_position."""
+    from database import get_db_connection_context
+    
+    with get_db_connection_context() as conn:
+        # Get all tweets in the thread
+        rows = conn.execute("""
+            SELECT t.*, ca.category as analysis_category, 
+                   ca.local_explanation, ca.external_explanation,
+                   ca.analysis_stages, ca.external_analysis_used,
+                   ca.analysis_timestamp, ca.categories_detected,
+                   ca.verification_data, ca.verification_confidence
+            FROM tweets t
+            LEFT JOIN content_analyses ca ON t.tweet_id = ca.post_id
+            WHERE t.thread_id = ? AND t.username = ?
+            ORDER BY t.thread_position ASC, t.tweet_timestamp ASC
+        """, (thread_id, username)).fetchall()
+        
+        if not rows:
+            return []
+        
+        # Process each tweet for display
+        tweets = []
+        for row in rows:
+            tweet_dict = dict(row)
+            # Add display fields
+            tweet_dict['is_thread_start'] = False
+            tweet_dict['thread_tweet_count'] = 0
+            tweets.append(process_tweet_row(tweet_dict))
+        
+        return tweets
+
+
 def get_user_tweets_data(username: str, page: int, per_page: int,
                         category_filter: Optional[str], post_type_filter: Optional[str],
                         total_tweets_all: int, date_from: Optional[str] = None, date_to: Optional[str] = None) -> Dict[str, Any]:
-    """Get paginated tweets data with filtering."""
+    """Get paginated tweets data with filtering. Groups thread tweets to only show thread starts."""
     tweet_repo = get_tweet_repository()
     content_analysis_repo = get_content_analysis_repository()
 
     # Get all tweets for the user first (we'll filter in memory for now)
     all_tweets = tweet_repo.get_tweets_by_username(username)
 
+    # Build thread info: count tweets per thread_id
+    thread_counts = {}
+    for tweet in all_tweets:
+        thread_id = tweet.get('thread_id')
+        if thread_id:
+            thread_counts[thread_id] = thread_counts.get(thread_id, 0) + 1
+
     # Apply filters
     filtered_tweets = []
     for tweet in all_tweets:
+        # Skip non-start thread members - only show thread start tweet
+        thread_id = tweet.get('thread_id')
+        thread_position = tweet.get('thread_position', 0) or 0
+        if thread_id and thread_position > 0:
+            # This is a thread continuation, skip it (will be shown on thread page)
+            continue
         # Get analysis for this tweet
         analysis = content_analysis_repo.get_analysis_by_post_id(tweet['tweet_id'])
 
@@ -507,6 +553,15 @@ def get_user_tweets_data(username: str, page: int, per_page: int,
                 'verification_data': None,
                 'verification_confidence': 0.0
             })
+
+        # Add thread metadata
+        thread_id = tweet.get('thread_id')
+        if thread_id and thread_id in thread_counts:
+            tweet_with_analysis['is_thread_start'] = True
+            tweet_with_analysis['thread_tweet_count'] = thread_counts[thread_id]
+        else:
+            tweet_with_analysis['is_thread_start'] = False
+            tweet_with_analysis['thread_tweet_count'] = 0
 
         filtered_tweets.append(tweet_with_analysis)
 
@@ -601,6 +656,12 @@ def process_tweet_row(row) -> Dict[str, Any]:
     tweet['analysis_display'] = best_explanation
     tweet['category'] = tweet['analysis_category'] or 'general'
     tweet['has_multiple_categories'] = len(categories_detected) > 1
+
+    # Thread info
+    tweet['is_thread_start'] = row.get('is_thread_start', False)
+    tweet['thread_tweet_count'] = row.get('thread_tweet_count', 0)
+    tweet['thread_id'] = row.get('thread_id')
+    tweet['username'] = row.get('username', '')
 
     return tweet
 

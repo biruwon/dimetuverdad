@@ -102,7 +102,36 @@ def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size:
                 page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
             except TimeoutError:
                 print(f"   ❌ Session {sessions_completed}: No tweets found for @{username} or page failed to load")
-                break
+                # Try recovery: Retry button, reload or login
+                recovered = False
+                try:
+                    recovered = False
+                    # Try safer recovery strategies before doing a full reload
+                    for attempt in range(1, 6):
+                        try:
+                            if scroller.try_recovery_strategies(page, attempt):
+                                recovered = True
+                                break
+                        except Exception:
+                            pass
+
+                    if not recovered:
+                        cfg = get_config()
+                        if cfg.username and cfg.password:
+                            try:
+                                from fetcher.session_manager import SessionManager
+                                login_ok = SessionManager().login_and_save_session(page, cfg.username, cfg.password)
+                                if login_ok:
+                                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                                    page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
+                                    recovered = True
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+                if not recovered:
+                    break
             
             scroller.delay(2.0, 4.0)
             
@@ -447,7 +476,40 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
                 page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
             except TimeoutError:
                 print(f"❌ No tweets found for @{username} or page failed to load")
-                return []
+                # Try recovery before giving up
+                try:
+                    recovered = False
+                    try:
+                        retry_btn = page.locator('button:has-text("Retry")')
+                        if retry_btn and retry_btn.is_visible():
+                            retry_btn.click()
+                            page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
+                            recovered = True
+                    except Exception:
+                        try:
+                            page.reload()
+                            page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
+                            recovered = True
+                        except Exception:
+                            recovered = False
+
+                    if not recovered:
+                        cfg = get_config()
+                        if cfg.username and cfg.password:
+                            try:
+                                from fetcher.session_manager import SessionManager
+                                login_ok = SessionManager().login_and_save_session(page, cfg.username, cfg.password)
+                                if login_ok:
+                                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                                    page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
+                                    recovered = True
+                            except Exception:
+                                pass
+
+                    if not recovered:
+                        return []
+                except Exception:
+                    return []
 
             scroller.delay(2.0, 4.0)
             
@@ -459,6 +521,9 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
             all_collected_tweets = collector.collect_tweets_from_page(page, username, max_tweets, False, None, profile_pic_url, conn)
         
         print(f"\n📊 Collection complete: {len(all_collected_tweets)} tweets from @{username}")
+        
+        # Thread detection is performed inline during Phase 1 collection (no separate Phase 3)
+        print("🧵 Thread detection: performed inline during collection; no post-collection Phase 3 run.")
         
         # Print summary by post type
         post_type_counts = {}
@@ -477,20 +542,30 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
 
 def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_flag: bool, latest: bool = False):
     # Use shared browser setup helper to consolidate browser configuration
-    browser, context, page = SessionManager().create_browser_context(p, save_session=True)
+    session_mgr = SessionManager()
+    browser, context, page = session_mgr.create_browser_context(p, save_session=True)
+    
+    # Ensure we're logged in before starting
+    if not session_mgr.ensure_logged_in(page):
+        print("❌ Login failed - cannot proceed with fetch")
+        session_mgr.cleanup_session(browser, context)
+        return 0, 0
+    
+    # Save session after successful login check
+    context.storage_state(path=str(session_mgr.session_file))
     
     try:
         conn = fetcher_db.init_db()
     except Exception as e:
         print(f"❌ Database connection failed: {e}")
-        SessionManager().cleanup_session(browser, context)
+        session_mgr.cleanup_session(browser, context)
         return 0, 0
     # Fetch tweets for each handle in a single browser session
     total_saved = 0
     for handle in handles:
         print(f"\nFetching up to {max_tweets} tweets for @{handle}...")
         # Add retries with exponential backoff for each handle
-        max_retries = 0
+        max_retries = 2  # allow a couple of retries to recover from transient site failures
         attempt = 0
         tweets = []
         while attempt <= max_retries:
@@ -533,7 +608,7 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
         total_saved += len(tweets)
     
     conn.close()
-    SessionManager().cleanup_session(browser, context)
+    session_mgr.cleanup_session(browser, context)
     return total_saved, len(handles)
 
 
@@ -550,9 +625,17 @@ def main():
     parser.add_argument("--user", "-u", dest="user", help="Optional single username to fetch tweets from (with or without leading @). Overrides positional username.")
     parser.add_argument("--max", type=int, default=None, help="Maximum number of tweets to fetch per user (default: unlimited)")
     parser.add_argument("--latest", action='store_true', help="Strategy 1: Fetch only latest tweets, stop after 10 consecutive existing tweets")
+    parser.add_argument("--resume", action='store_true', help="Enable resume/seek mode to fetch older tweets (disabled by default)")
     parser.add_argument("--refetch", help="Re-fetch a specific tweet ID (bypasses exists check and updates database)")
     parser.add_argument("--refetch-all", help="Delete all data for specified username and refetch from scratch")
+    parser.add_argument("--no-threads", action='store_true', help="Disable thread detection and collection for this run")
     args = parser.parse_args()
+
+    # Honor --no-threads flag by toggling config at runtime
+    if getattr(args, 'no_threads', False):
+        cfg = get_config()
+        cfg.collect_threads = False
+        print("⚠️ Thread collection disabled for this run (--no-threads)")
 
     # Handle refetch mode for specific tweet
     if args.refetch:
@@ -584,7 +667,7 @@ def main():
     print(f"📣 Targets resolved (final): {handles}")
 
     with sync_playwright() as p:
-        total, accounts_processed = run_fetch_session(p, handles, max_tweets, True, args.latest)
+        total, accounts_processed = run_fetch_session(p, handles, max_tweets, args.resume, args.latest)
     
     # Increment performance counter with total tweets processed
     tracker.increment_operations(total)
@@ -598,7 +681,8 @@ def main():
     print(f"\n⏱️  Execution completed in: {minutes}m {seconds}s")
     print(f"📊 Total tweets fetched and saved: {total}")
     print(f"🎯 Accounts processed: {accounts_processed}")
-    print(f"📈 Average tweets per account: {total/accounts_processed:.1f}")
+    if accounts_processed > 0:
+        print(f"📈 Average tweets per account: {total/accounts_processed:.1f}")
 
     # Print performance summary
     metrics = stop_tracking(tracker)

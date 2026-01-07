@@ -62,6 +62,13 @@ def create_fresh_database_schema(db_path: str):
                 original_content TEXT,    -- For reposts or referenced tweets (if different)
                 reply_to_username TEXT,   -- For replies
 
+                -- Thread detection columns
+                reply_to_tweet_id TEXT,   -- ID of the tweet being replied to
+                conversation_id TEXT,     -- Twitter conversation ID
+                thread_id TEXT,           -- ID of the first tweet in the thread
+                thread_position INTEGER,  -- Position in thread (1-based)
+                is_thread_start INTEGER DEFAULT 0, -- 1 if this is the first tweet of a thread
+
                 -- Media and content
                 media_links TEXT,         -- Comma-separated URLs
                 media_count INTEGER DEFAULT 0,
@@ -188,6 +195,10 @@ def create_fresh_database_schema(db_path: str):
             ('idx_tweets_tweet_timestamp', 'tweets', 'tweet_timestamp'),
             ('idx_tweets_deleted', 'tweets', 'is_deleted'),
             ('idx_tweets_edited', 'tweets', 'is_edited'),
+            ('idx_tweets_thread_id', 'tweets', 'thread_id'),
+            ('idx_tweets_conversation_id', 'tweets', 'conversation_id'),
+            ('idx_tweets_is_thread_start', 'tweets', 'is_thread_start'),
+            ('idx_tweets_reply_to', 'tweets', 'reply_to_tweet_id'),
             ('idx_analyses_post', 'content_analyses', 'post_id'),
             ('idx_analyses_category', 'content_analyses', 'category'),
             ('idx_analyses_author', 'content_analyses', 'author_username'),
@@ -347,6 +358,62 @@ def get_db_connection() -> sqlite3.Connection:
             pass
 
     return conn
+
+def _ensure_thread_columns(conn: sqlite3.Connection) -> None:
+    """Ensure thread-related columns exist in tweets table (safe for existing DBs)."""
+    cursor = conn.cursor()
+    
+    # Check which columns already exist
+    cursor.execute("PRAGMA table_info(tweets)")
+    existing_columns = {row['name'] for row in cursor.fetchall()}
+    
+    # Add missing thread columns
+    thread_columns = [
+        ("reply_to_tweet_id", "TEXT"),
+        ("conversation_id", "TEXT"),
+        ("thread_id", "TEXT"),
+        ("thread_position", "INTEGER"),
+        ("is_thread_start", "INTEGER DEFAULT 0"),
+    ]
+    
+    for col_name, col_type in thread_columns:
+        if col_name not in existing_columns:
+            try:
+                cursor.execute(f"ALTER TABLE tweets ADD COLUMN {col_name} {col_type}")
+                print(f"  ✅ Added column '{col_name}' to tweets table")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" not in str(e).lower():
+                    print(f"  ⚠️ Could not add column '{col_name}': {e}")
+    
+    # Create indexes if they don't exist
+    indexes = [
+        ("idx_tweets_thread_id", "tweets", "thread_id"),
+        ("idx_tweets_conversation_id", "tweets", "conversation_id"),
+        ("idx_tweets_is_thread_start", "tweets", "is_thread_start"),
+        ("idx_tweets_reply_to", "tweets", "reply_to_tweet_id"),
+    ]
+    
+    for idx_name, table, column in indexes:
+        try:
+            cursor.execute(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column})")
+        except sqlite3.OperationalError:
+            pass  # Index might already exist
+    
+    conn.commit()
+
+
+def ensure_schema_up_to_date(conn: sqlite3.Connection = None) -> None:
+    """Run all schema migrations to ensure database is up to date."""
+    should_close = conn is None
+    if conn is None:
+        conn = get_db_connection()
+    
+    try:
+        _ensure_thread_columns(conn)
+    finally:
+        if should_close:
+            conn.close()
+
 
 @contextmanager
 def get_db_connection_context():

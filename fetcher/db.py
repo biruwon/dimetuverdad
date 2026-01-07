@@ -61,7 +61,11 @@ def delete_account_data(username: str) -> Dict[str, int]:
         raise
 
 def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
-    """Simplified save/update function for tests and main logic."""
+    """Simplified save/update function for tests and main logic.
+    
+    Supports thread-related fields: reply_to_tweet_id, conversation_id,
+    thread_id, thread_position, is_thread_start.
+    """
     c = conn.cursor()
     try:
         if not tweet_data.get('tweet_id') or str(tweet_data.get('tweet_id')).lower() == 'analytics':
@@ -84,13 +88,21 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
                 needs_update = True
             elif tweet_data.get('content') and tweet_data.get('content') != existing_content:
                 needs_update = True
+            # Also update if thread metadata is being set
+            elif tweet_data.get('thread_id') or tweet_data.get('conversation_id'):
+                needs_update = True
             if not needs_update:
                 return False
-            # perform update (minimal fields)
+            # perform update (minimal fields + thread fields)
             c.execute("""UPDATE tweets SET content = ?, post_type = ?, original_author = ?, original_tweet_id = ?,
                         media_links = ?, media_count = ?,
                         engagement_likes = ?, engagement_retweets = ?, engagement_replies = ?,
-                        external_links = ?, original_content = ?, is_pinned = ?
+                        external_links = ?, original_content = ?, is_pinned = ?,
+                        reply_to_tweet_id = COALESCE(?, reply_to_tweet_id),
+                        conversation_id = COALESCE(?, conversation_id),
+                        thread_id = COALESCE(?, thread_id),
+                        thread_position = COALESCE(?, thread_position),
+                        is_thread_start = COALESCE(?, is_thread_start)
                         WHERE tweet_id = ?""", (
                 tweet_data.get('content'),
                 new_post_type,
@@ -104,6 +116,11 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
                 tweet_data.get('external_links'),
                 tweet_data.get('original_content'),
                 tweet_data.get('is_pinned', 0),
+                tweet_data.get('reply_to_tweet_id'),
+                tweet_data.get('conversation_id'),
+                tweet_data.get('thread_id'),
+                tweet_data.get('thread_position'),
+                tweet_data.get('is_thread_start'),
                 tweet_data['tweet_id']
             ))
             conn.commit()
@@ -113,8 +130,9 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
                         original_author, original_tweet_id, reply_to_username,
                         media_links, media_count,
                         engagement_likes, engagement_retweets, engagement_replies,
-                        external_links, original_content, is_pinned)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
+                        external_links, original_content, is_pinned,
+                        reply_to_tweet_id, conversation_id, thread_id, thread_position, is_thread_start)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
             tweet_data['tweet_id'],
             tweet_data.get('content'),
             tweet_data.get('username'),
@@ -131,7 +149,12 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
             tweet_data.get('engagement_replies', 0),
             tweet_data.get('external_links'),
             tweet_data.get('original_content'),
-            tweet_data.get('is_pinned', 0)
+            tweet_data.get('is_pinned', 0),
+            tweet_data.get('reply_to_tweet_id'),
+            tweet_data.get('conversation_id'),
+            tweet_data.get('thread_id'),
+            tweet_data.get('thread_position'),
+            tweet_data.get('is_thread_start', 0)
         ))
         conn.commit()
         return True
