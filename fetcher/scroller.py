@@ -13,11 +13,21 @@ from .logging_config import get_logger
 
 logger = get_logger('scroller')
 
+# Performance optimization: minimum delay to avoid rate limiting
+MIN_ADAPTIVE_DELAY = 0.3  # seconds
+
 class Scroller:
     """Handles scrolling and navigation operations for tweet collection."""
 
     def __init__(self):
         self.config = get_config()
+        # Track adaptive scroll performance
+        self._adaptive_scroll_stats = {
+            'total_scrolls': 0,
+            'content_loaded_fast': 0,  # Loaded before timeout
+            'content_loaded_timeout': 0,  # Hit timeout waiting
+            'total_wait_time': 0.0,
+        }
 
     def delay(self, min_seconds: Optional[float] = None, max_seconds: Optional[float] = None) -> None:
         """
@@ -69,6 +79,161 @@ class Scroller:
             page.evaluate(f"window.scrollBy(0, -{back_scroll})")
 
         self.delay(1.0, 2.5)
+
+    def adaptive_scroll(self, page, deep_scroll: bool = False) -> float:
+        """
+        Scroll with adaptive delay - wait only until new content appears.
+        
+        This is a performance-optimized version of random_scroll_pattern that
+        waits for content to load instead of using fixed delays.
+        
+        Args:
+            page: Playwright page object
+            deep_scroll: Whether to use aggressive scrolling for older content
+            
+        Returns:
+            float: Time spent waiting for content (for performance tracking)
+        """
+        start_time = time.time()
+        self._adaptive_scroll_stats['total_scrolls'] += 1
+        
+        # Count current articles before scroll
+        try:
+            prev_count = page.evaluate(
+                'document.querySelectorAll("article[data-testid=\\"tweet\\"]").length'
+            )
+        except Exception:
+            prev_count = 0
+        
+        # Choose scroll amount
+        if deep_scroll:
+            scroll_amounts = [900, 1100, 1200, 1000]
+        else:
+            scroll_amounts = [500, 600, 700, 800]
+        
+        scroll_amount = random.choice(scroll_amounts) + random.randint(0, 200)
+        page.evaluate(f"window.scrollBy(0, {scroll_amount})")
+        
+        # Wait for new content with short timeout (instead of fixed delay)
+        try:
+            page.wait_for_function(
+                f'document.querySelectorAll("article[data-testid=\\"tweet\\"]").length > {prev_count}',
+                timeout=2000  # Max 2 seconds instead of 1.5-3 seconds fixed
+            )
+            self._adaptive_scroll_stats['content_loaded_fast'] += 1
+        except Exception:
+            # Content didn't load in time - that's OK, continue anyway
+            self._adaptive_scroll_stats['content_loaded_timeout'] += 1
+        
+        # Minimum delay to avoid rate limiting (human-like)
+        time.sleep(MIN_ADAPTIVE_DELAY)
+        
+        # Occasional upward adjustment (less frequent for speed)
+        if random.random() < 0.05:  # 5% chance
+            back_scroll = 30 + random.randint(0, 50)
+            page.evaluate(f"window.scrollBy(0, -{back_scroll})")
+        
+        elapsed = time.time() - start_time
+        self._adaptive_scroll_stats['total_wait_time'] += elapsed
+        
+        return elapsed
+
+    def get_adaptive_scroll_stats(self) -> Dict[str, Any]:
+        """Get statistics about adaptive scroll performance."""
+        stats = self._adaptive_scroll_stats.copy()
+        if stats['total_scrolls'] > 0:
+            stats['avg_wait_time'] = stats['total_wait_time'] / stats['total_scrolls']
+            stats['fast_load_rate'] = stats['content_loaded_fast'] / stats['total_scrolls']
+        else:
+            stats['avg_wait_time'] = 0.0
+            stats['fast_load_rate'] = 0.0
+        return stats
+
+    def reset_adaptive_scroll_stats(self) -> None:
+        """Reset adaptive scroll statistics."""
+        self._adaptive_scroll_stats = {
+            'total_scrolls': 0,
+            'content_loaded_fast': 0,
+            'content_loaded_timeout': 0,
+            'total_wait_time': 0.0,
+        }
+
+    def prefetch_scroll(self, page) -> int:
+        """
+        P6 Performance Optimization: Trigger loading of next content batch.
+        
+        Scrolls ahead to trigger network loading of the next batch of tweets,
+        so that network I/O happens in parallel with CPU processing of current batch.
+        
+        This should be called BEFORE processing tweets, then processing happens
+        while content loads, and finally wait_for_prefetched_content() is called
+        after processing to ensure content is ready.
+        
+        Args:
+            page: Playwright page object
+            
+        Returns:
+            The article count before scrolling (for later comparison)
+        """
+        # Get current article count
+        try:
+            prev_count = page.evaluate(
+                'document.querySelectorAll("article[data-testid=\\"tweet\\"]").length'
+            )
+        except Exception:
+            prev_count = 0
+        
+        # Scroll ahead to trigger loading (don't wait)
+        scroll_amount = 1500 + random.randint(0, 500)  # Scroll far ahead
+        try:
+            page.evaluate(f"window.scrollBy(0, {scroll_amount})")
+        except Exception as e:
+            logger.warning(f"Prefetch scroll failed: {e}")
+        
+        return prev_count
+
+    def wait_for_prefetched_content(self, page, prev_count: int, timeout_ms: int = 500) -> bool:
+        """
+        P6 Performance Optimization: Wait for prefetched content with short timeout.
+        
+        Called after processing is complete to ensure the next batch of content
+        is ready. Uses a short timeout since content should already be loading.
+        
+        Args:
+            page: Playwright page object
+            prev_count: Article count before prefetch scroll
+            timeout_ms: Maximum time to wait in milliseconds (default 500ms)
+            
+        Returns:
+            True if new content loaded, False if timed out
+        """
+        try:
+            page.wait_for_function(
+                f'document.querySelectorAll("article[data-testid=\\"tweet\\"]").length > {prev_count}',
+                timeout=timeout_ms
+            )
+            return True
+        except Exception:
+            # Content didn't load - that's OK, will be handled by normal scroll logic
+            return False
+
+    def scroll_back_for_processing(self, page, amount: int = 800) -> None:
+        """
+        P6 Performance Optimization: Scroll back slightly for processing.
+        
+        After prefetch scroll, scroll back to ensure visible tweets are
+        in the viewport for processing.
+        
+        Args:
+            page: Playwright page object
+            amount: Pixels to scroll back (default 800)
+        """
+        back_amount = amount + random.randint(-100, 100)
+        try:
+            page.evaluate(f"window.scrollBy(0, -{back_amount})")
+            time.sleep(MIN_ADAPTIVE_DELAY)  # Small delay for rendering
+        except Exception as e:
+            logger.warning(f"Scroll back failed: {e}")
 
     def event_scroll_cycle(self, page, iteration: int) -> None:
         """

@@ -3,9 +3,12 @@ Tweet collection logic for the fetcher module.
 
 Handles the core tweet collection workflow, processing individual tweets,
 and managing collection state.
+
+Uses stateless HTML extraction (P1/Improvement #2) as primary method,
+falling back to page interaction only for videos and truncated text.
 """
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Any
 from datetime import datetime
 from .config import get_config
 from .logging_config import get_logger
@@ -14,6 +17,7 @@ from .media_monitor import get_media_monitor
 from .thread_detector import ThreadDetector, _sync_handle
 from . import db as fetcher_db
 from . import parsers as fetcher_parsers
+from . import html_extractor
 from .session_manager import SessionManager
 from database.repositories import get_tweet_repository
 
@@ -76,11 +80,13 @@ class TweetCollector:
 
     def extract_tweet_data(self, page, article, tweet_id: str, tweet_url: str, username: str, profile_pic_url: Optional[str]) -> Optional[Dict]:
         """
-        Extract comprehensive tweet data from a tweet article using the same approach as refetch.
-        This ensures consistent media extraction across regular fetch and refetch operations.
+        Extract comprehensive tweet data using hybrid stateless/interactive approach.
+        
+        Uses stateless HTML parsing (P1/Improvement #2) for most data,
+        falling back to page interaction only for videos that need network monitoring.
 
         Args:
-            page: Playwright page object (for media monitoring)
+            page: Playwright page object (for media monitoring when needed)
             article: Playwright article element
             tweet_id: Tweet ID
             tweet_url: Tweet URL
@@ -91,56 +97,118 @@ class TweetCollector:
             Dict of tweet data or None if extraction failed
         """
         try:
-            # Use the same extraction method as refetch_manager for consistency
-            # Pass article element to ensure we extract the correct tweet from timeline
-            tweet_data = fetcher_parsers.extract_tweet_with_media_monitoring(
-                page, tweet_id, username, tweet_url, self.media_monitor, self.scroller, article
-            )
+            # Step 1: Get article HTML for stateless parsing (single browser call)
+            article_html = None
+            try:
+                article_html = article.evaluate('el => el.outerHTML')
+            except Exception as html_err:
+                logger.debug(f"Could not get article HTML: {html_err}")
             
-            if not tweet_data:
-                return None
+            # Step 2: Try stateless extraction first (fast path)
+            stateless_data = None
+            needs_video_monitoring = False
             
-            # Extract timestamp
-            time_element = article.query_selector('time')
-            if time_element:
-                tweet_data['tweet_timestamp'] = time_element.get_attribute('datetime')
+            if article_html:
+                stateless_data = html_extractor.parse_tweet_from_html(article_html, username)
+                if stateless_data:
+                    # Check if this tweet has video that needs network monitoring
+                    media_links = stateless_data.get('media_links', '') or ''
+                    # Videos have poster thumbnails from amplify_video_thumb
+                    needs_video_monitoring = 'amplify_video_thumb' in media_links
+            
+            # Step 3: For tweets with video, use full page-based extraction
+            # For tweets without video, use stateless data enhanced with quoted tweet handling
+            if needs_video_monitoring or not stateless_data:
+                # Fall back to page-based extraction for video monitoring
+                tweet_data = fetcher_parsers.extract_tweet_with_media_monitoring(
+                    page, tweet_id, username, tweet_url, self.media_monitor, self.scroller, article
+                )
+                if not tweet_data:
+                    return None
             else:
-                tweet_data['tweet_timestamp'] = None
+                # Use stateless data for non-video tweets (fast path)
+                tweet_data = {
+                    'tweet_id': tweet_id,
+                    'username': username,
+                    'tweet_url': tweet_url,
+                    'content': stateless_data.get('content', ''),
+                    'media_links': stateless_data.get('media_links'),
+                    'media_count': stateless_data.get('media_count', 0),
+                    'post_type': stateless_data.get('post_type', 'original'),
+                    'original_author': stateless_data.get('original_author'),
+                    'original_tweet_id': stateless_data.get('original_tweet_id'),
+                    'tweet_timestamp': stateless_data.get('tweet_timestamp'),
+                }
+                
+                # For quoted tweets, try to get quoted content via parsers (may need tab)
+                if tweet_data['post_type'] == 'quote':
+                    try:
+                        quoted_data = fetcher_parsers.find_and_extract_quoted_tweet(
+                            page, article, tweet_id, username, self.scroller
+                        )
+                        if quoted_data:
+                            tweet_data['original_content'] = quoted_data.get('content')
+                            tweet_data['original_author'] = quoted_data.get('username') or tweet_data['original_author']
+                            tweet_data['original_tweet_id'] = quoted_data.get('tweet_id') or tweet_data['original_tweet_id']
+                            # Merge media from quoted tweet
+                            if quoted_data.get('media_links'):
+                                existing_media = tweet_data.get('media_links') or ''
+                                new_media = quoted_data.get('media_links', '')
+                                if existing_media and new_media:
+                                    tweet_data['media_links'] = f"{existing_media},{new_media}"
+                                elif new_media:
+                                    tweet_data['media_links'] = new_media
+                    except Exception as quote_err:
+                        logger.debug(f"Could not extract quoted tweet: {quote_err}")
+                
+                # Add engagement from stateless extraction
+                tweet_data.update({
+                    'engagement_retweets': stateless_data.get('engagement_retweets', 0),
+                    'engagement_likes': stateless_data.get('engagement_likes', 0),
+                    'engagement_replies': stateless_data.get('engagement_replies', 0),
+                    'engagement_views': stateless_data.get('engagement_views', 0),
+                })
+                
+                # Add thread line indicator from stateless extraction
+                tweet_data['has_thread_line'] = stateless_data.get('has_thread_line', False)
+            
+            # Step 4: Ensure timestamp is set (may need fallback to article query)
+            if not tweet_data.get('tweet_timestamp'):
+                time_element = article.query_selector('time')
+                if time_element:
+                    tweet_data['tweet_timestamp'] = time_element.get_attribute('datetime')
+                else:
+                    tweet_data['tweet_timestamp'] = None
             
             # Add profile picture URL
             tweet_data['profile_pic_url'] = profile_pic_url
             
-            # Extract engagement metrics (additional data not in refetch)
-            engagement = fetcher_parsers.extract_engagement_metrics(article)
-            tweet_data.update({
-                'engagement_retweets': engagement['retweets'],
-                'engagement_likes': engagement['likes'],
-                'engagement_replies': engagement['replies'],
-                'engagement_views': engagement['views'],
-            })
-
-            # Extract thread-related metadata inline
-            try:
-                article_handle = _sync_handle(article)
+            # Step 5: If we used page-based extraction, get engagement and thread metadata
+            if needs_video_monitoring or not stateless_data:
+                # Extract engagement metrics
+                engagement = fetcher_parsers.extract_engagement_metrics(article)
+                tweet_data.update({
+                    'engagement_retweets': engagement['retweets'],
+                    'engagement_likes': engagement['likes'],
+                    'engagement_replies': engagement['replies'],
+                    'engagement_views': engagement['views'],
+                })
                 
-                # Check for thread continuation line (CSS indicator r-1bimlpy)
-                has_thread_line = self.thread_detector._has_thread_line(article_handle)
-                tweet_data['has_thread_line'] = has_thread_line
-                
-                # Extract reply-to tweet ID if this is a reply
-                reply_to_id = self.thread_detector._extract_reply_to_id(article_handle)
-                if reply_to_id:
-                    tweet_data['reply_to_tweet_id'] = reply_to_id
-                
-                # If tweet has thread line, mark as potential thread member
-                if has_thread_line:
-                    # The thread_id and conversation_id will be determined during
-                    # post-collection thread grouping, but mark it for now
-                    tweet_data['is_thread_start'] = 0  # Not the start if it has a line above
-                    logger.debug(f"Tweet {tweet_id} has thread continuation line")
+                # Extract thread-related metadata
+                try:
+                    article_handle = _sync_handle(article)
+                    has_thread_line = self.thread_detector._has_thread_line(article_handle)
+                    tweet_data['has_thread_line'] = has_thread_line
                     
-            except Exception as thread_err:
-                logger.debug(f"Could not extract thread metadata for {tweet_id}: {thread_err}")
+                    reply_to_id = self.thread_detector._extract_reply_to_id(article_handle)
+                    if reply_to_id:
+                        tweet_data['reply_to_tweet_id'] = reply_to_id
+                    
+                    if has_thread_line:
+                        tweet_data['is_thread_start'] = 0
+                        logger.debug(f"Tweet {tweet_id} has thread continuation line")
+                except Exception as thread_err:
+                    logger.debug(f"Could not extract thread metadata for {tweet_id}: {thread_err}")
 
             return tweet_data
 
@@ -468,12 +536,29 @@ class TweetCollector:
                     exists_in_db, db_data = self.check_tweet_exists_in_db(username, tweet_id, resume_from_last)
 
                     if exists_in_db:
-                        # Check if update is needed
-                        post_analysis = fetcher_parsers.analyze_post_type(article, username)
-                        if post_analysis.get('should_skip'):
-                            continue
-
-                        content = fetcher_parsers.extract_full_tweet_content(article)
+                        # Use stateless extraction for comparison (faster than page-based)
+                        try:
+                            article_html = article.evaluate('el => el.outerHTML')
+                            stateless_data = html_extractor.parse_tweet_from_html(article_html, username)
+                        except Exception:
+                            stateless_data = None
+                        
+                        if stateless_data:
+                            # Check if should skip using stateless data
+                            post_type = stateless_data.get('post_type', 'original')
+                            content = stateless_data.get('content', '')
+                            
+                            # Skip pinned/repost_own posts (should_skip equivalent)
+                            if post_type in ('pinned', 'repost_own'):
+                                continue
+                        else:
+                            # Fallback to page-based extraction if stateless failed
+                            post_analysis = fetcher_parsers.analyze_post_type(article, username)
+                            if post_analysis.get('should_skip'):
+                                continue
+                            content = fetcher_parsers.extract_full_tweet_content(article)
+                            post_type = post_analysis.get('post_type', 'original')
+                        
                         if not content:
                             logger.debug(f"Skipping content-less tweet: {tweet_id}")
                             continue
@@ -483,7 +568,7 @@ class TweetCollector:
                         if db_data:
                             db_post_type = db_data.get('post_type')
                             db_content = db_data.get('content')
-                            if db_post_type != post_analysis.get('post_type') or (content and db_content and content != db_content):
+                            if db_post_type != post_type or (content and db_content and content != db_content):
                                 needs_update = True
 
                         if not needs_update:
@@ -595,20 +680,25 @@ class TweetCollector:
                     # Use aggressive scrolling when needed
                     if consecutive_empty_scrolls > 5:
                         self.scroller.aggressive_scroll(page, consecutive_empty_scrolls)
+                    elif getattr(self.config, 'use_adaptive_scroll', True):
+                        # Use adaptive scrolling (performance optimization P2)
+                        # This waits for content to load instead of fixed delays
+                        self.scroller.adaptive_scroll(page, deep_scroll=False)
                     else:
                         self.scroller.event_scroll_cycle(page, iteration)
                 except Exception:
                     try:
                         page.evaluate("window.scrollBy(0, 1000)")
-                        self.scroller.human_delay(2.0, 3.0)
+                        self.scroller.delay(2.0, 3.0)
                     except Exception:
                         logger.error("All scrolling methods failed")
                         consecutive_empty_scrolls += 2
 
                 # Wait for new tweets to load after scrolling
+                # Note: With adaptive scroll, this wait is largely redundant but kept for safety
                 try:
                     logger.debug(f"Waiting for more tweets to load (was {prev_article_count})...")
-                    page.wait_for_function(f"document.querySelectorAll('article[data-testid=\"tweet\"]').length > {prev_article_count}", timeout=20000)
+                    page.wait_for_function(f"document.querySelectorAll('article[data-testid=\"tweet\"]').length > {prev_article_count}", timeout=5000)
                     new_count = page.evaluate("document.querySelectorAll('article[data-testid=\"tweet\"]').length")
                     logger.debug(f"New tweets loaded: now {new_count} articles")
                 except Exception:

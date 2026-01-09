@@ -523,3 +523,374 @@ The main architectural changes would be:
 6. **Graceful degradation** - Always save partial data
 
 These changes would make the fetcher more maintainable, testable, and resilient to Twitter's frequent UI changes.
+
+---
+
+# Performance & Speed Optimizations
+
+This section focuses specifically on improvements that reduce fetching time.
+
+**Current baseline**: ~5-7 minutes for 200 posts (~1.5-2 sec/post)
+**Target**: ~2-3 minutes for 200 posts (~0.6-0.9 sec/post)
+
+---
+
+## P1. Parallel HTML Extraction (High Impact, Low Effort)
+
+### Current Problem
+Each tweet extraction makes multiple round-trips to the browser (query selector, get attribute, inner text, etc.).
+
+### Better Approach
+Grab all article HTML in a single JavaScript call, then parse stateless:
+
+```python
+# Current (slow) - multiple round-trips per tweet
+for article in articles:
+    text = article.query_selector('[data-testid="tweetText"]').inner_text()  # Round-trip 1
+    link = article.query_selector('a[href*="/status/"]').get_attribute('href')  # Round-trip 2
+    time = article.query_selector('time').get_attribute('datetime')  # Round-trip 3
+    # ... more round-trips
+
+# Faster - single round-trip for all tweets
+all_html = page.evaluate('''() => {
+    return Array.from(document.querySelectorAll('article[data-testid="tweet"]'))
+        .map(a => ({
+            html: a.outerHTML,
+            rect: a.getBoundingClientRect()
+        }))
+}''')
+
+# Parse in Python (no browser communication)
+from bs4 import BeautifulSoup
+tweets = []
+for item in all_html:
+    soup = BeautifulSoup(item['html'], 'html.parser')
+    tweets.append(extract_tweet_from_soup(soup))
+```
+
+### Expected Savings
+- **Per scroll cycle**: 0.5-1 second (10-15 tweets)
+- **Per 200 tweets**: 30-60 seconds
+
+---
+
+## P2. Adaptive Scroll Delays (Medium Impact, Low Effort)
+
+### Current Problem
+Fixed random delays between scrolls waste time when content loads quickly.
+
+### Better Approach
+Wait only until new content appears, with a short minimum delay:
+
+```python
+# Current (slow)
+page.evaluate('window.scrollBy(0, 800)')
+time.sleep(random.uniform(1.5, 3.0))  # Always wait 1.5-3 seconds
+
+# Faster - wait only for content
+prev_count = len(page.query_selector_all('article[data-testid="tweet"]'))
+page.evaluate('window.scrollBy(0, 800)')
+
+try:
+    page.wait_for_function(
+        f'document.querySelectorAll("article[data-testid=\\"tweet\\"]").length > {prev_count}',
+        timeout=3000
+    )
+except TimeoutError:
+    pass  # Content didn't load, continue anyway
+
+# Minimum human-like delay to avoid rate limiting
+time.sleep(0.3)
+```
+
+### Expected Savings
+- **Per scroll cycle**: 1-2 seconds
+- **Per 200 tweets**: 60-120 seconds
+
+---
+
+## P3. Batch Database Writes (Medium Impact, Low Effort)
+
+### Current Problem
+Each tweet is written individually, creating transaction overhead.
+
+### Better Approach
+Buffer tweets and write in batches:
+
+```python
+# Current (slow)
+for tweet in tweets:
+    save_tweet(conn, tweet)  # Individual transaction per tweet
+    conn.commit()
+
+# Faster - batch writes
+class TweetBuffer:
+    def __init__(self, conn, batch_size=50):
+        self.conn = conn
+        self.batch_size = batch_size
+        self.buffer = []
+    
+    def add(self, tweet):
+        self.buffer.append(tweet)
+        if len(self.buffer) >= self.batch_size:
+            self.flush()
+    
+    def flush(self):
+        if not self.buffer:
+            return
+        cursor = self.conn.cursor()
+        cursor.executemany('''
+            INSERT OR REPLACE INTO tweets 
+            (tweet_id, username, content, tweet_url, tweet_timestamp, ...)
+            VALUES (?, ?, ?, ?, ?, ...)
+        ''', [(t['tweet_id'], t['username'], ...) for t in self.buffer])
+        self.conn.commit()
+        self.buffer = []
+```
+
+### Expected Savings
+- **Per 200 tweets**: 10-20 seconds
+
+---
+
+## P4. Skip Video Hover for Thumbnail Extraction (Medium Impact, Medium Effort)
+
+### Current Problem
+We hover over every video element to trigger network requests, adding 8-10 seconds per video.
+
+### Better Approach
+Extract video info from thumbnail URL when possible:
+
+```python
+# Current (slow) - hover to capture network requests
+video_player = article.query_selector('[data-testid="videoPlayer"]')
+if video_player:
+    video_player.hover()
+    time.sleep(2)  # Wait for network request
+    # Then capture from network monitor
+
+# Faster - derive from thumbnail when possible
+def extract_video_url_fast(article_html: str) -> Optional[str]:
+    soup = BeautifulSoup(article_html, 'html.parser')
+    
+    # Video thumbnail contains video ID
+    poster = soup.select_one('[data-testid="videoPlayer"] video')
+    if poster:
+        poster_url = poster.get('poster', '')
+        # Pattern: amplify_video_thumb/{VIDEO_ID}/img/...
+        match = re.search(r'amplify_video_thumb/(\d+)/', poster_url)
+        if match:
+            video_id = match.group(1)
+            # Construct playable URL (common pattern)
+            return f"https://video.twimg.com/amplify_video/{video_id}/vid/avc1/720x720/video.mp4"
+    
+    # Fallback to hover method only if needed
+    return None
+```
+
+### Expected Savings
+- **Per video**: 8-10 seconds (when pattern matches)
+- **Per 200 tweets**: 30-60 seconds (depends on video count)
+
+---
+
+## P5. Skip "Show More" for Short Tweets (Low-Medium Impact, Low Effort)
+
+### Current Problem
+We check for "Show more" button on every tweet, even short ones.
+
+### Better Approach
+Only look for expand button if visible text is near truncation threshold:
+
+```python
+# Current (slow) - check every tweet
+show_more = article.query_selector('[data-testid="tweet-text-show-more-link"]')
+if show_more:
+    show_more.click()
+    time.sleep(0.5)
+
+# Faster - only check if likely truncated
+def extract_text_smart(article_html: str, page=None, article=None) -> str:
+    soup = BeautifulSoup(article_html, 'html.parser')
+    text_el = soup.select_one('[data-testid="tweetText"]')
+    
+    if not text_el:
+        return ""
+    
+    visible_text = text_el.get_text()
+    
+    # Twitter truncates at ~280 chars, check if near limit
+    if len(visible_text) < 250:
+        return visible_text  # Definitely not truncated
+    
+    # Only if near truncation AND we have page access, try expanding
+    if page and article:
+        show_more = article.query_selector('[data-testid="tweet-text-show-more-link"]')
+        if show_more:
+            show_more.click()
+            page.wait_for_timeout(300)
+            # Re-extract
+            return article.query_selector('[data-testid="tweetText"]').inner_text()
+    
+    return visible_text
+```
+
+### Expected Savings
+- **Per non-truncated tweet**: ~0.3-0.5 seconds
+- **Per 200 tweets**: 20-40 seconds (assuming 70% not truncated)
+
+---
+
+## P6. Pre-scroll Content Loading (Medium Impact, Low Effort)
+
+### Current Problem
+We wait for content to load after each scroll, sequentially.
+
+### Better Approach
+Trigger loading of next batch while processing current batch:
+
+```python
+# Current (sequential)
+tweets = extract_visible_tweets(page)
+process_tweets(tweets)
+scroll_down(page)
+wait_for_load(page)  # Blocking wait
+
+# Faster - overlap loading with processing
+def collect_with_prefetch(page, max_tweets):
+    collected = []
+    
+    while len(collected) < max_tweets:
+        # Extract current visible tweets
+        tweets = extract_visible_tweets(page)
+        
+        # Trigger next load BEFORE processing
+        page.evaluate('window.scrollBy(0, 2000)')  # Scroll far ahead
+        
+        # Process current batch (network loading happens in parallel)
+        for tweet in tweets:
+            if tweet['id'] not in seen:
+                collected.append(tweet)
+                seen.add(tweet['id'])
+        
+        # Small wait for triggered content
+        page.wait_for_timeout(300)
+        
+        # Scroll back to process newly loaded
+        page.evaluate('window.scrollBy(0, -1200)')
+```
+
+### Expected Savings
+- **Per scroll cycle**: 0.5-1 second
+- **Per 200 tweets**: 20-40 seconds
+
+---
+
+## P7. Headless Mode for Production (Low Impact, Trivial Effort)
+
+### Current Problem
+Running with visible browser adds rendering overhead.
+
+### Better Approach
+Use headless mode when not debugging:
+
+```python
+# In config.py
+class FetcherConfig:
+    headless: bool = True  # Default to headless in production
+    
+# Override for debugging
+# ./run_in_venv.sh fetch --user kikollan --visible
+```
+
+### Expected Savings
+- **Overall**: ~10-20% faster (30-60 seconds per 200 tweets)
+
+---
+
+## P8. No Navigation for Quoted Tweets (High Impact, Medium Effort)
+
+### Current Problem
+We open a new tab for each quoted tweet, adding 5-6 seconds each.
+
+### Better Approach
+Extract everything from the embedded quote card without navigation:
+
+```python
+def extract_quoted_from_card(article_html: str) -> Optional[Dict]:
+    """Extract quoted tweet data from the embedded card."""
+    soup = BeautifulSoup(article_html, 'html.parser')
+    
+    # Find the quote card
+    card = soup.select_one('[data-testid="card.wrapper"]')
+    if not card:
+        return None
+    
+    # Extract link to get tweet ID and username
+    link = card.select_one('a[href*="/status/"]')
+    if not link:
+        return None
+    
+    href = link.get('href', '')
+    match = re.match(r'/([^/]+)/status/(\d+)', href)
+    if not match:
+        return None
+    
+    username, tweet_id = match.groups()
+    
+    # Extract visible content from card
+    text_el = card.select_one('[data-testid="tweetText"]')
+    text = text_el.get_text() if text_el else ""
+    
+    # Extract media thumbnails
+    media = []
+    for img in card.select('img[src*="twimg.com"]'):
+        media.append(img.get('src'))
+    
+    return {
+        'tweet_id': tweet_id,
+        'username': username,
+        'content': text,
+        'media_urls': media,
+        'tweet_url': f'https://x.com/{username}/status/{tweet_id}'
+    }
+```
+
+### Expected Savings
+- **Per quoted tweet**: 5-6 seconds
+- **Per 200 tweets**: 15-30 seconds (depends on quote frequency)
+
+---
+
+## Performance Improvement Summary
+
+| Optimization | Time Saved (200 tweets) | Effort | Priority |
+|--------------|-------------------------|--------|----------|
+| P1. Parallel HTML Extraction | 30-60 sec | Low | 🔴 High |
+| P2. Adaptive Scroll Delays | 60-120 sec | Low | 🔴 High |
+| P3. Batch Database Writes | 10-20 sec | Low | 🟡 Medium |
+| P4. Skip Video Hover | 30-60 sec | Medium | 🟡 Medium |
+| P5. Skip "Show More" Check | 20-40 sec | Low | 🟢 Low |
+| P6. Pre-scroll Loading | 20-40 sec | Low | 🟡 Medium |
+| P7. Headless Mode | 30-60 sec | Trivial | 🟢 Low |
+| P8. No Navigation for Quoted | 15-30 sec | Medium | 🟡 Medium |
+
+**Total potential savings**: 215-430 seconds per 200 tweets (50-70% reduction)
+
+### Projected Times for Large Fetches
+
+| Tweets | Current Time | Optimized Time |
+|--------|--------------|----------------|
+| 200 | 5-7 min | 2-3 min |
+| 1,000 | 25-35 min | 10-15 min |
+| 10,000 | 4-6 hours | 1.5-2.5 hours |
+| 85,000 | 35-50 hours | 13-20 hours |
+
+---
+
+## Quick Wins (Implement First)
+
+1. **P2. Adaptive Scroll Delays** - Easiest, biggest impact
+2. **P1. Parallel HTML Extraction** - Requires BeautifulSoup, high impact
+3. **P3. Batch Database Writes** - Simple buffer class
+4. **P7. Headless Mode** - Config flag only

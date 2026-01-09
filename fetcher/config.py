@@ -23,8 +23,9 @@ class FetcherConfig:
     email_or_phone: str = os.getenv("X_EMAIL_OR_PHONE", "")
 
     # Browser settings
-    headless: bool = False
-    slow_mo: int = 50
+    # Default headless=True for production (faster), override with --visible flag
+    headless: bool = os.getenv("FETCHER_HEADLESS", "true").lower() in ("1", "true", "yes")
+    slow_mo: int = int(os.getenv("FETCHER_SLOW_MO", "50"))
     viewport_width: int = 1280
     viewport_height: int = 720
     user_agents: List[str] = None
@@ -55,6 +56,9 @@ class FetcherConfig:
     # Feature flags
     # Toggle thread collection (set to True to enable thread detection & collection)
     collect_threads: bool = os.getenv("FETCHER_COLLECT_THREADS", "false").lower() in ("1","true","yes")
+    
+    # Performance optimization: use adaptive scroll delays (wait for content instead of fixed delays)
+    use_adaptive_scroll: bool = os.getenv("FETCHER_ADAPTIVE_SCROLL", "true").lower() in ("1", "true", "yes")
 
     # Session management
     session_size: int = 800

@@ -395,206 +395,215 @@ def extract_engagement_metrics(article) -> Dict[str, int]:
     return engagement
 
 
+# Threshold for checking "Show more" button - Twitter truncates around 280 chars
+# Only check for expansion if text is near this threshold (saves ~0.3-0.5s per short tweet)
+TRUNCATION_CHECK_THRESHOLD = 250
+
+
+def _try_expand_truncated_text(article, visible_text_length: int) -> bool:
+    """
+    Attempt to expand truncated text by clicking "Show more" button.
+    
+    Only checks if visible_text_length >= TRUNCATION_CHECK_THRESHOLD to avoid
+    unnecessary DOM queries on short tweets (~70% of tweets are not truncated).
+    
+    Args:
+        article: Playwright element locator for the tweet article
+        visible_text_length: Length of currently visible text
+        
+    Returns:
+        True if text was expanded, False otherwise
+    """
+    # P5 Optimization: Skip check for short tweets that can't be truncated
+    if visible_text_length < TRUNCATION_CHECK_THRESHOLD:
+        return False
+    
+    # NOTE: We MUST avoid clicking anchor tags that could navigate the page
+    # Prioritize non-link selectors to avoid navigation
+    show_more_selectors = [
+        '[data-testid="tweet-text-show-more-link"]',  # Twitter's specific test ID
+        'div[role="button"]:has-text("Show more")',   # Button-role divs (safe)
+        'div[role="button"]:has-text("Mostrar más")', # Spanish version
+        'span:has-text("Show more")',                 # Span elements (safe)
+        'span:has-text("Mostrar más")',               # Spanish version
+        '[aria-label*="Show more"]',
+        '[aria-label*="Mostrar más"]',
+        # AVOID anchor tags as they can navigate the page!
+        # 'a:has-text("Show more")',  # REMOVED - can cause navigation
+        # 'a:has-text("Mostrar más")', # REMOVED - can cause navigation
+    ]
+    
+    for selector in show_more_selectors:
+        try:
+            show_more_btn = article.query_selector(selector)
+            if show_more_btn:
+                # Double-check this isn't an anchor tag that could navigate
+                try:
+                    tag_name = show_more_btn.evaluate('el => el.tagName.toLowerCase()')
+                    if tag_name == 'a':
+                        print(f"⚠️ Skipping 'Show more' anchor tag to avoid navigation (selector: {selector})")
+                        continue
+                    # Also check if it's inside an anchor tag
+                    is_inside_link = show_more_btn.evaluate('el => !!el.closest("a")')
+                    if is_inside_link:
+                        print(f"⚠️ Skipping 'Show more' button inside anchor to avoid navigation")
+                        continue
+                except Exception:
+                    pass
+                
+                print(f"🔽 Found 'Show more' button ({selector}), expanding text...")
+                show_more_btn.click()
+                # Wait a bit for the text to expand
+                article.wait_for_timeout(500)
+                return True
+        except Exception:
+            # Button might not be clickable or already expanded
+            continue
+    
+    return False
+
+
+def _extract_text_from_element(text_elem) -> Optional[str]:
+    """
+    Extract text from a single DOM element using multiple strategies.
+    Preserves emojis and handles various element types.
+    
+    Returns the extracted text or None if extraction fails.
+    """
+    # First try JavaScript emoji extraction (most reliable for emojis)
+    try:
+        text = text_elem.evaluate('''
+            el => {
+                const extractTextWithEmojis = (node) => {
+                    let text = '';
+                    for (const child of node.childNodes) {
+                        if (child.nodeType === Node.TEXT_NODE) {
+                            text += child.textContent;
+                        } else if (child.nodeType === Node.ELEMENT_NODE) {
+                            if (child.tagName === 'IMG' && child.alt) {
+                                text += child.alt;
+                            } else {
+                                text += extractTextWithEmojis(child);
+                            }
+                        }
+                    }
+                    return text;
+                };
+                return extractTextWithEmojis(el);
+            }
+        ''')
+        if text and text.strip():
+            return text.strip()
+    except Exception:
+        pass
+    
+    # Fallback to inner_text()
+    try:
+        text = text_elem.inner_text()
+        if text and text.strip():
+            return text.strip()
+    except Exception:
+        pass
+
+    # Try getting raw HTML and extracting text while preserving emojis
+    try:
+        html_content = text_elem.evaluate('el => el.innerHTML')
+        if html_content:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+            text = soup.get_text()
+            text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+            if text and text.strip():
+                return text.strip()
+    except ImportError:
+        try:
+            html_content = text_elem.evaluate('el => el.innerHTML')
+            if html_content:
+                text = re.sub(r'<[^>]+>', '', html_content)
+                import html
+                text = html.unescape(text)
+                if text and text.strip():
+                    return text.strip()
+        except Exception:
+            pass
+    except Exception:
+        pass
+    
+    return None
+
+
 def extract_full_tweet_content(article) -> str:
     """
     Extract full tweet text content using multiple selector strategies.
     Handles different tweet layouts and structures.
     Returns empty string if no actual tweet text found (e.g., media-only posts).
-    """
-    # First, try to expand truncated text by clicking "Show more" button
-    # NOTE: We MUST avoid clicking anchor tags that could navigate the page
-    try:
-        # Prioritize non-link selectors to avoid navigation
-        show_more_selectors = [
-            '[data-testid="tweet-text-show-more-link"]',  # Twitter's specific test ID
-            'div[role="button"]:has-text("Show more")',   # Button-role divs (safe)
-            'div[role="button"]:has-text("Mostrar más")', # Spanish version
-            'span:has-text("Show more")',                 # Span elements (safe)
-            'span:has-text("Mostrar más")',               # Spanish version
-            '[aria-label*="Show more"]',
-            '[aria-label*="Mostrar más"]',
-            # AVOID anchor tags as they can navigate the page!
-            # 'a:has-text("Show more")',  # REMOVED - can cause navigation
-            # 'a:has-text("Mostrar más")', # REMOVED - can cause navigation
-        ]
-        
-        for selector in show_more_selectors:
-            try:
-                show_more_btn = article.query_selector(selector)
-                if show_more_btn:
-                    # Double-check this isn't an anchor tag that could navigate
-                    try:
-                        tag_name = show_more_btn.evaluate('el => el.tagName.toLowerCase()')
-                        if tag_name == 'a':
-                            print(f"⚠️ Skipping 'Show more' anchor tag to avoid navigation (selector: {selector})")
-                            continue
-                        # Also check if it's inside an anchor tag
-                        is_inside_link = show_more_btn.evaluate('el => !!el.closest("a")')
-                        if is_inside_link:
-                            print(f"⚠️ Skipping 'Show more' button inside anchor to avoid navigation")
-                            continue
-                    except Exception:
-                        pass
-                    
-                    print(f"🔽 Found 'Show more' button ({selector}), expanding text...")
-                    show_more_btn.click()
-                    # Wait a bit for the text to expand
-                    article.wait_for_timeout(500)
-                    break
-            except Exception as e:
-                # Button might not be clickable or already expanded
-                continue
-    except Exception as e:
-        # If expansion fails, continue with whatever text is visible
-        print(f"⚠️ Could not expand truncated text: {e}")
     
-    text_selectors = [
-        # Primary: Standard tweet text
+    P5 Optimization: Only checks for "Show more" button if text is near
+    truncation threshold (>= 250 chars), saving ~0.3-0.5s per short tweet.
+    """
+    # Primary selectors (most reliable)
+    primary_selectors = [
         '[data-testid="tweetText"]',
-
-        # Alternative: Different test IDs
         '[data-testid="Tweet-User-Text"]',
         '[data-testid="TweetText"]',
-
-        # CSS class-based selectors (common patterns)
+    ]
+    
+    # Fallback selectors (less reliable)
+    fallback_selectors = [
         '.tweet-text',
         '.TweetTextSize',
         '[class*="TweetText"]',
         '[class*="tweet-text"]',
-
-        # Generic text containers
-        'div[role="group"] p',  # Paragraph inside role group
-        'article p',            # Any paragraph in article
-
-        # Span-based text (newer Twitter layout)
+        'div[role="group"] p',
+        'article p',
         'span[data-testid="tweetText"]',
         'span[class*="tweet-text"]',
         'span[role="text"]',
     ]
 
-    print(f"🔍 Extracting tweet text with {len(text_selectors)} selector strategies...")
+    print(f"🔍 Extracting tweet text...")
 
-    for i, selector in enumerate(text_selectors):
+    # Try primary selectors first
+    for selector in primary_selectors:
+        try:
+            text_elem = article.query_selector(selector)
+            if text_elem:
+                visible_text = _extract_text_from_element(text_elem)
+                if visible_text:
+                    # P5 Optimization: Only check "Show more" if text is near truncation threshold
+                    if _try_expand_truncated_text(article, len(visible_text)):
+                        # Text was expanded, re-extract
+                        text_elem = article.query_selector(selector)
+                        if text_elem:
+                            expanded_text = _extract_text_from_element(text_elem)
+                            if expanded_text:
+                                print(f"📝 Extracted expanded text ({len(expanded_text)} chars)")
+                                return expanded_text
+                    print(f"📝 Extracted text ({len(visible_text)} chars)")
+                    return visible_text
+        except Exception as e:
+            print(f"⚠️ Primary selector {selector} failed: {e}")
+            continue
+
+    # Try fallback selectors
+    for selector in fallback_selectors:
         try:
             elements = article.query_selector_all(selector)
-            if elements:
-                print(f"✅ Found {len(elements)} text elements with selector: {selector}")
-
-                # For primary selectors, take the first match
-                if i < 3:  # Primary selectors
-                    text_elem = elements[0]
-                    
-                    # First try JavaScript emoji extraction (most reliable for emojis)
-                    try:
-                        # Use JavaScript to get text content while preserving emojis
-                        text = text_elem.evaluate('''
-                            el => {
-                                // Try to get text content that preserves emojis
-                                const textContent = el.textContent || el.innerText || '';
-                                
-                                // Also try to extract from child nodes to preserve emojis
-                                const extractTextWithEmojis = (node) => {
-                                    let text = '';
-                                    for (const child of node.childNodes) {
-                                        if (child.nodeType === Node.TEXT_NODE) {
-                                            text += child.textContent;
-                                        } else if (child.nodeType === Node.ELEMENT_NODE) {
-                                            // For img elements with alt text (emojis), use alt
-                                            if (child.tagName === 'IMG' && child.alt) {
-                                                text += child.alt;
-                                            } else {
-                                                text += extractTextWithEmojis(child);
-                                            }
-                                        }
-                                    }
-                                    return text;
-                                };
-                                
-                                return extractTextWithEmojis(el);
-                            }
-                        ''')
-                        if text and text.strip():
-                            print(f"📝 Extracted JS emoji text ({len(text)} chars): {repr(text[:200])}...")
+            for elem in elements:
+                try:
+                    text = elem.inner_text()
+                    if text and text.strip() and len(text.strip()) > 10:
+                        if not any(skip in text.lower() for skip in ['http', 'twitter.com', '@']):
+                            print(f"📝 Extracted generic text ({len(text)} chars): {text[:100]}...")
                             return text.strip()
-                    except Exception as e:
-                        print(f"⚠️ JavaScript emoji extraction failed: {e}")
-                    
-                    # Fallback to inner_text()
-                    try:
-                        text = text_elem.inner_text()
-                        if text and text.strip():
-                            print(f"📝 Extracted inner_text ({len(text)} chars): {text[:100]}...")
-                            return text.strip()
-                    except Exception as e:
-                        print(f"⚠️ inner_text() failed for {selector}: {e}")
-
-                    # Try getting raw HTML and extracting text while preserving emojis
-                    try:
-                        html_content = text_elem.evaluate('el => el.innerHTML')
-                        if html_content:
-                            # Use BeautifulSoup or regex to extract text while preserving emojis
-                            from bs4 import BeautifulSoup
-                            
-                            # Parse HTML with BeautifulSoup to preserve emojis
-                            soup = BeautifulSoup(html_content, 'html.parser')
-                            text = soup.get_text()
-                            
-                            # Additional cleanup
-                            text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
-                            
-                            if text and text.strip():
-                                print(f"📝 Extracted BeautifulSoup text ({len(text)} chars): {text[:100]}...")
-                                return text.strip()
-                    except ImportError:
-                        # Fallback if BeautifulSoup not available
-                        try:
-                            html_content = text_elem.evaluate('el => el.innerHTML')
-                            if html_content:
-                                # Simple HTML tag removal
-                                text = re.sub(r'<[^>]+>', '', html_content)
-                                # Decode HTML entities
-                                import html
-                                text = html.unescape(text)
-                                if text and text.strip():
-                                    print(f"📝 Extracted HTML text ({len(text)} chars): {text[:100]}...")
-                                    return text.strip()
-                        except Exception as e:
-                            print(f"⚠️ HTML extraction fallback failed: {e}")
-                    except Exception as e:
-                        print(f"⚠️ BeautifulSoup extraction failed for {selector}: {e}")
-                        
-                        # Try simpler HTML extraction as fallback
-                        try:
-                            html_content = text_elem.evaluate('el => el.innerHTML')
-                            if html_content:
-                                text = re.sub(r'<[^>]+>', '', html_content)
-                                import html
-                                text = html.unescape(text)
-                                if text and text.strip():
-                                    print(f"📝 Extracted simple HTML text ({len(text)} chars): {text[:100]}...")
-                                    return text.strip()
-                        except Exception as e2:
-                            print(f"⚠️ Simple HTML extraction failed: {e2}")
-
-                # For generic selectors, we need to be more careful
-                else:
-                    for elem in elements:
-                        try:
-                            text = elem.inner_text()
-                            if text and text.strip() and len(text.strip()) > 10:  # Minimum length filter
-                                # Additional validation: should not contain URLs or be too short
-                                if not any(skip in text.lower() for skip in ['http', 'twitter.com', '@']):
-                                    print(f"📝 Extracted generic text ({len(text)} chars): {text[:100]}...")
-                                    return text.strip()
-                        except Exception:
-                            continue
-
+                except Exception:
+                    continue
         except Exception as e:
             print(f"⚠️ Selector failed {selector}: {e}")
             continue
 
     # No text content found - this is likely a media-only post
-    print(f"� No text content found (media-only post)")
+    print(f"ℹ️ No text content found (media-only post)")
     return ''
 
 
@@ -872,6 +881,111 @@ def human_delay(min_seconds: float = 1.0, max_seconds: float = 3.0):
     """Sleep for a random amount of time to mimic human behavior."""
     delay = random.uniform(min_seconds, max_seconds)
     time.sleep(delay)
+
+
+def extract_quoted_from_embedded_card(quoted_card, post_analysis: dict) -> Optional[dict]:
+    """
+    P8 Performance Optimization: Extract quoted tweet data from the embedded card
+    without navigation (saves 5-6 seconds per quoted tweet).
+    
+    Extracts:
+    - Author username and tweet ID from the link
+    - Text content from the embedded tweetText element
+    - Media thumbnails from embedded images
+    - Tweet URL
+    
+    Args:
+        quoted_card: Playwright element for the quoted card/article
+        post_analysis: Post analysis dict to update with quoted content
+        
+    Returns:
+        dict with quoted tweet data, or None if extraction failed
+    """
+    try:
+        # Find the link to the quoted tweet
+        quoted_href = None
+        
+        # Try multiple methods to find the quoted tweet URL
+        quoted_link = quoted_card.query_selector('a[href*="/status/"]')
+        if quoted_link:
+            quoted_href = quoted_link.get_attribute('href')
+        
+        # If quoted_card IS a link
+        if not quoted_href:
+            try:
+                tag_name = quoted_card.evaluate('el => el.tagName.toLowerCase()')
+                if tag_name == 'a':
+                    quoted_href = quoted_card.get_attribute('href')
+            except Exception:
+                pass
+        
+        if not quoted_href or '/status/' not in quoted_href:
+            return None
+        
+        # Parse author and tweet ID from URL
+        parts = quoted_href.strip('/').split('/')
+        status_index = parts.index('status') if 'status' in parts else -1
+        if status_index < 1 or status_index + 1 >= len(parts):
+            return None
+        
+        quoted_author = parts[status_index - 1].split('?')[0]
+        quoted_tweet_id = parts[status_index + 1].split('?')[0]
+        quoted_tweet_url = f"https://x.com/{quoted_author}/status/{quoted_tweet_id}"
+        
+        # Update post_analysis with metadata
+        post_analysis['original_author'] = quoted_author
+        post_analysis['original_tweet_id'] = quoted_tweet_id
+        
+        # Extract text content from embedded card
+        quoted_text = None
+        quoted_text_elem = quoted_card.query_selector('[data-testid="tweetText"]')
+        if quoted_text_elem:
+            try:
+                quoted_text = _extract_text_from_element(quoted_text_elem)
+            except Exception:
+                try:
+                    quoted_text = quoted_text_elem.inner_text().strip()
+                except Exception:
+                    pass
+        
+        # Extract media from embedded card
+        media_links = []
+        try:
+            # Look for images in the card
+            for img in quoted_card.query_selector_all('img[src*="twimg.com"], img[src*="pbs.twimg"]'):
+                src = img.get_attribute('src')
+                if src and 'twimg.com' in src:
+                    # Skip profile images and emoji
+                    if 'profile_images' not in src and 'emoji' not in src:
+                        media_links.append(src)
+            
+            # Look for video thumbnails
+            for video in quoted_card.query_selector_all('video[poster*="twimg"], [data-testid="videoPlayer"] img'):
+                poster = video.get_attribute('poster') or video.get_attribute('src')
+                if poster and 'twimg.com' in poster:
+                    media_links.append(poster)
+        except Exception:
+            pass
+        
+        if quoted_text or media_links:
+            post_analysis['original_content'] = quoted_text or ""
+            print(f"📎 P8: Extracted quoted tweet from card (no navigation): @{quoted_author}, {len(quoted_text or '')} chars, {len(media_links)} media")
+            
+            return {
+                'tweet_id': quoted_tweet_id,
+                'username': quoted_author,
+                'content': quoted_text or "",
+                'media_links': media_links,
+                'media_count': len(media_links),
+                'tweet_url': quoted_tweet_url,
+                'extracted_from_card': True  # Flag to indicate no navigation was used
+            }
+        
+        return None
+        
+    except Exception as e:
+        print(f"⚠️ Error extracting from embedded card: {e}")
+        return None
 
 
 def extract_quoted_tweet_in_new_tab(page, quoted_tweet_url: str, post_analysis: dict) -> Optional[dict]:
@@ -1180,43 +1294,68 @@ def find_and_extract_quoted_tweet(page, main_article, post_analysis: dict) -> di
                     # Second one is the quoted tweet (nested inside main article)
                     quoted_text_elem = tweet_texts[1]
                     print(f"✅ Found quoted tweet (2nd tweetText element within main article)")
-                    # Get the text content first
-                    quoted_text = quoted_text_elem.inner_text() if hasattr(quoted_text_elem, 'inner_text') else None
+                    
+                    # P8 Optimization: Extract text directly without navigation
+                    quoted_text = None
+                    try:
+                        quoted_text = _extract_text_from_element(quoted_text_elem)
+                    except Exception:
+                        try:
+                            quoted_text = quoted_text_elem.inner_text() if hasattr(quoted_text_elem, 'inner_text') else None
+                        except Exception:
+                            pass
+                    
                     if quoted_text:
                         post_analysis['original_content'] = quoted_text
-                        print(f"📎 Quoted content: {quoted_text[:150]}...")
+                        print(f"📎 P8: Quoted content extracted without navigation: {quoted_text[:150]}...")
                     
-                    # Extract quoted tweet URL from the article
+                    # Extract quoted tweet metadata from the article links
                     try:
                         all_links = main_article.query_selector_all('a[href*="/status/"]')
                         main_tweet_id = post_analysis.get('tweet_id', '')
-                        quoted_tweet_url = None
                         
                         for link in all_links:
                             href = link.get_attribute('href')
                             if href and '/status/' in href and main_tweet_id not in href:
-                                # Parse author and tweet ID from URL
                                 parts = href.strip('/').split('/')
                                 if 'status' in parts:
                                     status_index = parts.index('status')
-                                    if status_index >= 1:
+                                    if status_index >= 1 and status_index + 1 < len(parts):
                                         quoted_author = parts[status_index - 1].split('?')[0]
                                         quoted_tweet_id = parts[status_index + 1].split('?')[0]
                                         post_analysis['original_author'] = quoted_author
                                         post_analysis['original_tweet_id'] = quoted_tweet_id
-                                        quoted_tweet_url = f"https://x.com/{quoted_author}/status/{quoted_tweet_id}"
-                                        print(f"📋 Extracted quoted tweet metadata: @{quoted_author}, ID: {quoted_tweet_id}")
+                                        print(f"📋 P8: Extracted quoted tweet metadata: @{quoted_author}, ID: {quoted_tweet_id}")
+                                        
+                                        # Return directly if we have text (P8 optimization - no navigation)
+                                        if quoted_text:
+                                            # Extract any media from the quoted section
+                                            media_links = []
+                                            try:
+                                                # Find the parent element of the quoted text for media
+                                                parent_elem = quoted_text_elem.evaluate_handle('el => el.closest("[role=\\"article\\"]") || el.parentElement.parentElement')
+                                                if parent_elem:
+                                                    parent = parent_elem.as_element()
+                                                    if parent:
+                                                        for img in parent.query_selector_all('img[src*="twimg.com"]'):
+                                                            src = img.get_attribute('src')
+                                                            if src and 'profile_images' not in src and 'emoji' not in src:
+                                                                media_links.append(src)
+                                            except Exception:
+                                                pass
+                                            
+                                            return {
+                                                'tweet_id': quoted_tweet_id,
+                                                'username': quoted_author,
+                                                'content': quoted_text,
+                                                'media_links': media_links,
+                                                'media_count': len(media_links),
+                                                'tweet_url': f"https://x.com/{quoted_author}/status/{quoted_tweet_id}",
+                                                'extracted_from_card': True
+                                            }
                                         break
-                        
-                        if quoted_tweet_url:
-                            # Use new tab to extract complete quoted tweet (avoids navigation issues)
-                            result = extract_quoted_tweet_in_new_tab(page, quoted_tweet_url, post_analysis)
-                            if result:
-                                return result
-                        else:
-                            print(f"⚠️ No quoted tweet link found in main article")
                     except Exception as e:
-                        print(f"⚠️ Could not extract quoted tweet: {e}")
+                        print(f"⚠️ P8: Could not extract quoted tweet metadata: {e}")
                 continue
             
             selector = selector_item
@@ -1324,15 +1463,19 @@ def find_and_extract_quoted_tweet(page, main_article, post_analysis: dict) -> di
         
         print(f"🔗 Found quoted tweet by @{quoted_author}: {quoted_tweet_url}")
         
-        # Try to extract embedded text first
-        quoted_text_elem = quoted_card.query_selector('[data-testid="tweetText"]')
-        if quoted_text_elem:
-            embedded_text = quoted_text_elem.inner_text().strip()
-            print(f"📄 Extracted embedded text: {len(embedded_text)} chars")
-        else:
-            embedded_text = None
+        # P8 Optimization: Try to extract from embedded card first (saves 5-6 seconds)
+        card_result = extract_quoted_from_embedded_card(quoted_card, post_analysis)
+        if card_result and card_result.get('content'):
+            # Check if content seems complete (not truncated)
+            content_len = len(card_result.get('content', ''))
+            # If content is substantial (>100 chars), assume it's complete enough
+            if content_len > 100 or content_len < TRUNCATION_CHECK_THRESHOLD:
+                print(f"✅ P8: Using embedded card data (no navigation needed)")
+                return card_result
+            else:
+                print(f"⚠️ P8: Embedded text may be truncated ({content_len} chars), will try navigation")
         
-        # Strategy 3: Extract quoted tweet in new tab (avoids navigation issues)
+        # Strategy 3: Extract quoted tweet in new tab (fallback if card extraction insufficient)
         result = extract_quoted_tweet_in_new_tab(page, quoted_tweet_url, post_analysis)
         if result:
             return result

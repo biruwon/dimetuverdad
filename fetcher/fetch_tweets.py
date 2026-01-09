@@ -629,13 +629,21 @@ def main():
     parser.add_argument("--refetch", help="Re-fetch a specific tweet ID (bypasses exists check and updates database)")
     parser.add_argument("--refetch-all", help="Delete all data for specified username and refetch from scratch")
     parser.add_argument("--no-threads", action='store_true', help="Disable thread detection and collection for this run")
+    parser.add_argument("--visible", action='store_true', help="Show browser window (disable headless mode) for debugging")
     args = parser.parse_args()
 
-    # Honor --no-threads flag by toggling config at runtime
+    # Apply runtime config overrides
+    cfg = get_config()
+    
+    # Honor --no-threads flag
     if getattr(args, 'no_threads', False):
-        cfg = get_config()
         cfg.collect_threads = False
         print("⚠️ Thread collection disabled for this run (--no-threads)")
+    
+    # Honor --visible flag (disable headless mode for debugging)
+    if getattr(args, 'visible', False):
+        cfg.headless = False
+        print("👁️ Browser visible mode enabled (--visible)")
 
     # Handle refetch mode for specific tweet
     if args.refetch:

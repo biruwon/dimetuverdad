@@ -1,6 +1,8 @@
 import sqlite3
-from typing import Dict
+import time
+from typing import Dict, List, Optional
 from datetime import datetime
+from dataclasses import dataclass, field
 
 # Import path utilities for consistent database path resolution
 import sys
@@ -11,6 +13,208 @@ from utils import paths
 from database.repositories import get_tweet_repository
 
 DB_PATH = str(paths.get_db_path())
+
+
+@dataclass
+class BatchWriteStats:
+    """Track batch write performance statistics."""
+    total_tweets: int = 0
+    batches_written: int = 0
+    total_time: float = 0.0
+    errors: int = 0
+    
+    @property
+    def avg_batch_time(self) -> float:
+        if self.batches_written == 0:
+            return 0.0
+        return self.total_time / self.batches_written
+
+
+class TweetBuffer:
+    """
+    Buffer for batch database writes (P3 Performance Optimization).
+    
+    Buffers tweet data and writes in batches to reduce transaction overhead.
+    This can significantly improve write performance when collecting many tweets.
+    
+    Usage:
+        buffer = TweetBuffer(conn, batch_size=50)
+        for tweet in tweets:
+            buffer.add(tweet)
+        buffer.flush()  # Don't forget to flush remaining tweets
+    """
+    
+    def __init__(self, conn: sqlite3.Connection, batch_size: int = 50):
+        """
+        Initialize the tweet buffer.
+        
+        Args:
+            conn: SQLite database connection
+            batch_size: Number of tweets to buffer before writing
+        """
+        self.conn = conn
+        self.batch_size = batch_size
+        self.buffer: List[Dict] = []
+        self.stats = BatchWriteStats()
+        self._insert_columns = [
+            'tweet_id', 'content', 'username', 'tweet_url', 'tweet_timestamp',
+            'post_type', 'original_author', 'original_tweet_id', 'reply_to_username',
+            'media_links', 'media_count', 'engagement_likes', 'engagement_retweets',
+            'engagement_replies', 'external_links', 'original_content', 'is_pinned',
+            'reply_to_tweet_id', 'conversation_id', 'thread_id', 'thread_position',
+            'is_thread_start'
+        ]
+    
+    def add(self, tweet_data: Dict) -> bool:
+        """
+        Add a tweet to the buffer.
+        
+        Args:
+            tweet_data: Tweet data dictionary
+            
+        Returns:
+            bool: True if tweet was added (not a duplicate)
+        """
+        tweet_id = tweet_data.get('tweet_id')
+        if not tweet_id or str(tweet_id).lower() == 'analytics':
+            return False
+        
+        # Skip if already in buffer
+        if any(t.get('tweet_id') == tweet_id for t in self.buffer):
+            return False
+        
+        self.buffer.append(tweet_data)
+        
+        if len(self.buffer) >= self.batch_size:
+            self.flush()
+        
+        return True
+    
+    def flush(self) -> int:
+        """
+        Write all buffered tweets to the database.
+        
+        Returns:
+            int: Number of tweets written
+        """
+        if not self.buffer:
+            return 0
+        
+        start_time = time.time()
+        tweets_written = 0
+        
+        try:
+            cursor = self.conn.cursor()
+            
+            # Prepare values for batch insert
+            placeholders = ', '.join(['?'] * len(self._insert_columns))
+            columns = ', '.join(self._insert_columns)
+            
+            for tweet_data in self.buffer:
+                try:
+                    # Check if exists for update logic
+                    cursor.execute(
+                        "SELECT id FROM tweets WHERE tweet_id = ?",
+                        (tweet_data['tweet_id'],)
+                    )
+                    existing = cursor.fetchone()
+                    
+                    if existing:
+                        # Update existing tweet
+                        self._update_tweet(cursor, tweet_data)
+                    else:
+                        # Insert new tweet
+                        values = tuple(
+                            tweet_data.get(col, 0 if col in ('media_count', 'engagement_likes', 
+                                'engagement_retweets', 'engagement_replies', 'is_pinned', 
+                                'is_thread_start') else None)
+                            for col in self._insert_columns
+                        )
+                        cursor.execute(
+                            f"INSERT INTO tweets ({columns}) VALUES ({placeholders})",
+                            values
+                        )
+                    tweets_written += 1
+                    
+                except Exception as e:
+                    self.stats.errors += 1
+                    # Continue with other tweets
+                    continue
+            
+            # Single commit for the entire batch
+            self.conn.commit()
+            
+            elapsed = time.time() - start_time
+            self.stats.total_tweets += tweets_written
+            self.stats.batches_written += 1
+            self.stats.total_time += elapsed
+            
+        except Exception as e:
+            self.stats.errors += 1
+        finally:
+            self.buffer = []
+        
+        return tweets_written
+    
+    def _update_tweet(self, cursor, tweet_data: Dict) -> None:
+        """Update an existing tweet with new data."""
+        cursor.execute("""
+            UPDATE tweets SET 
+                content = ?,
+                post_type = ?,
+                original_author = ?,
+                original_tweet_id = ?,
+                media_links = ?,
+                media_count = ?,
+                engagement_likes = ?,
+                engagement_retweets = ?,
+                engagement_replies = ?,
+                external_links = ?,
+                original_content = ?,
+                is_pinned = ?,
+                reply_to_tweet_id = COALESCE(?, reply_to_tweet_id),
+                conversation_id = COALESCE(?, conversation_id),
+                thread_id = COALESCE(?, thread_id),
+                thread_position = COALESCE(?, thread_position),
+                is_thread_start = COALESCE(?, is_thread_start)
+            WHERE tweet_id = ?
+        """, (
+            tweet_data.get('content'),
+            tweet_data.get('post_type', 'original'),
+            tweet_data.get('original_author'),
+            tweet_data.get('original_tweet_id'),
+            tweet_data.get('media_links'),
+            tweet_data.get('media_count', 0),
+            tweet_data.get('engagement_likes', 0),
+            tweet_data.get('engagement_retweets', 0),
+            tweet_data.get('engagement_replies', 0),
+            tweet_data.get('external_links'),
+            tweet_data.get('original_content'),
+            tweet_data.get('is_pinned', 0),
+            tweet_data.get('reply_to_tweet_id'),
+            tweet_data.get('conversation_id'),
+            tweet_data.get('thread_id'),
+            tweet_data.get('thread_position'),
+            tweet_data.get('is_thread_start'),
+            tweet_data['tweet_id']
+        ))
+    
+    def get_stats(self) -> BatchWriteStats:
+        """Get batch write statistics."""
+        return self.stats
+    
+    def __len__(self) -> int:
+        """Return number of tweets currently in buffer."""
+        return len(self.buffer)
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - flush remaining tweets."""
+        self.flush()
+        return False
 
 def delete_account_data(username: str) -> Dict[str, int]:
     """

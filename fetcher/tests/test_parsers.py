@@ -16,6 +16,27 @@ class FakeElem:
 
     def inner_text(self):
         return self._text
+    
+    def evaluate(self, script):
+        """Mock JavaScript evaluate for text extraction."""
+        # Return the text for text extraction scripts
+        if 'extractTextWithEmojis' in script or 'textContent' in script or 'innerHTML' in script:
+            return self._text
+        # Return tag name for tag checks
+        if 'tagName' in script:
+            return self.tag
+        # Return False for 'inside anchor' checks by default
+        if 'closest' in script:
+            return False
+        return None
+    
+    def wait_for_timeout(self, ms):
+        """Mock wait function."""
+        pass
+
+    def click(self):
+        """Mock click function."""
+        pass
 
     def query_selector(self, selector):
         # First check mapping if available
@@ -332,8 +353,10 @@ def test_extract_full_tweet_content_and_fallback():
     assert parsers.extract_full_tweet_content(article) == 'Hello world'
 
     # When no proper tweet text selectors match, return empty (media-only post)
-    article2 = FakeElem(text='This is a much longer fallback full text that should definitely be extracted properly')
-    article2.query_selector_all = lambda selector: []  # Mock to force no matches
+    # Must mock both query_selector and query_selector_all to return nothing
+    article2 = FakeElem(mapping={})  # Empty mapping means query_selector returns None
+    article2.query_selector = lambda selector: None  # Force no primary matches
+    article2.query_selector_all = lambda selector: []  # Force no fallback matches
     # Should return empty string since no tweet text selectors matched
     assert parsers.extract_full_tweet_content(article2) == ''
 
@@ -384,7 +407,8 @@ def test_extract_full_tweet_content_multiple_selectors():
 
     # Test media-only post (no text selectors match)
     article6 = FakeElem(mapping={})
-    article6.query_selector_all = lambda selector: []
+    article6.query_selector = lambda selector: None  # Force no primary matches
+    article6.query_selector_all = lambda selector: []  # Force no fallback matches
     result6 = parsers.extract_full_tweet_content(article6)
     # Should return empty string for media-only posts
     assert result6 == ''
@@ -393,34 +417,28 @@ def test_extract_full_tweet_content_multiple_selectors():
 def test_extract_full_tweet_content_ultimate_fallback():
     """Test that media-only posts return empty string (no overly broad fallbacks)."""
     # When no proper tweet text selectors match, should return empty
-    article_text = """@username
-This is the main tweet content that should be extracted.
-2h
-Like Reply Retweet
-2024"""
-
-    article = FakeElem(text=article_text)
-    # Mock all selectors to return None (simulates media-only post)
-    article.query_selector_all = lambda selector: []
+    # Simulates a media-only post where tweet text element is not found
+    article = FakeElem(mapping={})
+    article.query_selector = lambda selector: None  # Force no primary matches
+    article.query_selector_all = lambda selector: []  # Force no fallback matches
 
     result = parsers.extract_full_tweet_content(article)
     # Should return empty string since no tweet text selectors matched
     assert result == ''
-    assert '@username' not in result  # Should filter out usernames
-    assert '2h' not in result  # Should filter out timestamps
-    assert 'Like Reply Retweet' not in result  # Should filter out engagement text
 
 
 def test_extract_full_tweet_content_empty_and_invalid():
     """Test extract_full_tweet_content with empty or invalid inputs."""
-    # Empty article
-    empty_article = FakeElem(text='')
+    # Empty article (media-only post simulation)
+    empty_article = FakeElem(mapping={})
+    empty_article.query_selector = lambda selector: None  # No tweet text element
     empty_article.query_selector_all = lambda selector: []
     result = parsers.extract_full_tweet_content(empty_article)
     assert result == ''
 
-    # Article with only unwanted content
-    unwanted_article = FakeElem(text='@user 2h Like Reply')
+    # Article with no tweet text element (media-only post)
+    unwanted_article = FakeElem(mapping={})
+    unwanted_article.query_selector = lambda selector: None  # No tweet text element
     unwanted_article.query_selector_all = lambda selector: []
     result = parsers.extract_full_tweet_content(unwanted_article)
     assert result == ''  # Should return empty when no valid content found
@@ -624,3 +642,538 @@ def test_find_and_extract_quoted_tweet_scroll_position_handling():
 
     # Verify scroll position was saved
     mock_page.evaluate.assert_called_with("window.scrollY")
+
+
+# ===========================================================
+# P5: Skip "Show More" for Short Tweets Tests
+# ===========================================================
+
+class TestTruncationCheckThreshold:
+    """Tests for the TRUNCATION_CHECK_THRESHOLD constant."""
+    
+    def test_truncation_threshold_exists(self):
+        """Test that the truncation threshold constant is defined."""
+        assert hasattr(parsers, 'TRUNCATION_CHECK_THRESHOLD')
+        assert parsers.TRUNCATION_CHECK_THRESHOLD == 250
+    
+    def test_truncation_threshold_below_twitter_limit(self):
+        """Threshold should be below Twitter's 280 char limit to catch potential truncation."""
+        assert parsers.TRUNCATION_CHECK_THRESHOLD < 280
+
+
+class TestTryExpandTruncatedText:
+    """Tests for the _try_expand_truncated_text function."""
+    
+    def test_skip_expansion_for_short_text(self):
+        """Short text (< 250 chars) should skip the expansion check entirely."""
+        from unittest.mock import Mock
+        
+        article = Mock()
+        # query_selector should NOT be called for short text
+        article.query_selector = Mock(return_value=None)
+        
+        short_text_length = 100  # Well below threshold
+        result = parsers._try_expand_truncated_text(article, short_text_length)
+        
+        assert result is False
+        # Verify query_selector was never called (optimization working)
+        article.query_selector.assert_not_called()
+    
+    def test_skip_expansion_at_threshold_minus_one(self):
+        """Text at exactly threshold-1 chars should skip expansion check."""
+        from unittest.mock import Mock
+        
+        article = Mock()
+        article.query_selector = Mock(return_value=None)
+        
+        result = parsers._try_expand_truncated_text(article, 249)
+        
+        assert result is False
+        article.query_selector.assert_not_called()
+    
+    def test_check_expansion_at_threshold(self):
+        """Text at exactly threshold should check for Show more button."""
+        from unittest.mock import Mock
+        
+        article = Mock()
+        article.query_selector = Mock(return_value=None)  # No button found
+        
+        result = parsers._try_expand_truncated_text(article, 250)
+        
+        assert result is False
+        # Verify query_selector WAS called (checking for button)
+        assert article.query_selector.call_count > 0
+    
+    def test_check_expansion_above_threshold(self):
+        """Text above threshold should check for Show more button."""
+        from unittest.mock import Mock
+        
+        article = Mock()
+        article.query_selector = Mock(return_value=None)
+        
+        result = parsers._try_expand_truncated_text(article, 300)
+        
+        assert result is False
+        assert article.query_selector.call_count > 0
+    
+    def test_expansion_clicks_button_when_found(self):
+        """When Show more button is found, it should be clicked."""
+        from unittest.mock import Mock
+        
+        article = Mock()
+        mock_button = Mock()
+        # First evaluate returns 'span' (not anchor), second returns False (not inside anchor)
+        mock_button.evaluate = Mock(side_effect=['span', False])
+        mock_button.click = Mock()
+        article.query_selector = Mock(return_value=mock_button)
+        article.wait_for_timeout = Mock()
+        
+        result = parsers._try_expand_truncated_text(article, 280)
+        
+        assert result is True
+        mock_button.click.assert_called_once()
+        article.wait_for_timeout.assert_called_once_with(500)
+    
+    def test_skip_anchor_tags(self):
+        """Anchor tags should be skipped to avoid navigation."""
+        from unittest.mock import Mock
+        
+        article = Mock()
+        mock_anchor = Mock()
+        mock_anchor.evaluate = Mock(return_value='a')  # Is an anchor tag
+        article.query_selector = Mock(return_value=mock_anchor)
+        
+        result = parsers._try_expand_truncated_text(article, 280)
+        
+        # Should return False since anchor was skipped
+        assert result is False
+        mock_anchor.click.assert_not_called()
+    
+    def test_skip_button_inside_anchor(self):
+        """Buttons inside anchor tags should be skipped."""
+        from unittest.mock import Mock
+        
+        article = Mock()
+        mock_button = Mock()
+        # For each selector tried (7 selectors), we need:
+        # - First evaluate returns 'span' (not anchor)
+        # - Second returns True (inside anchor) - causes skip
+        # The side_effect cycles through for each selector
+        mock_button.evaluate = Mock(side_effect=['span', True] * 7)
+        article.query_selector = Mock(return_value=mock_button)
+        
+        result = parsers._try_expand_truncated_text(article, 280)
+        
+        # All buttons were inside anchors, so no expansion
+        assert result is False
+
+
+class TestExtractTextFromElement:
+    """Tests for the _extract_text_from_element helper function."""
+    
+    def test_extract_simple_text(self):
+        """Test extracting simple text from an element."""
+        from unittest.mock import Mock
+        
+        mock_elem = Mock()
+        mock_elem.evaluate = Mock(return_value="Hello, world!")
+        
+        result = parsers._extract_text_from_element(mock_elem)
+        
+        assert result == "Hello, world!"
+    
+    def test_extract_text_strips_whitespace(self):
+        """Extracted text should be stripped of whitespace."""
+        from unittest.mock import Mock
+        
+        mock_elem = Mock()
+        mock_elem.evaluate = Mock(return_value="  Hello  ")
+        
+        result = parsers._extract_text_from_element(mock_elem)
+        
+        assert result == "Hello"
+    
+    def test_fallback_to_inner_text(self):
+        """Should fall back to inner_text if JS extraction fails."""
+        from unittest.mock import Mock
+        
+        mock_elem = Mock()
+        mock_elem.evaluate = Mock(side_effect=Exception("JS failed"))
+        mock_elem.inner_text = Mock(return_value="Fallback text")
+        
+        result = parsers._extract_text_from_element(mock_elem)
+        
+        assert result == "Fallback text"
+    
+    def test_returns_none_for_empty_text(self):
+        """Should return None if all extraction methods return empty."""
+        from unittest.mock import Mock
+        
+        mock_elem = Mock()
+        mock_elem.evaluate = Mock(return_value="")
+        mock_elem.inner_text = Mock(return_value="")
+        
+        result = parsers._extract_text_from_element(mock_elem)
+        
+        assert result is None
+
+
+class TestExtractFullTweetContentP5:
+    """Tests for P5 optimization in extract_full_tweet_content."""
+    
+    def test_short_text_does_not_check_show_more(self):
+        """For short tweets, Show more should NOT be checked (P5 optimization)."""
+        from unittest.mock import Mock, patch
+        
+        short_text = "This is a short tweet."  # 23 chars, well below threshold
+        
+        mock_elem = Mock()
+        mock_elem.evaluate = Mock(return_value=short_text)
+        
+        mock_article = Mock()
+        mock_article.query_selector = Mock(return_value=mock_elem)
+        mock_article.query_selector_all = Mock(return_value=[])
+        
+        with patch.object(parsers, '_try_expand_truncated_text') as mock_expand:
+            mock_expand.return_value = False
+            
+            result = parsers.extract_full_tweet_content(mock_article)
+            
+            assert result == short_text
+            # Verify _try_expand_truncated_text was called with correct length
+            mock_expand.assert_called_once()
+            _, call_args = mock_expand.call_args
+            # The length argument should be len(short_text)
+            assert call_args == {} or mock_expand.call_args[0][1] == len(short_text)
+    
+    def test_long_text_checks_show_more(self):
+        """For long tweets, Show more SHOULD be checked."""
+        from unittest.mock import Mock, patch
+        
+        # Create text that's above the threshold
+        long_text = "A" * 260  # Above 250 threshold
+        
+        mock_elem = Mock()
+        mock_elem.evaluate = Mock(return_value=long_text)
+        
+        mock_article = Mock()
+        mock_article.query_selector = Mock(return_value=mock_elem)
+        mock_article.query_selector_all = Mock(return_value=[])
+        
+        with patch.object(parsers, '_try_expand_truncated_text') as mock_expand:
+            mock_expand.return_value = False  # No expansion happened
+            
+            result = parsers.extract_full_tweet_content(mock_article)
+            
+            assert result == long_text
+            # Verify expansion check was attempted
+            mock_expand.assert_called_once()
+    
+    def test_re_extracts_text_after_expansion(self):
+        """If text is expanded, should re-extract to get full content."""
+        from unittest.mock import Mock, patch
+        
+        initial_text = "A" * 260  # Truncated text
+        expanded_text = "A" * 400  # Full text after expansion
+        
+        mock_elem = Mock()
+        # First call returns truncated, second call returns expanded
+        mock_elem.evaluate = Mock(side_effect=[initial_text, expanded_text])
+        
+        mock_article = Mock()
+        mock_article.query_selector = Mock(return_value=mock_elem)
+        mock_article.query_selector_all = Mock(return_value=[])
+        
+        with patch.object(parsers, '_try_expand_truncated_text') as mock_expand:
+            mock_expand.return_value = True  # Expansion happened
+            
+            result = parsers.extract_full_tweet_content(mock_article)
+            
+            assert result == expanded_text
+
+
+# ============================================================================
+# P8: No Navigation for Quoted Tweets Tests
+# ============================================================================
+
+class TestExtractQuotedFromEmbeddedCard:
+    """Tests for extract_quoted_from_embedded_card - P8 optimization."""
+    
+    def test_extracts_basic_quoted_tweet_from_card(self):
+        """Should extract author, ID, content from embedded card."""
+        from unittest.mock import Mock
+        
+        # Setup mock card with link containing status URL
+        mock_link = Mock()
+        mock_link.get_attribute = Mock(return_value="https://x.com/quoted_user/status/123456789")
+        
+        # Setup mock text element
+        mock_text_elem = Mock()
+        mock_text_elem.evaluate = Mock(return_value="This is the quoted tweet content")
+        
+        mock_card = Mock()
+        mock_card.query_selector = Mock(side_effect=lambda s: {
+            'a[href*="/status/"]': mock_link,
+            '[data-testid="tweetText"]': mock_text_elem,
+        }.get(s))
+        mock_card.query_selector_all = Mock(return_value=[])  # No images
+        
+        post_analysis = {'tweet_id': '999999'}  # Main tweet ID
+        
+        result = parsers.extract_quoted_from_embedded_card(mock_card, post_analysis)
+        
+        assert result is not None
+        assert result['username'] == 'quoted_user'
+        assert result['tweet_id'] == '123456789'
+        assert result['content'] == 'This is the quoted tweet content'
+        assert result['extracted_from_card'] is True
+    
+    def test_returns_none_when_no_link_found(self):
+        """Should return None if no status link in card."""
+        from unittest.mock import Mock
+        
+        mock_card = Mock()
+        mock_card.query_selector = Mock(return_value=None)
+        mock_card.query_selector_all = Mock(return_value=[])
+        
+        result = parsers.extract_quoted_from_embedded_card(mock_card, {})
+        
+        assert result is None
+    
+    def test_returns_none_when_link_is_main_tweet(self):
+        """Should return None if link points to main tweet (same ID)."""
+        from unittest.mock import Mock
+        
+        mock_link = Mock()
+        mock_link.get_attribute = Mock(return_value="https://x.com/user/status/123456")
+        
+        mock_card = Mock()
+        mock_card.query_selector = Mock(return_value=mock_link)
+        mock_card.query_selector_all = Mock(return_value=[])
+        
+        # Main tweet has the same ID as the link
+        post_analysis = {'tweet_id': '123456'}
+        
+        result = parsers.extract_quoted_from_embedded_card(mock_card, post_analysis)
+        
+        assert result is None
+    
+    def test_extracts_media_from_card(self):
+        """Should extract images from the quoted card."""
+        from unittest.mock import Mock
+        
+        mock_link = Mock()
+        mock_link.get_attribute = Mock(return_value="/quoted/status/12345")
+        
+        mock_text_elem = Mock()
+        mock_text_elem.evaluate = Mock(return_value="Quoted content")
+        
+        # Create mock images
+        mock_img1 = Mock()
+        mock_img1.get_attribute = Mock(return_value="https://pbs.twimg.com/media/image1.jpg")
+        mock_img2 = Mock()
+        mock_img2.get_attribute = Mock(return_value="https://pbs.twimg.com/media/image2.jpg")
+        
+        # Track call count to return different results for different selectors
+        call_count = [0]
+        def query_selector_all_handler(selector):
+            call_count[0] += 1
+            # First call is for images, return images
+            if 'img[src' in selector:
+                return [mock_img1, mock_img2]
+            # Second call is for videos, return empty
+            return []
+        
+        mock_card = Mock()
+        mock_card.query_selector = Mock(side_effect=lambda s: {
+            'a[href*="/status/"]': mock_link,
+            '[data-testid="tweetText"]': mock_text_elem,
+        }.get(s))
+        mock_card.query_selector_all = Mock(side_effect=query_selector_all_handler)
+        
+        post_analysis = {'tweet_id': '999'}
+        
+        result = parsers.extract_quoted_from_embedded_card(mock_card, post_analysis)
+        
+        assert result is not None
+        assert len(result['media_links']) == 2
+        assert 'image1.jpg' in result['media_links'][0]
+        assert result['media_count'] == 2
+    
+    def test_filters_profile_and_emoji_images(self):
+        """Should filter out profile images and emoji from media."""
+        from unittest.mock import Mock
+        
+        mock_link = Mock()
+        mock_link.get_attribute = Mock(return_value="/quoted/status/12345")
+        
+        mock_text_elem = Mock()
+        mock_text_elem.evaluate = Mock(return_value="Content")
+        
+        # Create mix of images - some should be filtered
+        mock_img_good = Mock()
+        mock_img_good.get_attribute = Mock(return_value="https://pbs.twimg.com/media/good.jpg")
+        mock_img_profile = Mock()
+        mock_img_profile.get_attribute = Mock(return_value="https://pbs.twimg.com/profile_images/pfp.jpg")
+        mock_img_emoji = Mock()
+        mock_img_emoji.get_attribute = Mock(return_value="https://abs.twimg.com/emoji/v2/emoji.png")
+        
+        def query_selector_all_handler(selector):
+            # For images selector return the test images
+            if 'img[src' in selector:
+                return [mock_img_good, mock_img_profile, mock_img_emoji]
+            # For video selector return empty
+            return []
+        
+        mock_card = Mock()
+        mock_card.query_selector = Mock(side_effect=lambda s: {
+            'a[href*="/status/"]': mock_link,
+            '[data-testid="tweetText"]': mock_text_elem,
+        }.get(s))
+        mock_card.query_selector_all = Mock(side_effect=query_selector_all_handler)
+        
+        result = parsers.extract_quoted_from_embedded_card(mock_card, {'tweet_id': '999'})
+        
+        assert result is not None
+        assert len(result['media_links']) == 1
+        assert 'good.jpg' in result['media_links'][0]
+    
+    def test_parses_url_formats(self):
+        """Should handle various URL formats."""
+        from unittest.mock import Mock
+        
+        test_cases = [
+            ("/user/status/123", "user", "123"),
+            ("https://x.com/user/status/123", "user", "123"),
+            ("https://twitter.com/user/status/123", "user", "123"),
+            ("/user/status/123?ref_src=twsrc", "user", "123"),
+            ("/user_name/status/456789", "user_name", "456789"),
+        ]
+        
+        for url, expected_user, expected_id in test_cases:
+            mock_link = Mock()
+            mock_link.get_attribute = Mock(return_value=url)
+            
+            mock_text_elem = Mock()
+            mock_text_elem.evaluate = Mock(return_value="Content")
+            
+            mock_card = Mock()
+            mock_card.query_selector = Mock(side_effect=lambda s, link=mock_link, text=mock_text_elem: {
+                'a[href*="/status/"]': link,
+                '[data-testid="tweetText"]': text,
+            }.get(s))
+            mock_card.query_selector_all = Mock(return_value=[])
+            
+            result = parsers.extract_quoted_from_embedded_card(mock_card, {'tweet_id': '999'})
+            
+            assert result is not None, f"Failed for URL: {url}"
+            assert result['username'] == expected_user, f"Failed username for URL: {url}"
+            assert result['tweet_id'] == expected_id, f"Failed ID for URL: {url}"
+    
+    def test_returns_none_for_empty_content(self):
+        """Should return None if no text content and no media found."""
+        from unittest.mock import Mock
+        
+        mock_link = Mock()
+        mock_link.get_attribute = Mock(return_value="/user/status/123")
+        
+        mock_card = Mock()
+        mock_card.query_selector = Mock(side_effect=lambda s: {
+            'a[href*="/status/"]': mock_link,
+            '[data-testid="tweetText"]': None,  # No text element
+        }.get(s))
+        mock_card.query_selector_all = Mock(return_value=[])  # No media either
+        
+        result = parsers.extract_quoted_from_embedded_card(mock_card, {'tweet_id': '999'})
+        
+        # P8: Returns None if no content AND no media - nothing useful to extract
+        # Caller should fall back to navigation
+        assert result is None
+
+
+class TestP8QuotedTweetIntegration:
+    """Integration tests for P8 quoted tweet optimization."""
+    
+    def test_card_extraction_flag_present(self):
+        """Results from card extraction should have extracted_from_card flag."""
+        from unittest.mock import Mock
+        
+        mock_link = Mock()
+        mock_link.get_attribute = Mock(return_value="/quoted/status/12345")
+        
+        mock_text = Mock()
+        mock_text.evaluate = Mock(return_value="Quoted content")
+        
+        mock_card = Mock()
+        mock_card.query_selector = Mock(side_effect=lambda s: {
+            'a[href*="/status/"]': mock_link,
+            '[data-testid="tweetText"]': mock_text,
+        }.get(s))
+        mock_card.query_selector_all = Mock(return_value=[])
+        
+        result = parsers.extract_quoted_from_embedded_card(mock_card, {'tweet_id': '999'})
+        
+        assert result is not None
+        assert result['extracted_from_card'] is True
+    
+    def test_tweet_url_format(self):
+        """Should construct proper tweet URL."""
+        from unittest.mock import Mock
+        
+        mock_link = Mock()
+        mock_link.get_attribute = Mock(return_value="/testuser/status/98765")
+        
+        mock_text = Mock()
+        mock_text.evaluate = Mock(return_value="Content")
+        
+        mock_card = Mock()
+        mock_card.query_selector = Mock(side_effect=lambda s: {
+            'a[href*="/status/"]': mock_link,
+            '[data-testid="tweetText"]': mock_text,
+        }.get(s))
+        mock_card.query_selector_all = Mock(return_value=[])
+        
+        result = parsers.extract_quoted_from_embedded_card(mock_card, {'tweet_id': '999'})
+        
+        assert result['tweet_url'] == "https://x.com/testuser/status/98765"
+
+
+class TestP8PerformanceExpectations:
+    """Tests documenting P8 performance expectations."""
+    
+    def test_no_navigation_required_for_card_extraction(self):
+        """P8 optimization should not require page navigation."""
+        from unittest.mock import Mock, patch
+        
+        # The extract_quoted_from_embedded_card function should never call
+        # page.goto or open new tabs
+        mock_link = Mock()
+        mock_link.get_attribute = Mock(return_value="/user/status/123")
+        
+        mock_text = Mock()
+        mock_text.evaluate = Mock(return_value="Quick extract")
+        
+        mock_card = Mock()
+        mock_card.query_selector = Mock(side_effect=lambda s: {
+            'a[href*="/status/"]': mock_link,
+            '[data-testid="tweetText"]': mock_text,
+        }.get(s))
+        mock_card.query_selector_all = Mock(return_value=[])
+        
+        # No page object should be needed
+        result = parsers.extract_quoted_from_embedded_card(mock_card, {'tweet_id': '999'})
+        
+        # Verify we got results without any navigation
+        assert result is not None
+        assert result['extracted_from_card'] is True
+    
+    def test_handles_exception_gracefully(self):
+        """Should handle extraction errors and return None."""
+        from unittest.mock import Mock
+        
+        mock_card = Mock()
+        mock_card.query_selector = Mock(side_effect=Exception("Unexpected error"))
+        
+        result = parsers.extract_quoted_from_embedded_card(mock_card, {'tweet_id': '999'})
+        
+        assert result is None

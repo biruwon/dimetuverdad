@@ -1,6 +1,8 @@
 import pytest
+import time
+from unittest.mock import Mock, patch
 
-from fetcher.scroller import Scroller
+from fetcher.scroller import Scroller, MIN_ADAPTIVE_DELAY
 
 
 class FakeLocator:
@@ -62,3 +64,312 @@ def test_try_recovery_reload_as_last_resort():
 
     assert recovered is True
     assert page._reloaded is True
+
+# ============== Adaptive Scroll Tests (P2 Performance Optimization) ==============
+
+class FakePageForAdaptiveScroll:
+    """Fake page object that simulates content loading behavior."""
+    
+    def __init__(self, article_counts=None, fast_load=True):
+        """
+        Args:
+            article_counts: List of article counts to return on each evaluate call.
+                           If None, defaults to [5, 8] (5 before scroll, 8 after).
+            fast_load: If True, wait_for_function succeeds. If False, raises timeout.
+        """
+        self.article_counts = article_counts or [5, 8]
+        self._eval_call_count = 0
+        self.evaluations = []
+        self.fast_load = fast_load
+        self._wait_for_function_called = False
+    
+    def evaluate(self, js):
+        self.evaluations.append(js)
+        
+        # Return article count for the count query
+        if 'querySelectorAll' in js and '.length' in js:
+            idx = min(self._eval_call_count, len(self.article_counts) - 1)
+            count = self.article_counts[idx]
+            self._eval_call_count += 1
+            return count
+        
+        # scrollBy calls return None
+        return None
+    
+    def wait_for_function(self, condition, timeout=None):
+        self._wait_for_function_called = True
+        if not self.fast_load:
+            raise Exception("TimeoutError: waiting for content")
+
+
+@patch('time.sleep')  # Speed up tests by mocking sleep
+def test_adaptive_scroll_basic_functionality(mock_sleep):
+    """Test that adaptive_scroll performs scroll and waits for content."""
+    scroller = Scroller()
+    page = FakePageForAdaptiveScroll(article_counts=[5, 8], fast_load=True)
+    
+    elapsed = scroller.adaptive_scroll(page, deep_scroll=False)
+    
+    # Verify scroll was performed (at least one forward, possibly one backward)
+    scroll_calls = [e for e in page.evaluations if 'scrollBy' in e]
+    forward_scrolls = [e for e in scroll_calls if 'scrollBy(0, -' not in e]
+    assert len(forward_scrolls) >= 1, "Should have at least one forward scroll"
+    
+    # Verify wait_for_function was called
+    assert page._wait_for_function_called is True
+    
+    # Verify stats updated
+    stats = scroller.get_adaptive_scroll_stats()
+    assert stats['total_scrolls'] == 1
+    assert stats['content_loaded_fast'] == 1
+    assert stats['content_loaded_timeout'] == 0
+
+
+@patch('time.sleep')
+def test_adaptive_scroll_handles_timeout(mock_sleep):
+    """Test that adaptive_scroll handles content not loading gracefully."""
+    scroller = Scroller()
+    page = FakePageForAdaptiveScroll(article_counts=[5, 5], fast_load=False)
+    
+    # Should not raise, just continue
+    elapsed = scroller.adaptive_scroll(page, deep_scroll=False)
+    
+    # Verify stats show timeout
+    stats = scroller.get_adaptive_scroll_stats()
+    assert stats['total_scrolls'] == 1
+    assert stats['content_loaded_fast'] == 0
+    assert stats['content_loaded_timeout'] == 1
+
+
+@patch('time.sleep')
+def test_adaptive_scroll_deep_scroll_uses_larger_amounts(mock_sleep):
+    """Test that deep_scroll=True uses larger scroll amounts."""
+    scroller = Scroller()
+    page = FakePageForAdaptiveScroll(article_counts=[5, 8], fast_load=True)
+    
+    scroller.adaptive_scroll(page, deep_scroll=True)
+    
+    # Check that scroll was called with a larger amount (900-1400 range for deep)
+    scroll_call = [e for e in page.evaluations if 'scrollBy' in e][0]
+    # Extract the scroll amount from "window.scrollBy(0, XXX)"
+    import re
+    match = re.search(r'scrollBy\(0, (\d+)\)', scroll_call)
+    assert match, "Should have a scroll call"
+    scroll_amount = int(match.group(1))
+    assert scroll_amount >= 900, f"Deep scroll should be >= 900, got {scroll_amount}"
+
+
+def test_adaptive_scroll_stats_reset():
+    """Test that stats can be reset."""
+    scroller = Scroller()
+    
+    # Simulate some activity
+    scroller._adaptive_scroll_stats['total_scrolls'] = 100
+    scroller._adaptive_scroll_stats['content_loaded_fast'] = 80
+    
+    scroller.reset_adaptive_scroll_stats()
+    
+    stats = scroller.get_adaptive_scroll_stats()
+    assert stats['total_scrolls'] == 0
+    assert stats['content_loaded_fast'] == 0
+
+
+def test_adaptive_scroll_stats_calculations():
+    """Test that stats calculations are correct."""
+    scroller = Scroller()
+    
+    # Set up stats manually
+    scroller._adaptive_scroll_stats = {
+        'total_scrolls': 10,
+        'content_loaded_fast': 8,
+        'content_loaded_timeout': 2,
+        'total_wait_time': 5.0,
+    }
+    
+    stats = scroller.get_adaptive_scroll_stats()
+    
+    assert stats['avg_wait_time'] == 0.5  # 5.0 / 10
+    assert stats['fast_load_rate'] == 0.8  # 8 / 10
+
+
+def test_min_adaptive_delay_constant():
+    """Test that MIN_ADAPTIVE_DELAY is a reasonable value."""
+    assert MIN_ADAPTIVE_DELAY > 0, "Should be positive"
+    assert MIN_ADAPTIVE_DELAY <= 1.0, "Should be under 1 second for performance"
+
+
+# ===========================================================
+# P6: Pre-scroll Content Loading Tests
+# ===========================================================
+
+class TestPrefetchScroll:
+    """Tests for the prefetch_scroll optimization (P6)."""
+    
+    def test_prefetch_scroll_returns_article_count(self):
+        """Test that prefetch_scroll returns current article count."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock(side_effect=[15])  # 15 articles
+        
+        result = scroller.prefetch_scroll(page)
+        
+        assert result == 15
+        # Should have scrolled
+        assert page.evaluate.call_count == 2  # count + scroll
+    
+    def test_prefetch_scroll_scrolls_ahead(self):
+        """Test that prefetch scrolls a large amount ahead."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock(return_value=10)
+        
+        scroller.prefetch_scroll(page)
+        
+        # Check second call is a scrollBy with large amount
+        calls = page.evaluate.call_args_list
+        assert len(calls) >= 2
+        scroll_call = str(calls[1])
+        assert 'scrollBy' in scroll_call
+        assert '0, 1' in scroll_call  # Starts with 1500+
+    
+    def test_prefetch_scroll_handles_error(self):
+        """Test that prefetch_scroll handles errors gracefully."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock(side_effect=Exception("Failed"))
+        
+        # Should not raise, just return 0
+        result = scroller.prefetch_scroll(page)
+        
+        assert result == 0
+
+
+class TestWaitForPrefetchedContent:
+    """Tests for wait_for_prefetched_content (P6)."""
+    
+    def test_wait_returns_true_when_content_loads(self):
+        """Test successful content load returns True."""
+        scroller = Scroller()
+        page = Mock()
+        page.wait_for_function = Mock(return_value=True)
+        
+        result = scroller.wait_for_prefetched_content(page, prev_count=10)
+        
+        assert result is True
+        page.wait_for_function.assert_called_once()
+    
+    def test_wait_returns_false_on_timeout(self):
+        """Test that timeout returns False."""
+        scroller = Scroller()
+        page = Mock()
+        page.wait_for_function = Mock(side_effect=Exception("Timeout"))
+        
+        result = scroller.wait_for_prefetched_content(page, prev_count=10)
+        
+        assert result is False
+    
+    def test_wait_uses_correct_selector(self):
+        """Test that wait uses correct article count selector."""
+        scroller = Scroller()
+        page = Mock()
+        page.wait_for_function = Mock(return_value=True)
+        
+        scroller.wait_for_prefetched_content(page, prev_count=25, timeout_ms=300)
+        
+        call_args = page.wait_for_function.call_args
+        assert '> 25' in call_args[0][0]  # Check prev_count in selector
+        assert call_args[1]['timeout'] == 300
+    
+    def test_wait_default_timeout_is_short(self):
+        """Test that default timeout is short for performance."""
+        scroller = Scroller()
+        page = Mock()
+        page.wait_for_function = Mock(return_value=True)
+        
+        scroller.wait_for_prefetched_content(page, prev_count=10)
+        
+        call_args = page.wait_for_function.call_args
+        assert call_args[1]['timeout'] <= 1000  # Should be <= 1 second
+
+
+class TestScrollBackForProcessing:
+    """Tests for scroll_back_for_processing (P6)."""
+    
+    def test_scroll_back_scrolls_negative(self):
+        """Test that scroll_back scrolls in negative direction."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock()
+        
+        with patch('time.sleep'):  # Don't actually sleep
+            scroller.scroll_back_for_processing(page)
+        
+        call_args = str(page.evaluate.call_args)
+        assert 'scrollBy' in call_args
+        assert '-' in call_args  # Negative scroll
+    
+    def test_scroll_back_handles_error(self):
+        """Test that scroll_back handles errors gracefully."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock(side_effect=Exception("Failed"))
+        
+        # Should not raise
+        with patch('time.sleep'):
+            scroller.scroll_back_for_processing(page)
+    
+    def test_scroll_back_uses_custom_amount(self):
+        """Test that custom scroll amount is used."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock()
+        
+        with patch('time.sleep'):
+            scroller.scroll_back_for_processing(page, amount=500)
+        
+        call_args = str(page.evaluate.call_args)
+        # Should be around -500 (±100)
+        assert 'scrollBy' in call_args
+
+
+class TestPrefetchIntegration:
+    """Integration tests for the prefetch scroll pattern (P6)."""
+    
+    def test_prefetch_pattern_workflow(self):
+        """Test the expected prefetch workflow pattern."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock(side_effect=[
+            20,  # Article count for prefetch
+            None,  # Scroll call
+            None,  # Scroll back call
+        ])
+        page.wait_for_function = Mock(return_value=True)
+        
+        # Step 1: Prefetch before processing
+        prev_count = scroller.prefetch_scroll(page)
+        assert prev_count == 20
+        
+        # Step 2: Process tweets (simulated - would be CPU work here)
+        # ...processing happens...
+        
+        # Step 3: Wait for prefetched content (short timeout)
+        loaded = scroller.wait_for_prefetched_content(page, prev_count)
+        assert loaded is True
+        
+        # Step 4: Scroll back for next processing iteration
+        with patch('time.sleep'):
+            scroller.scroll_back_for_processing(page)
+    
+    def test_prefetch_with_timeout_still_continues(self):
+        """Test that prefetch timeout doesn't block workflow."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock(return_value=10)
+        page.wait_for_function = Mock(side_effect=Exception("Timeout"))
+        
+        prev_count = scroller.prefetch_scroll(page)
+        loaded = scroller.wait_for_prefetched_content(page, prev_count)
+        
+        # Even with timeout, should continue (returns False, not raise)
+        assert loaded is False

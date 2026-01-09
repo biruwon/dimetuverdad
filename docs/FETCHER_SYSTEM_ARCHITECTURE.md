@@ -44,9 +44,13 @@ class FetcherConfig:
     password: str
     email_or_phone: str
     
-    # Browser settings
-    headless: bool = False
+    # Browser settings (headless=True default for performance)
+    headless: bool = True  # Override with --visible flag
     user_agents: List[str] = None  # Randomized for anti-detection
+    
+    # Feature flags
+    collect_threads: bool = False  # Enable with FETCHER_COLLECT_THREADS=true
+    use_adaptive_scroll: bool = True  # P2 optimization
     
     # Timeouts and delays
     page_load_timeout: int = 30000
@@ -465,17 +469,40 @@ total_saved, accounts_processed = run_fetch_session(
 
 ## 📊 Performance Characteristics
 
+### Performance Optimizations (P1-P8)
+
+The fetcher includes 8 performance optimizations that significantly improve collection speed:
+
+| Optimization | Description | Time Saved |
+|-------------|-------------|------------|
+| **P1. Parallel HTML Extraction** | BeautifulSoup parsing off main thread | 30-60 sec |
+| **P2. Adaptive Scroll Delays** | Wait for content instead of fixed 2s delays | 60-120 sec |
+| **P3. Batch Database Writes** | Buffer tweets and write in batches | 10-20 sec |
+| **P4. Skip Video Hover** | Extract video URL from poster pattern | 30-60 sec |
+| **P5. Skip "Show More" Check** | Skip for tweets < 250 chars | 20-40 sec |
+| **P6. Pre-scroll Content Loading** | Detect new content before scrolling | 20-40 sec |
+| **P7. Headless Mode** | No browser rendering overhead | 30-60 sec |
+| **P8. No Navigation for Quoted Tweets** | Extract quoted content inline | 15-30 sec |
+
 ### Collection Speeds (M1 Pro, 32GB RAM)
+
+**Benchmark Results (200 tweets):**
+
+| User | Time | Rate | Notes |
+|------|------|------|-------|
+| kikollan | 187 sec | ~0.94 sec/tweet | Clean run, text-heavy content |
+| infovlogger36 | 306 sec | ~1.53 sec/tweet | Media-heavy with quoted tweets |
+
+**Estimated Collection Times:**
+- 200 tweets: ~3-5 minutes
+- 1,000 tweets: ~15-25 minutes
+- 5,000 tweets: ~1.5-2.5 hours
+- 85,000 tweets: ~22-30 hours
 
 **Latest Mode (fast updates):**
 - 30 tweets: ~10-15 seconds
 - 100 tweets: ~30-45 seconds
 - Optimized stopping logic prevents unnecessary work
-
-**Full History Mode:**
-- 100 tweets: ~20-30 seconds
-- 500 tweets: ~2-3 minutes
-- 1000+ tweets: ~5-10 minutes (with resume logic)
 
 **Multi-Session Mode:**
 - 2000 tweets: ~10-15 minutes (across 3 sessions)
@@ -492,12 +519,23 @@ total_saved, accounts_processed = run_fetch_session(
 
 ### Optimization Strategies
 
+**Core Strategies:**
 1. **Smart Stopping:** Latest mode prevents over-collection of existing tweets
 2. **Resume Logic:** Continues from last collected timestamp, not from beginning
 3. **Session Management:** Refreshes browser context to bypass Twitter's limits
 4. **Parallel Processing:** Multiple accounts per browser session
 5. **Resource Limits:** Memory and CPU monitoring with automatic cleanup
 6. **Database Indexing:** Optimized queries for existence checks and updates
+
+**P1-P8 Performance Optimizations (Implemented):**
+- **P1. Parallel HTML Extraction:** Uses BeautifulSoup for off-thread HTML parsing
+- **P2. Adaptive Scroll Delays:** Waits for content to load instead of fixed 2-second delays (2000ms timeout)
+- **P3. Batch Database Writes:** Buffers tweets and writes in batches to reduce I/O
+- **P4. Skip Video Hover:** Extracts video URLs from poster pattern (`amplify_video_thumb` → `amplify_video/vid/avc1/720x720/video.mp4`)
+- **P5. Skip "Show More" Check:** Skips expansion click for tweets under 250 characters
+- **P6. Pre-scroll Content Loading:** Detects new content availability before scrolling
+- **P7. Headless Mode:** Enabled by default (use `--visible` to disable for debugging)
+- **P8. No Navigation for Quoted Tweets:** Extracts quoted content inline from DOM without opening new tabs
 
 ### Rate Limiting & Anti-Detection
 
@@ -530,7 +568,8 @@ class FetcherConfig:
     email_or_phone: str = os.getenv("X_EMAIL_OR_PHONE", "")
     
     # Browser settings
-    headless: bool = False
+    # Default headless=True for production (faster), override with --visible flag
+    headless: bool = os.getenv("FETCHER_HEADLESS", "true").lower() in ("1", "true", "yes")
     slow_mo: int = 50
     viewport_width: int = 1280
     viewport_height: int = 720
@@ -556,6 +595,13 @@ class FetcherConfig:
     max_session_retries: int = 5
     max_sessions: int = 10
     
+    # Thread detection tuning
+    thread_detect_interval: int = 5  # scroll cycles between inline thread detection
+    
+    # Feature flags
+    collect_threads: bool = os.getenv("FETCHER_COLLECT_THREADS", "false").lower() in ("1","true","yes")
+    use_adaptive_scroll: bool = os.getenv("FETCHER_ADAPTIVE_SCROLL", "true").lower() in ("1", "true", "yes")
+    
     # Session management
     session_size: int = 800
     large_collection_threshold: int = 800
@@ -578,6 +624,10 @@ class FetcherConfig:
 **Optional:**
 - `FETCHER_MAX_TWEETS`: Default maximum tweets per user
 - `FETCHER_SESSION_SIZE`: Multi-session chunk size
+- `FETCHER_HEADLESS`: Set to `false` to show browser window (default: `true`)
+- `FETCHER_COLLECT_THREADS`: Set to `true` to enable thread detection (default: `false`)
+- `FETCHER_ADAPTIVE_SCROLL`: Set to `false` to use fixed scroll delays (default: `true`)
+- `FETCHER_SLOW_MO`: Browser slow motion delay in ms (default: `50`)
 - `DATABASE_PATH`: Custom database location
 
 ### Configuration Features
@@ -587,8 +637,17 @@ class FetcherConfig:
 - Dynamic viewport sizing
 - Configurable delays and timing
 - Session persistence and rotation
+- Headless mode (default) for reduced fingerprint
 
-**Performance Tuning:**
+**Performance Tuning (P1-P8 Optimizations):**
+- **P1**: Parallel HTML extraction with BeautifulSoup
+- **P2**: Adaptive scroll delays (wait for content, not fixed time)
+- **P3**: Batch database writes (buffered inserts)
+- **P4**: Skip video hover (extract URL from poster pattern)
+- **P5**: Skip "Show More" check for short tweets (<250 chars)
+- **P6**: Pre-scroll content loading detection
+- **P7**: Headless mode enabled by default
+- **P8**: No navigation for quoted tweets (inline extraction)
 - Adjustable timeouts and retry limits
 - Memory and resource management
 - Collection thresholds and limits
@@ -604,7 +663,7 @@ class FetcherConfig:
 # Fetch latest tweets from default accounts (fast updates)
 ./run_in_venv.sh fetch --latest
 
-# Fetch specific user (full history with resume)
+# Fetch specific user (full history)
 ./run_in_venv.sh fetch --user "username"
 
 # Fetch latest from specific user only
@@ -619,6 +678,15 @@ class FetcherConfig:
 # Delete all data for account and refetch from scratch
 ./run_in_venv.sh fetch --refetch-all "username"
 
+# Enable resume mode to fetch older tweets beyond current collection
+./run_in_venv.sh fetch --user "username" --resume
+
+# Show browser window for debugging (disables headless mode)
+./run_in_venv.sh fetch --user "username" --visible
+
+# Disable thread detection for faster collection
+./run_in_venv.sh fetch --user "username" --no-threads
+
 # Unlimited collection (use with caution)
 ./run_in_venv.sh fetch --user "username" --max 10000
 ```
@@ -627,8 +695,11 @@ class FetcherConfig:
 - `--user, -u`: Single username to fetch (overrides defaults)
 - `--max`: Maximum tweets per user (default: unlimited)
 - `--latest`: Use latest mode (stops after 10 consecutive existing tweets)
+- `--resume`: Enable resume/seek mode to fetch older tweets (disabled by default)
 - `--refetch`: Re-fetch specific tweet ID with updated data
 - `--refetch-all`: Delete and refetch entire account from scratch
+- `--visible`: Show browser window (disable headless mode) for debugging
+- `--no-threads`: Disable thread detection and collection for this run
 
 ### Performance Tracking
 

@@ -150,6 +150,10 @@ class FakePage:
             self._event_handlers[event] = []
         self._event_handlers[event].append(handler)
 
+    def add_init_script(self, script):
+        """Mock add_init_script for stealth mode."""
+        pass
+
     @property
     def keyboard(self):
         return types.SimpleNamespace(press=lambda key: None)

@@ -333,3 +333,232 @@ def test_save_account_profile_info_empty_url(test_db):
     assert row is None
 
     conn.close()
+
+
+# ===== BATCH WRITE TESTS (P3 Performance Optimization) =====
+
+class TestTweetBuffer:
+    """Tests for the TweetBuffer batch write class."""
+    
+    def test_buffer_basic_functionality(self, test_db):
+        """Test basic buffer add and flush."""
+        conn = get_test_connection(test_db)
+        
+        # Create account first
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('batchuser',))
+        conn.commit()
+        
+        buffer = db.TweetBuffer(conn, batch_size=5)
+        
+        # Add a tweet
+        tweet = {
+            'tweet_id': 'batch001',
+            'content': 'Batch test tweet',
+            'username': 'batchuser',
+            'tweet_url': 'https://x.com/batchuser/status/batch001',
+            'tweet_timestamp': '2024-01-01T12:00:00Z',
+            'post_type': 'original'
+        }
+        
+        result = buffer.add(tweet)
+        assert result is True
+        assert len(buffer) == 1
+        
+        # Flush and verify
+        written = buffer.flush()
+        assert written == 1
+        assert len(buffer) == 0
+        
+        # Check database
+        c.execute("SELECT * FROM tweets WHERE tweet_id = ?", ('batch001',))
+        row = c.fetchone()
+        assert row is not None
+        assert row['content'] == 'Batch test tweet'
+        
+        conn.close()
+    
+    def test_buffer_auto_flush_on_size(self, test_db):
+        """Test that buffer auto-flushes when batch_size is reached."""
+        conn = get_test_connection(test_db)
+        
+        # Create account
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('batchuser',))
+        conn.commit()
+        
+        buffer = db.TweetBuffer(conn, batch_size=3)
+        
+        # Add tweets up to batch size
+        for i in range(3):
+            buffer.add({
+                'tweet_id': f'auto{i}',
+                'content': f'Tweet {i}',
+                'username': 'batchuser',
+                'tweet_url': f'https://x.com/batchuser/status/auto{i}',
+                'tweet_timestamp': '2024-01-01T12:00:00Z',
+                'post_type': 'original'
+            })
+        
+        # Buffer should be empty after auto-flush
+        assert len(buffer) == 0
+        
+        # Verify all tweets were written
+        c.execute("SELECT COUNT(*) FROM tweets WHERE tweet_id LIKE 'auto%'")
+        count = c.fetchone()[0]
+        assert count == 3
+        
+        conn.close()
+    
+    def test_buffer_skips_duplicates(self, test_db):
+        """Test that duplicate tweet IDs are skipped in buffer."""
+        conn = get_test_connection(test_db)
+        
+        # Create account
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('batchuser',))
+        conn.commit()
+        
+        buffer = db.TweetBuffer(conn, batch_size=10)
+        
+        tweet = {
+            'tweet_id': 'dup001',
+            'content': 'First version',
+            'username': 'batchuser',
+            'tweet_url': 'https://x.com/batchuser/status/dup001',
+            'post_type': 'original'
+        }
+        
+        # Add same tweet twice
+        result1 = buffer.add(tweet)
+        result2 = buffer.add(tweet)
+        
+        assert result1 is True
+        assert result2 is False
+        assert len(buffer) == 1
+        
+        conn.close()
+    
+    def test_buffer_skips_analytics(self, test_db):
+        """Test that 'analytics' tweet IDs are skipped."""
+        conn = get_test_connection(test_db)
+        
+        buffer = db.TweetBuffer(conn, batch_size=10)
+        
+        result = buffer.add({
+            'tweet_id': 'analytics',
+            'content': 'Should not be saved',
+            'username': 'user'
+        })
+        
+        assert result is False
+        assert len(buffer) == 0
+        
+        conn.close()
+    
+    def test_buffer_context_manager(self, test_db):
+        """Test buffer as context manager (auto-flush on exit)."""
+        conn = get_test_connection(test_db)
+        
+        # Create account
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('ctxuser',))
+        conn.commit()
+        
+        with db.TweetBuffer(conn, batch_size=100) as buffer:
+            buffer.add({
+                'tweet_id': 'ctx001',
+                'content': 'Context manager test',
+                'username': 'ctxuser',
+                'tweet_url': 'https://x.com/ctxuser/status/ctx001',
+                'post_type': 'original'
+            })
+            # Not flushed yet (batch_size=100)
+            assert len(buffer) == 1
+        
+        # Should be auto-flushed on exit
+        c.execute("SELECT * FROM tweets WHERE tweet_id = ?", ('ctx001',))
+        assert c.fetchone() is not None
+        
+        conn.close()
+    
+    def test_buffer_stats_tracking(self, test_db):
+        """Test that buffer tracks statistics."""
+        conn = get_test_connection(test_db)
+        
+        # Create account
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('statsuser',))
+        conn.commit()
+        
+        buffer = db.TweetBuffer(conn, batch_size=2)
+        
+        # Add 3 tweets (will trigger 1 auto-flush at 2, then manual flush)
+        for i in range(3):
+            buffer.add({
+                'tweet_id': f'stats{i}',
+                'content': f'Stats test {i}',
+                'username': 'statsuser',
+                'tweet_url': f'https://x.com/statsuser/status/stats{i}',
+                'post_type': 'original'
+            })
+        
+        buffer.flush()  # Flush remaining
+        
+        stats = buffer.get_stats()
+        assert stats.total_tweets == 3
+        assert stats.batches_written == 2  # 2 at auto-flush + 1 at manual
+        assert stats.total_time > 0
+        
+        conn.close()
+    
+    def test_buffer_update_existing(self, test_db):
+        """Test that buffer updates existing tweets."""
+        conn = get_test_connection(test_db)
+        
+        # Create account and existing tweet
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('updateuser',))
+        c.execute("""
+            INSERT INTO tweets (tweet_id, content, username, tweet_url, post_type)
+            VALUES ('existing001', 'Original content', 'updateuser', 
+                    'https://x.com/updateuser/status/existing001', 'original')
+        """)
+        conn.commit()
+        
+        buffer = db.TweetBuffer(conn, batch_size=10)
+        
+        # Add tweet with same ID but different content
+        buffer.add({
+            'tweet_id': 'existing001',
+            'content': 'Updated content',
+            'username': 'updateuser',
+            'tweet_url': 'https://x.com/updateuser/status/existing001',
+            'post_type': 'original'
+        })
+        buffer.flush()
+        
+        # Verify update
+        c.execute("SELECT content FROM tweets WHERE tweet_id = ?", ('existing001',))
+        row = c.fetchone()
+        assert row['content'] == 'Updated content'
+        
+        conn.close()
+
+
+class TestBatchWriteStats:
+    """Tests for BatchWriteStats dataclass."""
+    
+    def test_avg_batch_time_zero_division(self):
+        """Test avg_batch_time handles zero batches."""
+        stats = db.BatchWriteStats()
+        assert stats.avg_batch_time == 0.0
+    
+    def test_avg_batch_time_calculation(self):
+        """Test avg_batch_time calculation."""
+        stats = db.BatchWriteStats(
+            total_tweets=100,
+            batches_written=10,
+            total_time=5.0
+        )
+        assert stats.avg_batch_time == 0.5
