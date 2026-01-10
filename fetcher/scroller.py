@@ -281,8 +281,19 @@ class Scroller:
             bool: True if recovery successful
         """
         # Safer recovery strategies: try non-disruptive actions first
+        def try_click_retry():
+            """Try to click retry button with short timeout - don't wait if not found."""
+            try:
+                retry_btn = page.query_selector('button:has-text("Retry")')
+                if retry_btn and retry_btn.is_visible():
+                    retry_btn.click()
+                    return True
+            except Exception:
+                pass
+            return False
+        
         strategies = [
-            ("click_retry_button", lambda: (lambda: (page.locator('button:has-text("Retry")').click() if page.locator('button:has-text("Retry")') else None))()),
+            ("click_retry_button", try_click_retry),
             ("clear_cache", lambda: page.evaluate("localStorage.clear(); sessionStorage.clear();")),
             ("small_random_scroll", lambda: page.evaluate(f"window.scrollBy(0, {200 + random.randint(200, 400)})")),
             ("jump_to_middle", lambda: page.evaluate("window.scrollTo(0, document.body.scrollHeight/2)")),

@@ -52,10 +52,11 @@ class FetcherConfig:
 
     # Thread detection tuning
     thread_detect_interval: int = 5  # number of scroll cycles between inline thread detection
+    thread_collect_timeout_seconds: int = 600  # max time (10 min) for collecting a single thread, generous to avoid cutting off long threads
 
     # Feature flags
-    # Toggle thread collection (set to True to enable thread detection & collection)
-    collect_threads: bool = os.getenv("FETCHER_COLLECT_THREADS", "false").lower() in ("1","true","yes")
+    # Thread collection is enabled by default. Set FETCHER_COLLECT_THREADS=false to disable.
+    collect_threads: bool = os.getenv("FETCHER_COLLECT_THREADS", "true").lower() in ("1","true","yes")
     
     # Performance optimization: use adaptive scroll delays (wait for content instead of fixed delays)
     use_adaptive_scroll: bool = os.getenv("FETCHER_ADAPTIVE_SCROLL", "true").lower() in ("1", "true", "yes")

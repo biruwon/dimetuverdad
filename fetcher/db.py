@@ -218,47 +218,70 @@ class TweetBuffer:
 
 def delete_account_data(username: str) -> Dict[str, int]:
     """
-    Delete all data for a specific account from both tweets and content_analyses tables.
+    Delete all data for a specific account from tweets and related tables.
+    
+    Deletes in proper order to respect foreign key constraints:
+    1. model_analyses (references tweets.tweet_id)
+    2. user_feedback (references tweets.tweet_id)
+    3. post_edits (references tweets.tweet_id)
+    4. content_analyses (author_username match)
+    5. tweets (main table)
     
     Args:
         username: The username to delete data for
         
     Returns:
-        Dict with counts of deleted records: {'tweets': count, 'analyses': count}
+        Dict with counts of deleted records
     """
     try:
-        # Use standardized repositories
-        tweet_repo = get_tweet_repository()
+        from database import get_db_connection_context
         
-        # For analyses count, we need to use direct access since content analysis repo might not have username filtering
-        # This is a specialized operation that may need to stay direct for now
-        from database import get_db_connection_context
+        deleted_counts = {
+            'tweets': 0,
+            'analyses': 0,
+            'model_analyses': 0,
+            'user_feedback': 0,
+            'post_edits': 0
+        }
+        
         with get_db_connection_context() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) AS analyses_count FROM content_analyses WHERE author_username = ?", (username,))
-            row = cur.fetchone()
-            analyses_count = row['analyses_count'] if row else 0
-
-        # Delete tweets using direct access (for now, since repository doesn't have delete method)
-        from database import get_db_connection_context
-        with get_db_connection_context() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM tweets WHERE username = ?", (username,))
-            tweets_before = cur.fetchone()[0]
-            cur.execute("DELETE FROM tweets WHERE username = ?", (username,))
-            deleted_tweets = cur.rowcount
-            conn.commit()
-
-        # Delete analyses using direct access (for now)
-        from database import get_db_connection_context
-        with get_db_connection_context() as conn:
-            cur = conn.cursor()
+            
+            # First, get all tweet_ids for this user (needed for FK tables)
+            cur.execute("SELECT tweet_id FROM tweets WHERE username = ?", (username,))
+            tweet_ids = [row[0] for row in cur.fetchall()]
+            
+            if tweet_ids:
+                placeholders = ','.join('?' * len(tweet_ids))
+                
+                # Delete from tables with FK to tweets.tweet_id (in order)
+                # 1. model_analyses
+                cur.execute(f"DELETE FROM model_analyses WHERE post_id IN ({placeholders})", tweet_ids)
+                deleted_counts['model_analyses'] = cur.rowcount
+                
+                # 2. user_feedback
+                cur.execute(f"DELETE FROM user_feedback WHERE post_id IN ({placeholders})", tweet_ids)
+                deleted_counts['user_feedback'] = cur.rowcount
+                
+                # 3. post_edits
+                cur.execute(f"DELETE FROM post_edits WHERE post_id IN ({placeholders})", tweet_ids)
+                deleted_counts['post_edits'] = cur.rowcount
+            
+            # 4. Delete content_analyses by author_username
             cur.execute("DELETE FROM content_analyses WHERE author_username = ?", (username,))
+            deleted_counts['analyses'] = cur.rowcount
+            
+            # 5. Delete tweets (main table)
+            cur.execute("DELETE FROM tweets WHERE username = ?", (username,))
+            deleted_counts['tweets'] = cur.rowcount
+            
             conn.commit()
 
-        print(f"✅ Deleted {deleted_tweets} tweets and {analyses_count} analyses for @{username}")
+        print(f"✅ Deleted for @{username}: {deleted_counts['tweets']} tweets, {deleted_counts['analyses']} analyses, "
+              f"{deleted_counts['model_analyses']} model_analyses, {deleted_counts['user_feedback']} feedback, "
+              f"{deleted_counts['post_edits']} edits")
 
-        return {'tweets': deleted_tweets, 'analyses': analyses_count}
+        return deleted_counts
 
     except Exception as e:
         print(f"❌ Error deleting data for @{username}: {e}")

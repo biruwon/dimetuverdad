@@ -562,3 +562,150 @@ class TestBatchWriteStats:
             total_time=5.0
         )
         assert stats.avg_batch_time == 0.5
+
+
+class TestDeleteAccountData:
+    """Tests for delete_account_data function."""
+    
+    def test_deletes_account_data_with_mocking(self, monkeypatch):
+        """Should delete tweets and analyses for a user using mocking."""
+        from unittest.mock import MagicMock, patch
+        
+        # Mock the tweet repository
+        mock_tweet_repo = MagicMock()
+        
+        # Create mock connection context manager
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.side_effect = [
+            {'analyses_count': 5},  # First call: analyses count
+            (10,),  # Second call: tweets count before delete
+        ]
+        mock_cursor.rowcount = 10
+        
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        
+        def mock_context_manager():
+            return mock_conn
+        
+        with patch('fetcher.db.get_tweet_repository', return_value=mock_tweet_repo):
+            with patch('database.get_db_connection_context', mock_context_manager):
+                result = db.delete_account_data('testuser')
+        
+        assert result['tweets'] == 10
+        assert result['analyses'] == 5
+    
+    def test_delete_account_data_handles_exception(self, monkeypatch):
+        """Should raise exception on database error."""
+        from unittest.mock import MagicMock, patch
+        
+        mock_tweet_repo = MagicMock()
+        
+        def raise_error():
+            raise Exception("Database error")
+        
+        with patch('fetcher.db.get_tweet_repository', return_value=mock_tweet_repo):
+            with patch('database.get_db_connection_context', side_effect=raise_error):
+                with pytest.raises(Exception):
+                    db.delete_account_data('testuser')
+
+
+class TestUpdateTweetInDatabase:
+    """Tests for update_tweet_in_database function."""
+    
+    def test_updates_tweet_with_mocking(self):
+        """Should update tweet and return True on success."""
+        from unittest.mock import MagicMock, patch
+        
+        # Create mock cursor and connection
+        mock_cursor = MagicMock()
+        mock_cursor.rowcount = 1
+        
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        
+        def mock_context_manager():
+            return mock_conn
+        
+        with patch('database.get_db_connection_context', mock_context_manager):
+            result = db.update_tweet_in_database('tweet123', {
+                'content': 'Updated',
+                'engagement_likes': 100,
+            })
+        
+        assert result is True
+        mock_cursor.execute.assert_called_once()
+        mock_conn.commit.assert_called_once()
+    
+    def test_returns_false_when_no_rows_updated(self):
+        """Should return False when tweet doesn't exist."""
+        from unittest.mock import MagicMock, patch
+        
+        mock_cursor = MagicMock()
+        mock_cursor.rowcount = 0
+        
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        
+        def mock_context_manager():
+            return mock_conn
+        
+        with patch('database.get_db_connection_context', mock_context_manager):
+            result = db.update_tweet_in_database('nonexistent', {'content': 'Test'})
+        
+        assert result is False
+    
+    def test_returns_false_on_exception(self):
+        """Should return False on database error."""
+        from unittest.mock import patch
+        
+        def raise_error():
+            raise Exception("Database error")
+        
+        with patch('database.get_db_connection_context', side_effect=raise_error):
+            result = db.update_tweet_in_database('tweet123', {'content': 'Test'})
+        
+        assert result is False
+
+
+class TestInitDb:
+    """Tests for init_db function."""
+    
+    def test_init_db_creates_scrape_errors_table(self):
+        """Should create scrape_errors table."""
+        from unittest.mock import MagicMock, patch
+        
+        mock_cursor = MagicMock()
+        # First query checks for tweets table - return a result
+        mock_cursor.fetchone.return_value = ('tweets',)
+        
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        
+        with patch('database.get_db_connection', return_value=mock_conn):
+            result = db.init_db()
+        
+        assert result == mock_conn
+        # Verify CREATE TABLE was called
+        calls = [str(call) for call in mock_cursor.execute.call_args_list]
+        assert any('scrape_errors' in str(call) for call in calls)
+    
+    def test_init_db_raises_when_tweets_table_missing(self):
+        """Should raise exception when tweets table doesn't exist."""
+        from unittest.mock import MagicMock, patch
+        
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = None  # No tweets table
+        
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        
+        with patch('database.get_db_connection', return_value=mock_conn):
+            with pytest.raises(Exception, match="Database not properly initialized"):
+                db.init_db()

@@ -14,7 +14,7 @@ from .config import get_config
 from .logging_config import get_logger
 from .scroller import get_scroller
 from .media_monitor import get_media_monitor
-from .thread_detector import ThreadDetector, _sync_handle
+from .thread_detector import ThreadDetector, _sync_handle, BrowserClosedByUserError
 from . import db as fetcher_db
 from . import parsers as fetcher_parsers
 from . import html_extractor
@@ -597,26 +597,25 @@ class TweetCollector:
                         logger.info(f"Thread connector detected at {tweet_id} — collecting thread")
                         try:
                             session_manager = SessionManager()
-                            # Reuse current page's context to avoid creating nested Playwright instances
-                            existing_context = None
-                            try:
-                                existing_context = page.context
-                            except Exception:
-                                existing_context = None
-
+                            # Reuse existing browser context (via page.context) to avoid "Sync API inside asyncio" error.
+                            # This allows thread collection to open new pages in the same browser.
                             thread_summary = self.thread_detector.collect_thread_by_id(
-                                username, tweet_id, session_manager, existing_context=existing_context
+                                username, tweet_id, session_manager, existing_context=page.context
                             )
                             if thread_summary and thread_summary.tweets:
                                 saved_threads = self.thread_detector.save_thread_to_database(thread_summary, conn, username)
                                 # Add collected thread tweets to our local lists and seen ids
+                                thread_tweets_added = 0
                                 for t in thread_summary.tweets:
                                     tid = t.get('tweet_id')
                                     if tid and tid not in seen_tweet_ids:
                                         collected_tweets.append(t)
                                         seen_tweet_ids.add(tid)
+                                        thread_tweets_added += 1
                                 processed_thread_ids.add(thread_summary.start_id)
                                 saved_count += saved_threads
+                                # Count thread tweets toward this cycle to avoid false empty-cycle detection
+                                tweets_found_this_cycle += thread_tweets_added
                                 logger.info(f"Saved {saved_threads} tweets from thread starting at {thread_summary.start_id}")
                                 # Skip saving the individual tweet_data below to avoid dupes
                                 continue
@@ -625,6 +624,11 @@ class TweetCollector:
                                 # to avoid repeated attempts reopening the same thread in this run.
                                 processed_thread_ids.add(tweet_id)
                                 logger.debug(f"No thread collected for {tweet_id}; marking as processed to avoid retries")
+                        except BrowserClosedByUserError:
+                            # User manually closed the browser - disable thread collection for this session
+                            logger.warning("Browser closed by user - disabling thread collection for this session")
+                            self.config.collect_threads = False
+                            processed_thread_ids.add(tweet_id)
                         except Exception as e:
                             logger.warning(f"Thread collection for {tweet_id} failed: {e}")
                             processed_thread_ids.add(tweet_id)

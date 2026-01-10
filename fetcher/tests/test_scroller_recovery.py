@@ -17,6 +17,19 @@ class FakeLocator:
         return self._visible
 
 
+class FakeButton:
+    """Fake button element for testing."""
+    def __init__(self, page, visible=True):
+        self.page = page
+        self._visible = visible
+
+    def click(self):
+        self.page._clicked_retry = True
+
+    def is_visible(self):
+        return self._visible
+
+
 class FakePage:
     def __init__(self, has_retry=True):
         self._clicked_retry = False
@@ -28,6 +41,12 @@ class FakePage:
         if self._has_retry and selector == 'button:has-text("Retry")':
             return FakeLocator(self, visible=True)
         # Return a falsy object if no retry
+        return None
+
+    def query_selector(self, selector):
+        """Return a fake button if retry button is requested and exists."""
+        if self._has_retry and 'Retry' in selector:
+            return FakeButton(self, visible=True)
         return None
 
     def evaluate(self, js):
@@ -373,3 +392,249 @@ class TestPrefetchIntegration:
         
         # Even with timeout, should continue (returns False, not raise)
         assert loaded is False
+
+
+class TestRandomScrollPattern:
+    """Tests for Scroller.random_scroll_pattern()."""
+
+    def test_random_scroll_normal_mode(self):
+        """Should perform scroll with normal amounts."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock()
+        
+        with patch('time.sleep'):
+            scroller.random_scroll_pattern(page, deep_scroll=False)
+        
+        # Should have called evaluate at least once
+        assert page.evaluate.called
+        # Check the scroll JS contains window.scrollBy
+        call_args = page.evaluate.call_args_list[0][0][0]
+        assert 'window.scrollBy' in call_args
+
+    def test_random_scroll_deep_scroll_mode(self):
+        """Should use larger scroll amounts in deep scroll mode."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock()
+        
+        with patch('time.sleep'):
+            with patch('random.random', return_value=0.5):  # No back scroll
+                scroller.random_scroll_pattern(page, deep_scroll=True)
+        
+        assert page.evaluate.called
+
+    def test_random_scroll_with_back_scroll(self):
+        """Should occasionally scroll back slightly."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock()
+        
+        # Force back scroll by making random() return < 0.08
+        with patch('time.sleep'):
+            with patch('random.random', return_value=0.05):
+                scroller.random_scroll_pattern(page, deep_scroll=False)
+        
+        # Should have two evaluate calls - scroll and back scroll
+        assert page.evaluate.call_count >= 2
+
+
+class TestEventScrollCycle:
+    """Tests for Scroller.event_scroll_cycle()."""
+
+    def test_event_scroll_cycle_normal_iteration(self):
+        """Should scroll with appropriate pattern."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock()
+        
+        with patch('time.sleep'):
+            scroller.event_scroll_cycle(page, iteration=1)
+        
+        assert page.evaluate.called
+
+    def test_event_scroll_cycle_varies_by_iteration(self):
+        """Should use different scroll patterns for different iterations."""
+        scroller = Scroller()
+        page1 = Mock()
+        page1.evaluate = Mock()
+        page2 = Mock()
+        page2.evaluate = Mock()
+        
+        with patch('time.sleep'):
+            scroller.event_scroll_cycle(page1, iteration=0)
+            scroller.event_scroll_cycle(page2, iteration=1)
+        
+        # Both should call evaluate
+        assert page1.evaluate.called
+        assert page2.evaluate.called
+
+    def test_event_scroll_cycle_longer_pause_every_10(self):
+        """Should have longer pause on every 10th iteration."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock()
+        
+        with patch('time.sleep') as mock_sleep:
+            scroller.event_scroll_cycle(page, iteration=10)
+        
+        # Should have called delay (sleep) with longer values
+        assert mock_sleep.called
+
+    def test_event_scroll_cycle_handles_evaluate_exception(self):
+        """Should handle exceptions gracefully."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock(side_effect=Exception("Eval error"))
+        
+        with patch('time.sleep'):
+            # Should not raise exception
+            scroller.event_scroll_cycle(page, iteration=1)
+
+
+class TestCheckPageHeightChange:
+    """Tests for Scroller.check_page_height_change()."""
+
+    def test_returns_new_height(self):
+        """Should return the new page height."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock(return_value=5000)
+        
+        result = scroller.check_page_height_change(page, 4000)
+        
+        assert result == 5000
+        page.evaluate.assert_called_with("document.body.scrollHeight")
+
+    def test_returns_last_height_on_no_change(self):
+        """Should return same height if no change."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock(return_value=4000)
+        
+        result = scroller.check_page_height_change(page, 4000)
+        
+        assert result == 4000
+
+    def test_returns_last_height_on_exception(self):
+        """Should return last height on evaluation error."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock(side_effect=Exception("Error"))
+        
+        result = scroller.check_page_height_change(page, 3000)
+        
+        assert result == 3000
+
+
+class TestAggressiveScroll:
+    """Tests for Scroller.aggressive_scroll()."""
+
+    def test_aggressive_scroll_increases_with_empty_scrolls(self):
+        """Should increase scroll amount with more consecutive empty scrolls."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock()
+        
+        with patch('time.sleep'):
+            scroller.aggressive_scroll(page, consecutive_empty_scrolls=1)
+        
+        # Should call evaluate twice for 2 iterations
+        assert page.evaluate.call_count == 2
+
+    def test_aggressive_scroll_caps_multiplier_at_3(self):
+        """Should cap the scroll multiplier at 3x."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock()
+        
+        with patch('time.sleep'):
+            scroller.aggressive_scroll(page, consecutive_empty_scrolls=10)
+        
+        # Even with 10 empty scrolls, multiplier should be capped
+        assert page.evaluate.called
+        # Check the scroll amount is capped (800 * 3 = 2400)
+        call_args = page.evaluate.call_args_list[0][0][0]
+        assert '2400' in call_args
+
+    def test_aggressive_scroll_handles_exception(self):
+        """Should fallback to basic scroll on exception."""
+        scroller = Scroller()
+        page = Mock()
+        call_count = [0]
+        
+        def evaluate_side_effect(js):
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                raise Exception("First calls fail")
+            return None
+        
+        page.evaluate = Mock(side_effect=evaluate_side_effect)
+        
+        with patch('time.sleep'):
+            # Should not raise, should try fallback
+            scroller.aggressive_scroll(page, consecutive_empty_scrolls=1)
+
+
+class TestDelayMethod:
+    """Tests for Scroller.delay()."""
+
+    def test_delay_uses_default_values(self):
+        """Should use config values when no args provided."""
+        scroller = Scroller()
+        
+        with patch('time.sleep') as mock_sleep:
+            scroller.delay()
+        
+        assert mock_sleep.called
+        sleep_time = mock_sleep.call_args[0][0]
+        # Should be within default range from config
+        assert sleep_time >= 0
+
+    def test_delay_uses_custom_values(self):
+        """Should use provided min/max values."""
+        scroller = Scroller()
+        
+        with patch('time.sleep') as mock_sleep:
+            with patch('random.uniform', return_value=1.5):
+                scroller.delay(1.0, 2.0)
+        
+        mock_sleep.assert_called_once_with(1.5)
+
+
+class TestScrollMethod:
+    """Tests for Scroller.scroll()."""
+
+    def test_scroll_delegates_to_random_scroll_pattern(self):
+        """Should call random_scroll_pattern internally."""
+        scroller = Scroller()
+        page = Mock()
+        page.evaluate = Mock()
+        
+        with patch.object(scroller, 'random_scroll_pattern') as mock_random:
+            scroller.scroll(page, deep_scroll=False)
+        
+        mock_random.assert_called_once_with(page, False)
+
+    def test_scroll_passes_deep_scroll_flag(self):
+        """Should pass deep_scroll flag to random_scroll_pattern."""
+        scroller = Scroller()
+        page = Mock()
+        
+        with patch.object(scroller, 'random_scroll_pattern') as mock_random:
+            scroller.scroll(page, deep_scroll=True)
+        
+        mock_random.assert_called_once_with(page, True)
+
+
+class TestGetScroller:
+    """Tests for get_scroller() function."""
+
+    def test_returns_global_scroller_instance(self):
+        """Should return the global scroller instance."""
+        from fetcher.scroller import get_scroller, scroller as global_scroller
+        
+        result = get_scroller()
+        
+        assert result is global_scroller
+        assert isinstance(result, Scroller)

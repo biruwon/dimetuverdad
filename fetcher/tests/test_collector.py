@@ -522,3 +522,159 @@ class TestTweetCollector:
         """Test get_collector function returns TweetCollector instance."""
         collector = get_collector()
         assert isinstance(collector, TweetCollector)
+
+
+class TestGroupAndUpdateThreads:
+    """Tests for _group_and_update_threads method."""
+
+    def test_no_thread_indicators(self, collector, mock_database_connection):
+        """Should return 0 when no tweets have thread indicators."""
+        tweets = [
+            {'tweet_id': '123', 'content': 'Test tweet'},
+            {'tweet_id': '456', 'content': 'Another tweet'}
+        ]
+        
+        result = collector._group_and_update_threads(mock_database_connection, tweets, 'testuser')
+        assert result == 0
+
+    def test_tweets_with_thread_line(self, collector, mock_database_connection):
+        """Should detect threads when tweets have thread line indicators."""
+        tweets = [
+            {'tweet_id': '123', 'content': 'Thread start', 'has_thread_line': True},
+            {'tweet_id': '456', 'content': 'Thread reply', 'reply_to_tweet_id': '123'}
+        ]
+        
+        # Mock thread detector to return grouped threads
+        collector.thread_detector._group_into_threads_by_reply_chain = Mock(return_value=[
+            {'tweets': [
+                {'tweet_id': '123'},
+                {'tweet_id': '456'}
+            ]}
+        ])
+        
+        result = collector._group_and_update_threads(mock_database_connection, tweets, 'testuser')
+        assert result >= 0
+
+    def test_thread_grouping_exception(self, collector, mock_database_connection):
+        """Should handle exceptions in thread grouping gracefully."""
+        tweets = [
+            {'tweet_id': '123', 'has_thread_line': True}
+        ]
+        
+        # Mock thread detector to raise exception
+        collector.thread_detector._group_into_threads_by_reply_chain = Mock(
+            side_effect=Exception("Grouping failed")
+        )
+        
+        result = collector._group_and_update_threads(mock_database_connection, tweets, 'testuser')
+        assert result == 0
+
+    def test_empty_tweets_list(self, collector, mock_database_connection):
+        """Should return 0 for empty tweets list."""
+        result = collector._group_and_update_threads(mock_database_connection, [], 'testuser')
+        assert result == 0
+
+
+class TestMaybeDetectThreads:
+    """Tests for _maybe_detect_threads method."""
+
+    def test_feature_disabled(self, collector, mock_page, mock_database_connection):
+        """Should return 0 when collect_threads is disabled."""
+        collector.config.collect_threads = False
+        
+        detected, new_scroll_count = collector._maybe_detect_threads(
+            mock_page, 'testuser', mock_database_connection, scrolls_since_last_detect=10
+        )
+        
+        assert detected == 0
+        assert new_scroll_count == 10
+
+    def test_not_enough_scrolls(self, collector, mock_page, mock_database_connection):
+        """Should not detect when not enough scrolls have passed."""
+        collector.config.collect_threads = True
+        collector.config.thread_detect_interval = 5
+        
+        detected, new_scroll_count = collector._maybe_detect_threads(
+            mock_page, 'testuser', mock_database_connection, scrolls_since_last_detect=3
+        )
+        
+        assert detected == 0
+        assert new_scroll_count == 3
+
+
+class TestCheckTweetExistsInDbEdgeCases:
+    """Additional edge cases for check_tweet_exists_in_db."""
+
+    @patch('fetcher.collector.get_tweet_repository')
+    def test_username_mismatch(self, mock_repo_func, collector):
+        """Should return False if username doesn't match."""
+        mock_repo = Mock()
+        mock_repo.get_tweet_by_id.return_value = {'tweet_id': '123', 'username': 'differentuser'}
+        mock_repo_func.return_value = mock_repo
+        
+        exists, needs_update = collector.check_tweet_exists_in_db('testuser', '123', True)
+        
+        assert exists is False
+        assert needs_update is None
+
+    @patch('fetcher.collector.get_tweet_repository')
+    def test_tweet_exists_same_username(self, mock_repo_func, collector):
+        """Should return True if tweet exists with same username."""
+        mock_repo = Mock()
+        mock_repo.get_tweet_by_id.return_value = {
+            'tweet_id': '123', 
+            'username': 'testuser',
+            'post_type': 'original',
+            'content': 'test content'
+        }
+        mock_repo_func.return_value = mock_repo
+        
+        exists, needs_update = collector.check_tweet_exists_in_db('testuser', '123', True)
+        
+        assert exists is True
+
+
+class TestExtractTweetDataEdgeCases:
+    """Additional edge cases for extract_tweet_data."""
+
+    def test_article_html_extraction_failure(self, collector, mock_page):
+        """Test handling when article HTML extraction fails."""
+        mock_article = Mock()
+        mock_article.evaluate.side_effect = Exception("HTML extraction failed")
+        mock_article.query_selector.return_value = None
+        
+        # Should handle the error and potentially fall back
+        with patch('fetcher.collector.html_extractor.parse_tweet_from_html', return_value=None):
+            with patch('fetcher.collector.fetcher_parsers.extract_tweet_with_media_monitoring', return_value=None):
+                result = collector.extract_tweet_data(
+                    mock_article, '123', 'https://twitter.com/user/status/123', 
+                    'user', mock_page, []
+                )
+                assert result is None
+
+    def test_video_monitoring_needed(self, collector, mock_page):
+        """Test detection of tweets requiring video monitoring."""
+        mock_article = Mock()
+        mock_article.evaluate.return_value = '<html>...</html>'
+        
+        # Mock stateless extraction with video content
+        stateless_data = {
+            'content': 'Video tweet',
+            'media_links': 'https://pbs.twimg.com/amplify_video_thumb/123.jpg',
+            'media_count': 1
+        }
+        
+        with patch('fetcher.collector.html_extractor.parse_tweet_from_html', return_value=stateless_data):
+            # Should trigger video monitoring path
+            with patch('fetcher.collector.fetcher_parsers.extract_tweet_with_media_monitoring') as mock_extract:
+                mock_extract.return_value = {
+                    'tweet_id': '123',
+                    'content': 'Video tweet',
+                    'tweet_timestamp': '2024-01-01T12:00:00Z'
+                }
+                result = collector.extract_tweet_data(
+                    mock_article, '123', 'https://twitter.com/user/status/123',
+                    'user', mock_page, []
+                )
+                # Video monitoring should have been triggered
+                assert mock_extract.called

@@ -13,8 +13,33 @@ import time
 from dataclasses import dataclass
 from typing import Optional, Dict, List, Any, Set
 
-from playwright.sync_api import ElementHandle, Page, BrowserContext, sync_playwright
+from playwright.sync_api import ElementHandle, Page, BrowserContext, sync_playwright, Error as PlaywrightError
 from fetcher.config import get_config
+
+
+class BrowserClosedByUserError(Exception):
+    """Raised when the browser is manually closed by the user.
+    
+    This exception should propagate up to stop thread collection
+    entirely, rather than attempting to open new browser instances.
+    """
+    pass
+
+
+def is_browser_closed_error(e: Exception) -> bool:
+    """Check if an exception indicates the browser was closed by user."""
+    error_msg = str(e).lower()
+    # Common playwright errors when browser/page is closed
+    closed_indicators = [
+        'target closed',
+        'target page, context or browser has been closed',
+        'browser has been closed',
+        'context has been closed',
+        'page has been closed',
+        'connection closed',
+        'browser.close',
+    ]
+    return any(indicator in error_msg for indicator in closed_indicators)
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +182,275 @@ class ThreadDetector:
         except Exception as e:
             self.logger.warning(f"Error checking thread line: {e}")
             return False
+
+    def _dismiss_specific_overlays(self, page: Page) -> None:
+        """Dismiss specific known Twitter overlays that need special handling.
+        
+        Handles:
+        - Cookie consent banner (BottomBar) - click "Accept all cookies"
+        - Tweet compose box - close with Escape or close button
+        - Grok/Chat drawers - minimize them
+        """
+        try:
+            # 1. Handle cookie consent banner
+            cookie_banner = page.query_selector('[data-testid="BottomBar"]')
+            if cookie_banner and cookie_banner.is_visible():
+                self.logger.debug("Found cookie consent banner, accepting cookies...")
+                # Find and click "Accept all cookies" button - try multiple languages
+                accept_selectors = [
+                    '[data-testid="BottomBar"] button:has-text("Accept")',
+                    '[data-testid="BottomBar"] button:has-text("Aceptar")',  # Spanish
+                    '[data-testid="BottomBar"] button:has-text("Akzeptieren")',  # German
+                    'button:has-text("Accept all cookies")',
+                    'button:has-text("Aceptar todas las cookies")',  # Spanish
+                    'button:has-text("Alle Cookies akzeptieren")',  # German
+                ]
+                accept_btn = None
+                for sel in accept_selectors:
+                    try:
+                        accept_btn = page.query_selector(sel)
+                        if accept_btn and accept_btn.is_visible():
+                            break
+                    except Exception:
+                        continue
+                if accept_btn and accept_btn.is_visible():
+                    accept_btn.click()
+                    page.wait_for_timeout(500)
+                    self.logger.debug("Clicked accept cookies button")
+            
+            # 2. Handle open compose/reply tweet box (inline reply on tweet pages)
+            compose_textarea = page.query_selector('[data-testid="tweetTextarea_0"]')
+            if compose_textarea and compose_textarea.is_visible():
+                self.logger.debug("Found open compose/reply box, closing it...")
+                
+                # Method 1: Blur the textarea and press Escape
+                page.evaluate("""() => {
+                    const textarea = document.querySelector('[data-testid="tweetTextarea_0"]');
+                    if (textarea) {
+                        textarea.blur();
+                        // Also try to blur any focused element
+                        document.activeElement?.blur();
+                    }
+                }""")
+                page.keyboard.press('Escape')
+                page.wait_for_timeout(300)
+                
+                # Method 2: Click on tweet text (not media) to shift focus away from compose box
+                compose_textarea = page.query_selector('[data-testid="tweetTextarea_0"]')
+                if compose_textarea and compose_textarea.is_visible():
+                    # Find a safe text element to click (avoid media which would open image viewer)
+                    safe_click_targets = [
+                        'article[data-testid="tweet"] [data-testid="tweetText"]',
+                        'article[data-testid="tweet"] time',
+                        'article[data-testid="tweet"] [data-testid="User-Name"]',
+                    ]
+                    clicked = False
+                    for selector in safe_click_targets:
+                        try:
+                            safe_el = page.query_selector(selector)
+                            if safe_el and safe_el.is_visible():
+                                safe_el.click()
+                                clicked = True
+                                page.wait_for_timeout(300)
+                                break
+                        except Exception:
+                            continue
+                    if not clicked:
+                        # Last resort: press Escape again
+                        page.keyboard.press('Escape')
+                
+                # Method 3: Scroll up to collapse inline reply
+                compose_textarea = page.query_selector('[data-testid="tweetTextarea_0"]')
+                if compose_textarea and compose_textarea.is_visible():
+                    page.evaluate("window.scrollTo(0, 0)")
+                    page.wait_for_timeout(300)
+                    page.keyboard.press('Escape')
+                    page.wait_for_timeout(200)
+                
+                # Method 4: Click the close button if it exists (modal compose)
+                compose_textarea = page.query_selector('[data-testid="tweetTextarea_0"]')
+                if compose_textarea and compose_textarea.is_visible():
+                    close_btn = page.query_selector('[data-testid="app-bar-close"]')
+                    if close_btn and close_btn.is_visible():
+                        close_btn.click()
+                        page.wait_for_timeout(300)
+                
+                # Method 5: Hide the inline reply container via JavaScript as last resort
+                compose_textarea = page.query_selector('[data-testid="tweetTextarea_0"]')
+                if compose_textarea and compose_textarea.is_visible():
+                    self.logger.debug("Compose box still visible, hiding via CSS...")
+                    page.evaluate("""() => {
+                        // Find the inline_reply_offscreen container and hide it
+                        const container = document.querySelector('[data-testid="inline_reply_offscreen"]');
+                        if (container) {
+                            container.style.display = 'none';
+                        }
+                        // Also hide the tweetTextarea label container
+                        const label = document.querySelector('[data-testid="tweetTextarea_0_label"]');
+                        if (label) {
+                            const parent = label.closest('[data-testid="cellInnerDiv"]');
+                            if (parent) {
+                                parent.style.display = 'none';
+                            }
+                        }
+                    }""")
+                    page.wait_for_timeout(200)
+                
+                self.logger.debug("Compose/reply box dismissed")
+            
+            # 3. Minimize Grok drawer if expanded
+            grok_drawer = page.query_selector('[data-testid="GrokDrawer"]')
+            if grok_drawer and grok_drawer.is_visible():
+                # Check if it's expanded (height > 100px typically means expanded)
+                is_expanded = page.evaluate("""(el) => {
+                    const rect = el.getBoundingClientRect();
+                    return rect.height > 100;
+                }""", grok_drawer)
+                if is_expanded:
+                    self.logger.debug("Found expanded Grok drawer, clicking to minimize...")
+                    # Click the Grok header to minimize
+                    grok_header = page.query_selector('[data-testid="GrokDrawerHeader"]')
+                    if grok_header:
+                        grok_header.click()
+                        page.wait_for_timeout(300)
+            
+            # 4. Handle any other popup menus
+            menu = page.query_selector('[role="menu"]')
+            if menu and menu.is_visible():
+                self.logger.debug("Found popup menu, pressing Escape...")
+                page.keyboard.press('Escape')
+                page.wait_for_timeout(300)
+                
+        except Exception as e:
+            self.logger.debug(f"Error dismissing specific overlays: {e}")
+
+    def _dismiss_page_modals(self, page: Page, max_attempts: int = 5) -> bool:
+        """Dismiss any modals/overlays that Twitter shows on page load.
+        
+        Twitter often shows modals like:
+        - New post/compose modal
+        - User options modal  
+        - Login prompts
+        - Cookie consent
+        
+        Returns True if page is now clean, False if modals couldn't be dismissed.
+        """
+        # First, handle specific known overlays that need special treatment
+        self._dismiss_specific_overlays(page)
+        
+        for attempt in range(max_attempts):
+            try:
+                # Check for common modal/overlay patterns
+                has_modal = page.evaluate("""() => {
+                    // Common modal selectors Twitter uses
+                    const modalSelectors = [
+                        'div[role="dialog"]',
+                        '[aria-modal="true"]',
+                        '[data-testid="modal"]',
+                        '[data-testid="sheetDialog"]',
+                        '[data-testid="confirmationSheetDialog"]',
+                        'div[aria-label*="modal"]',
+                        'div[aria-label*="Modal"]',
+                        '[role="menu"]',
+                        // Compose tweet modal
+                        '[data-testid="tweetButton"]',
+                        '[data-testid="toolBar"]',
+                        // Layer for overlays
+                        '#layers div[data-testid]'
+                    ];
+                    
+                    for (const sel of modalSelectors) {
+                        const el = document.querySelector(sel);
+                        if (el && el.offsetParent !== null) {
+                            // Check if it's actually a blocking modal, not just a tweet button in the sidebar
+                            const rect = el.getBoundingClientRect();
+                            // If it's centered or covers significant area, it's likely a modal
+                            if (rect.width > 300 && rect.height > 200) {
+                                return {found: true, selector: sel};
+                            }
+                        }
+                    }
+                    
+                    // Check #layers specifically for Twitter's overlay system
+                    const layers = document.querySelector('#layers');
+                    if (layers && layers.children.length > 0) {
+                        for (const child of layers.children) {
+                            if (child.offsetParent !== null && child.innerHTML.length > 100) {
+                                return {found: true, selector: '#layers child'};
+                            }
+                        }
+                    }
+                    
+                    return {found: false};
+                }""")
+                
+                if not has_modal or not has_modal.get('found'):
+                    return True  # No modal found, page is clean
+                
+                self.logger.debug(f"Modal detected via {has_modal.get('selector')}, attempting to dismiss (attempt {attempt + 1})")
+                
+                # Try pressing Escape multiple times
+                for _ in range(3):
+                    try:
+                        page.keyboard.press('Escape')
+                        page.wait_for_timeout(300)
+                    except Exception:
+                        pass
+                
+                # Try clicking close buttons
+                close_selectors = [
+                    '[data-testid="app-bar-close"]',
+                    'button[aria-label*="Close"]',
+                    'button[aria-label*="close"]', 
+                    'div[aria-label*="Close"]',
+                    '[data-testid="close"]',
+                    'button[data-testid="xMigrationBottomBar"] button',
+                    '[role="button"][aria-label*="Close"]',
+                ]
+                
+                for sel in close_selectors:
+                    try:
+                        close_btn = page.query_selector(sel)
+                        if close_btn and close_btn.is_visible():
+                            close_btn.click()
+                            page.wait_for_timeout(500)
+                            break
+                    except Exception:
+                        continue
+                
+                # Click outside modal area (top-left corner)
+                try:
+                    page.mouse.click(5, 5)
+                    page.wait_for_timeout(300)
+                except Exception:
+                    pass
+                
+                page.wait_for_timeout(500)
+                
+            except Exception as e:
+                self.logger.debug(f"Error dismissing modal (attempt {attempt + 1}): {e}")
+                continue
+        
+        # Final check
+        try:
+            still_has_modal = page.evaluate("""() => {
+                const layers = document.querySelector('#layers');
+                if (layers && layers.children.length > 0) {
+                    for (const child of layers.children) {
+                        if (child.offsetParent !== null && child.innerHTML.length > 100) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }""")
+            if still_has_modal:
+                self.logger.warning("Could not dismiss all modals after max attempts")
+                return False
+        except Exception:
+            pass
+        
+        return True
 
     def _extract_tweet_from_article(self, article: ElementHandle) -> Optional[Dict]:
         article_handle = _sync_handle(article)
@@ -664,8 +958,45 @@ class ThreadDetector:
         page.on("response", capture_conversation_id)
         
         try:
+            self.logger.info(f"🧵 Navigating to thread page: {thread_url}")
             page.goto(thread_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(3000)
+            
+            # Check actual URL after navigation
+            actual_url = page.url
+            self.logger.info(f"🧵 Page loaded. Actual URL: {actual_url}")
+            
+            # Check if we got redirected to a Twitter internal page instead of the tweet
+            def is_bad_redirect(url: str) -> bool:
+                bad_patterns = [
+                    '/explore', '/i/connect_people', '/i/flow/', '/home',
+                    '/login', '/signup', '/messages', '/notifications'
+                ]
+                for pattern in bad_patterns:
+                    if pattern in url:
+                        return True
+                if url.endswith('x.com/') or url.endswith('twitter.com/'):
+                    return True
+                return False
+            
+            # If we got redirected to an internal page, try navigating again
+            if is_bad_redirect(actual_url):
+                self.logger.warning(f"🧵 Redirected to {actual_url}, trying direct navigation again...")
+                page.goto(thread_url, wait_until="networkidle")
+                actual_url = page.url
+                self.logger.info(f"🧵 Second navigation. Actual URL: {actual_url}")
+                
+                # If still redirected, the tweet might be unavailable
+                if is_bad_redirect(actual_url):
+                    self.logger.error(f"🧵 Cannot access thread page, redirected to: {actual_url}")
+                    return None
+            
+            page.wait_for_timeout(2000)
+            
+            # Dismiss any modals Twitter shows on page load (anti-scraping measures)
+            if not self._dismiss_page_modals(page):
+                self.logger.warning(f"Could not dismiss modals on thread page {thread_url}, attempting to continue")
+            
+            page.wait_for_timeout(1000)
             
             # Extract thread chain from conversation structure
             thread_chain = self._extract_thread_chain_from_conversation(
@@ -694,159 +1025,161 @@ class ThreadDetector:
         page: Page,
         username_lower: str,
         start_id: str,
-        max_scroll_attempts: int = 100
+        expected_url: str = None
     ) -> List[Dict]:
         """Extract self-reply chain from a conversation page with scrolling.
         
-        This method handles long threads (50+ posts) by:
-        1. First scrolling UP to find the thread start
-        2. Clicking all "Show replies" buttons to expand collapsed sections
-        3. Scrolling DOWN through all thread posts
-        4. Collecting all consecutive posts from the same user
+        This method collects ALL consecutive posts from the same user in a thread.
+        It will scroll until it finds:
+        - A post from a different user (end of thread)
+        - Or the page bottom with no more content
+        
+        There are no artificial limits - a thread can have any number of posts.
         
         A valid self-thread is when the user posts consecutive tweets replying to themselves.
         """
         collected_posts: Dict[str, Dict] = {}  # tweet_id -> tweet_data
         
+        def is_on_wrong_page() -> bool:
+            """Check if we've been redirected away from the thread page."""
+            try:
+                current_url = page.url.lower()
+                # Check for known bad redirects
+                bad_patterns = [
+                    '/home', '/explore', '/i/connect_people', '/i/flow/',
+                    '/login', '/signup', '/messages', '/notifications',
+                    '/search', '/compose', 'foryou', 'for_you'
+                ]
+                for pattern in bad_patterns:
+                    if pattern in current_url:
+                        self.logger.warning(f"Detected redirect to {current_url} during thread extraction")
+                        return True
+                # Check we're still on a status page for the right tweet
+                if f'/status/{start_id}' not in current_url and expected_url:
+                    # We might be on a different tweet's page - that's ok for thread navigation
+                    # But if we're on a completely different page type, abort
+                    if '/status/' not in current_url:
+                        self.logger.warning(f"No longer on a status page: {current_url}")
+                        return True
+                return False
+            except Exception as e:
+                self.logger.debug(f"Error checking URL: {e}")
+                return False
+        
         def click_show_buttons() -> int:
             """Click all 'Show' buttons that expand collapsed content. Returns count clicked.
 
-            Only click expanders that are either global (no owning article) or whose owning
-            article belongs to the target user. This avoids expanding replies under other
-            users that can pull in unrelated content and cause long/no-ending loops.
+            Uses JavaScript-side filtering for speed - avoids expensive Python-side iteration
+            over thousands of DOM elements.
             """
             clicked = 0
+            # Save URL before clicking to detect navigation
+            url_before = page.url
             try:
-                # Search a wide set of possible elements that can act as expanders
-                candidates = page.query_selector_all('div[role="button"], button, a, span')
-                for el in candidates:
-                    try:
-                        btn_text = (el.inner_text() or '').strip().lower()
-                        aria = (el.get_attribute('aria-label') or '').strip().lower()
-                        title = (el.get_attribute('title') or '').strip().lower()
-                        data_testid = (el.get_attribute('data-testid') or '').strip().lower()
-                        href = (el.get_attribute('href') or '').strip().lower()
-
-                        # Create a short identifying snippet for blacklisting
-                        snippet = (btn_text or aria or title or data_testid or href or '')[:200]
-                        if snippet in self._blocked_expanders:
-                            self.logger.debug(f"Skipping previously blocked expander: {snippet}")
-                            continue
-
-                        # Avoid clicking links or controls that navigate to compose/new-post pages early
-                        if href and ('/compose' in href or 'intent/tweet' in href or '/i/compose' in href or 'compose' in href):
-                            self._blocked_expanders.add(snippet)
-                            self.logger.debug(f"Skipping navigation expander (compose/link): {snippet} -> {href}")
-                            continue
-                        if href and '/status/' not in href and not href.startswith('#') and not href.startswith('/'):
-                            # generic external/nav links - block to be safe (we only want in-thread expands)
-                            self._blocked_expanders.add(snippet)
-                            self.logger.debug(f"Skipping generic navigation expander: {snippet} -> {href}")
-                            continue
-
-                        # Decide if this element is likely an expander
-                        is_expander = False
-                        for candidate_text in (btn_text, aria, title, data_testid):
-                            if not candidate_text:
-                                continue
-                            if 'show' in candidate_text or 'reply' in candidate_text or 'more' in candidate_text:
-                                is_expander = True
-                                break
-
-                        if not is_expander:
-                            continue
-
-                        # Get additional attributes to decide if this is a menu-like control
-                        role = (el.get_attribute('role') or '').strip().lower()
-                        aria_haspopup = (el.get_attribute('aria-haspopup') or '').strip().lower()
-
-                        # Conservative safe-expander regex matches explicit 'show replies' / 'view thread' patterns
-                        safe_re = re.compile(r"(show\s(replies|conversation)|view thread|show more replies|view conversation)", re.I)
-
-                        # If the element is menu-like, treat as risky and skip clicking to avoid opening menus
-                        is_menu_like = False
-                        if aria_haspopup and 'menu' in aria_haspopup:
-                            is_menu_like = True
-                        if role in ('menu', 'menubar'):
-                            is_menu_like = True
-                        if (data_testid and 'more' in data_testid) and not safe_re.search(btn_text or ''):
-                            is_menu_like = True
-                        if (aria and ('more menu' in aria or 'more menu items' in aria)):
-                            is_menu_like = True
-
-                        if is_menu_like and not safe_re.search(btn_text or ''):
-                            # Blacklist it and skip clicking
-                            self._blocked_expanders.add(snippet)
-                            self.logger.debug(f"Skipping risky expander (likely menu): {snippet}")
-                            continue
-
-                        # Try to find the owning article (if any) and ensure it belongs to target user
-                        owner_href = None
+                # Use JavaScript to find show-reply/expand buttons efficiently
+                # Returns list of element info for buttons we should click
+                show_buttons = page.evaluate(f"""(targetUser) => {{
+                    const results = [];
+                    const targetLower = targetUser.toLowerCase();
+                    
+                    // Only look within the conversation timeline - avoid nav elements
+                    const conversation = document.querySelector('[aria-label="Timeline: Conversation"]');
+                    const container = conversation || document.body;
+                    
+                    // Look for elements with "show" text patterns - much more targeted than all buttons
+                    const candidates = container.querySelectorAll(
+                        '[data-testid*="show"], [data-testid*="reply"], ' +
+                        'div[role="button"], button, span'
+                    );
+                    
+                    for (const el of candidates) {{
+                        // Skip elements outside conversation area or in nav/header
+                        const nav = el.closest('nav, header, [role="navigation"], [data-testid="primaryColumn"] > div:first-child');
+                        if (nav) continue;
+                        
+                        // Skip tab elements
+                        if (el.getAttribute('role') === 'tab') continue;
+                        if (el.closest('[role="tablist"]')) continue;
+                        
+                        const text = (el.innerText || '').trim().toLowerCase();
+                        const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+                        const title = (el.getAttribute('title') || '').toLowerCase();
+                        const testid = (el.getAttribute('data-testid') || '').toLowerCase();
+                        const href = (el.getAttribute('href') || '').toLowerCase();
+                        
+                        // Skip if text contains navigation-like words
+                        if (/for you|trending|explore|home|search|profile|settings|premium/i.test(text)) continue;
+                        
+                        // Quick check: is this likely a show/expand button?
+                        const combined = text + ' ' + aria + ' ' + title + ' ' + testid;
+                        const isExpander = /show|repl(y|ies)|view.*thread|more.*repl/i.test(combined);
+                        if (!isExpander) continue;
+                        
+                        // Skip menu-like elements
+                        const hasPopup = (el.getAttribute('aria-haspopup') || '').includes('menu');
+                        const isMenu = el.getAttribute('role') === 'menu';
+                        if (hasPopup || isMenu) continue;
+                        if (testid.includes('more') && !testid.includes('replies')) continue;
+                        if (aria.includes('more menu')) continue;
+                        
+                        // Skip navigation/compose links
+                        if (href && (href.includes('/compose') || href.includes('intent/tweet'))) continue;
+                        if (href && (href.includes('/explore') || href.includes('/home') || href.includes('/search'))) continue;
+                        if (href && !href.includes('/status/') && !href.startsWith('#') && href.length > 1) continue;
+                        
+                        // Must be inside an article (tweet) to be valid
+                        const article = el.closest('article[data-testid="tweet"]');
+                        if (!article) continue;  // Skip buttons not inside tweets
+                        
+                        // Check owning article's user
+                        const userLink = article.querySelector('a[href*="/status/"]');
+                        if (userLink) {{
+                            const parts = userLink.getAttribute('href').split('/').filter(Boolean);
+                            if (parts.length >= 2 && parts[1] === 'status') {{
+                                const owner = parts[0].toLowerCase();
+                                if (owner !== targetLower) continue;  // Skip other users' expand buttons
+                            }}
+                        }}
+                        
+                        // Element passes all checks - mark for clicking
+                        results.push({{
+                            text: text.slice(0, 50),
+                            aria: aria.slice(0, 50),
+                            testid: testid
+                        }});
+                        
+                        // Click the element directly in JS (faster than round-tripping to Python)
+                        try {{
+                            el.scrollIntoView({{behavior: 'instant', block: 'center'}});
+                            el.click();
+                        }} catch (e) {{}}
+                    }}
+                    
+                    return results;
+                }}""", username_lower)
+                
+                if show_buttons:
+                    clicked = len(show_buttons)
+                    if clicked > 0:
+                        self.logger.debug(f"Clicked {clicked} show buttons via JS: {show_buttons}")
+                        # Wait for content to load after clicks
+                        page.wait_for_timeout(1000)
+                        
+                        # Check if clicking caused navigation - if so, go back
+                        url_after = page.url
+                        if url_after != url_before and '/status/' not in url_after:
+                            self.logger.warning(f"Button click caused navigation to {url_after}, navigating back")
+                            page.go_back()
+                            page.wait_for_timeout(1000)
+                        
+                        # Check if any overlays were opened
                         try:
-                            owner_href = el.evaluate("e => { const a = e.closest('article[data-testid=\"tweet\"]'); if (!a) return null; const l = a.querySelector('a[href*=\"/status/\"]'); return l ? l.getAttribute('href') : null }")
-                        except Exception:
-                            owner_href = None
-
-                        owner_username = None
-                        if owner_href:
-                            try:
-                                parts = owner_href.strip('/').split('/')
-                                if parts and len(parts) >= 2 and parts[1] == 'status':
-                                    owner_username = parts[0].lower()
-                            except Exception:
-                                owner_username = None
-
-                        # If the expander is attached to another user, skip it
-                        if owner_username and owner_username != username_lower:
-                            continue
-
-                        # Avoid clicking unrelated UI like 'More menu' when aria suggests menu
-                        if 'menu' in aria and 'more' not in btn_text:
-                            continue
-
-                        # Avoid clicking links or controls that navigate to compose/new-post pages
-                        href = (el.get_attribute('href') or '').strip().lower()
-                        onclick = (el.get_attribute('onclick') or '').strip().lower()
-                        if href and ('/compose' in href or 'intent/tweet' in href or '/i/compose' in href or 'compose' in href):
-                            self._blocked_expanders.add(snippet)
-                            self.logger.debug(f"Skipping navigation expander (compose/link): {snippet} -> {href}")
-                            continue
-                        if data_testid and ('compose' in data_testid or 'newtweet' in data_testid or 'tweet' in data_testid) and not safe_re.search(btn_text or ''):
-                            self._blocked_expanders.add(snippet)
-                            self.logger.debug(f"Skipping data-test compose-like expander: {snippet} -> {data_testid}")
-                            continue
-
-                        # If element appears to be a generic link that does not point to a status, skip it
-                        if href and '/status/' not in href and not href.startswith('#'):
-                            self._blocked_expanders.add(snippet)
-                            self.logger.debug(f"Skipping generic link expander: {snippet} -> {href}")
-                            continue
-
-                        try:
-                            el.scroll_into_view_if_needed()
+                            ok = _detect_and_try_close_overlay(attempts=1)
+                            if not ok:
+                                self.logger.debug("Show button opened an overlay")
                         except Exception:
                             pass
-                        page.wait_for_timeout(250)
-                        try:
-                            el.click()
-                            page.wait_for_timeout(900)
-
-                            # After clicking, if this opened a menu/overlay we should blacklist it
-                            try:
-                                ok = _detect_and_try_close_overlay(attempts=1)
-                                if not ok:
-                                    self._blocked_expanders.add(snippet)
-                                    self.logger.debug(f"Clicked expander opened an overlay; blacklisting: {snippet}")
-                                    continue
-                            except Exception:
-                                pass
-
-                            clicked += 1
-                            self.logger.debug(f"Clicked expander (text/aria/title/testid): '{btn_text}' / '{aria}' / '{title}' / '{data_testid}' (owner={owner_username})")
-                        except Exception:
-                            continue
-                    except Exception:
-                        continue
+                
             except Exception as e:
                 self.logger.debug(f"Error clicking show buttons: {e}")
             return clicked
@@ -873,102 +1206,15 @@ class ThreadDetector:
 
         def click_per_article_show_buttons() -> int:
             """Click inline 'show replies' buttons inside each article to expand deeper content.
-
-            Only click buttons on articles authored by the target user to avoid expanding
-            other users' reply trees (which can cause unrelated expansions and loops).
+            
+            This is a simplified version that just calls click_show_buttons() again
+            since the JS-optimized version handles all button clicking efficiently.
             """
-            clicked = 0
-            for tweet_id, tweet in list(collected_posts.items()):
-                # Only expand articles authored by the target user
-                if tweet.get('username', '').lower() != username_lower:
-                    continue
-
-                article = tweet.get('_article')
-                if not article:
-                    continue
-                try:
-                    # Try multiple button selectors within the article
-                    for btn in article.query_selector_all('button, div[role="button"], a, span'):
-                        try:
-                            txt = (btn.inner_text() or '').strip().lower()
-                            aria = (btn.get_attribute('aria-label') or '').strip().lower()
-                            title = (btn.get_attribute('title') or '').strip().lower()
-                            data_testid = (btn.get_attribute('data-testid') or '').strip().lower()
-
-                            is_expander = False
-                            for candidate_text in (txt, aria, title, data_testid):
-                                if not candidate_text:
-                                    continue
-                                if 'show' in candidate_text or 'reply' in candidate_text or 'more' in candidate_text or 'repl' in candidate_text:
-                                    is_expander = True
-                                    break
-
-                            if not is_expander:
-                                continue
-
-                            # Extra checks to avoid menu-like controls
-                            role = (btn.get_attribute('role') or '').strip().lower()
-                            aria_haspopup = (btn.get_attribute('aria-haspopup') or '').strip().lower()
-                            snippet = (txt or aria or title or data_testid or '')[:200]
-                            if snippet in self._blocked_expanders:
-                                self.logger.debug(f"Skipping previously blocked per-article expander: {snippet}")
-                                continue
-
-                            safe_re = re.compile(r"(show\s(replies|conversation)|view thread|show more replies|view conversation)", re.I)
-                            is_menu_like = False
-                            if aria_haspopup and 'menu' in aria_haspopup:
-                                is_menu_like = True
-                            if role in ('menu', 'menubar'):
-                                is_menu_like = True
-                            if (data_testid and 'more' in data_testid) and not safe_re.search(txt or ''):
-                                is_menu_like = True
-                            if (aria and ('more menu' in aria or 'more menu items' in aria)):
-                                is_menu_like = True
-
-                            if is_menu_like and not safe_re.search(txt or ''):
-                                self._blocked_expanders.add(snippet)
-                                self.logger.debug(f"Skipping risky per-article expander (likely menu): {snippet}")
-                                continue
-
-                            try:
-                                btn.scroll_into_view_if_needed()
-                            except Exception:
-                                pass
-
-                            # Avoid clicking compose/navigation anchors inside articles
-                            href = (btn.get_attribute('href') or '').strip().lower()
-                            if href and ('/compose' in href or 'intent/tweet' in href or '/i/compose' in href or 'compose' in href):
-                                self._blocked_expanders.add(snippet)
-                                self.logger.debug(f"Skipping per-article navigation expander: {snippet} -> {href}")
-                                continue
-
-                            try:
-                                btn.click()
-                                page.wait_for_timeout(600)
-
-                                # If clicking opened an overlay/menu, blacklist it
-                                try:
-                                    ok = _detect_and_try_close_overlay(attempts=1)
-                                    if not ok:
-                                        self._blocked_expanders.add(snippet)
-                                        self.logger.debug(f"Clicked per-article expander opened an overlay; blacklisting: {snippet}")
-                                        continue
-                                except Exception:
-                                    pass
-
-                                clicked += 1
-                            except Exception:
-                                continue
-                        except Exception:
-                            continue
-                except Exception:
-                    continue
-            if clicked:
-                self.logger.debug(f"Clicked {clicked} per-article show-buttons (target user only)")
-            return clicked
+            # Just re-run the optimized click_show_buttons - it handles per-article buttons too
+            return click_show_buttons()
 
         # First, scroll to top of page to find thread start
-        self.logger.debug(f"Scrolling to find thread start...")
+        self.logger.info(f"Scrolling to find thread start...")
         page.evaluate("window.scrollTo(0, 0)")
         page.wait_for_timeout(1000)
 
@@ -981,66 +1227,64 @@ class ThreadDetector:
             page.wait_for_timeout(500)
 
         # Initial collection and button clicks
+        self.logger.info(f"Initial tweet collection...")
         collect_visible_tweets()
+        self.logger.info(f"Initial show buttons click...")
         click_show_buttons()
+        self.logger.info(f"Starting main scroll loop...")
         
-        # Main scroll loop - scroll down and collect
+        # Main scroll loop - scroll down and collect until we hit a non-user post or page bottom
         last_count = 0
-        stall_count = 0
-        scroll_attempt = 0
-        max_stall = 10  # Allow more stalls for long threads
+        consecutive_empty_scrolls = 0
+        scroll_iteration = 0
         start_time = time.time()
         max_time = get_config().thread_collect_timeout_seconds
 
         def _detect_and_try_close_overlay(attempts: int = 3) -> bool:
             """Detect common modal/overlay patterns and attempt to close them.
 
-            Returns True if an overlay was detected and successfully closed or
-            False if an overlay remains after attempts.
+            Returns True if no blocking overlay detected or if successfully closed.
+            Returns False only if a true blocking modal remains after attempts.
+            
+            NOTE: This is intentionally conservative - we only detect actual blocking
+            modals/dialogs, not just any focused element or UI components.
             """
             try:
                 info = page.evaluate("""() => {
-                    // Common modal/dialog selectors
-                    const selectors = ['div[role="dialog"]', '[aria-modal="true"]', '[data-testid="modal"]', '.modal', 'div[aria-label*="modal"]'];
-                    for (const s of selectors) {
+                    // Only detect actual blocking modals/dialogs
+                    const modalSelectors = [
+                        'div[role="dialog"]', 
+                        '[aria-modal="true"]', 
+                        '[data-testid="modal"]',
+                        '[data-testid="sheetDialog"]',
+                        '[data-testid="confirmationSheetDialog"]'
+                    ];
+                    for (const s of modalSelectors) {
                         const el = document.querySelector(s);
                         if (el && el.offsetParent !== null) {
-                            return {overlay: true, selector: s, snippet: el.outerHTML.substring(0, 1000)};
+                            // Check if it's actually blocking (covers significant viewport)
+                            const rect = el.getBoundingClientRect();
+                            if (rect.width > 300 && rect.height > 200) {
+                                return {overlay: true, selector: s, blocking: true};
+                            }
                         }
                     }
 
-                    // Menus and 'More' menus (e.g., 'More menu items')
+                    // Check for popup menus that block interaction
                     const menu = document.querySelector('[role="menu"]');
                     if (menu && menu.offsetParent !== null) {
-                        const aria = (menu.getAttribute('aria-label') || '').toLowerCase();
-                        if (aria.includes('more') || aria.includes('menu')) {
-                            return {overlay: true, selector: '[role="menu"]', snippet: menu.outerHTML.substring(0, 1000)};
-                        }
-                        return {overlay: true, selector: '[role="menu"]', snippet: menu.outerHTML.substring(0, 1000)};
-                    }
-
-                    // More conservative aria-label scan to catch items like 'More menu items'
-                    const els = document.querySelectorAll('[aria-label]');
-                    for (const el of els) {
-                        try {
-                            const a = (el.getAttribute('aria-label') || '').toLowerCase();
-                            if (a.includes('more menu') || a.includes('more menu items') || a.includes('more')) {
-                                if (el && el.offsetParent !== null) {
-                                    return {overlay: true, selector: '[aria-label]', label: a.slice(0, 200), snippet: el.outerHTML.substring(0, 1000)};
-                                }
-                            }
-                        } catch (e) {
-                            // ignore
+                        // Only consider it blocking if it's a substantial popup
+                        const rect = menu.getBoundingClientRect();
+                        if (rect.width > 150 && rect.height > 100) {
+                            return {overlay: true, selector: '[role="menu"]', blocking: true};
                         }
                     }
 
-                    if (document.activeElement && document.activeElement.tagName && document.activeElement.tagName.toLowerCase() !== 'body' && document.activeElement.tagName.toLowerCase() !== 'html') {
-                        return {overlay: true, selector: 'activeElement', tag: document.activeElement.tagName, snippet: (document.activeElement.outerHTML||'').substring(0,1000)};
-                    }
+                    // No blocking overlay detected
                     return {overlay: false};
                 }""")
             except Exception:
-                return False
+                return True  # Assume no overlay on error - don't block collection
 
             if not info or not info.get('overlay'):
                 return True
@@ -1083,19 +1327,26 @@ class ThreadDetector:
                     # Re-evaluate
                     try:
                         still = page.evaluate("""() => {
-                            const selectors = ['div[role="dialog"]', '[aria-modal="true"]', '[data-testid="modal"]', '.modal', 'div[aria-label*="modal"]', '[role="menu"]'];
-                            for (const s of selectors) {
+                            // Only check for actual blocking modals
+                            const modalSelectors = [
+                                'div[role="dialog"]', 
+                                '[aria-modal="true"]', 
+                                '[data-testid="modal"]',
+                                '[data-testid="sheetDialog"]',
+                                '[data-testid="confirmationSheetDialog"]'
+                            ];
+                            for (const s of modalSelectors) {
                                 const el = document.querySelector(s);
-                                if (el && el.offsetParent !== null) return true;
+                                if (el && el.offsetParent !== null) {
+                                    const rect = el.getBoundingClientRect();
+                                    if (rect.width > 300 && rect.height > 200) return true;
+                                }
                             }
-                            if (document.activeElement && document.activeElement.tagName && document.activeElement.tagName.toLowerCase() !== 'body' && document.activeElement.tagName.toLowerCase() !== 'html') return true;
-                            // also check for aria-labels that indicate 'more menu'
-                            const els = document.querySelectorAll('[aria-label]');
-                            for (const el of els) {
-                                try {
-                                    const a = (el.getAttribute('aria-label')||'').toLowerCase();
-                                    if (a.includes('more menu') || a.includes('more menu items') || a === 'more') return true;
-                                } catch (e) {}
+                            // Check for blocking popup menus
+                            const menu = document.querySelector('[role="menu"]');
+                            if (menu && menu.offsetParent !== null) {
+                                const rect = menu.getBoundingClientRect();
+                                if (rect.width > 150 && rect.height > 100) return true;
                             }
                             return false;
                         }""")
@@ -1126,13 +1377,35 @@ class ThreadDetector:
             self.logger.warning(f"Overlay remained after attempts during thread extraction of {start_id}; captured debugging artifacts")
             return False
 
-        while scroll_attempt < max_scroll_attempts and stall_count < max_stall:
+        # Track when we've found the end of the thread (non-user post after user posts)
+        found_thread_end = False
+        has_user_posts = False
+        
+        self.logger.info(f"Entering main scroll loop (no limits, collecting until thread ends)")
+        while True:
             # Global timeout guard
             if time.time() - start_time > max_time:
                 self.logger.warning(f"Aborting thread extraction for {start_id}: exceeded timeout ({max_time}s)")
                 break
+            
+            # Check if we've been redirected away from the thread page
+            if is_on_wrong_page():
+                self.logger.error(f"Aborting thread extraction for {start_id}: page redirected away")
+                break
+            
+            # If we found the thread end (non-user post after user posts), stop immediately
+            if found_thread_end:
+                self.logger.info(f"Thread end detected: found non-user post after consecutive user posts")
+                break
+            
+            # If we've hit consecutive empty scrolls at the page bottom, stop
+            if consecutive_empty_scrolls >= 2:
+                self.logger.info(f"Reached page bottom after {consecutive_empty_scrolls} empty scrolls")
+                break
 
-            scroll_attempt += 1
+            scroll_iteration += 1
+            if scroll_iteration % 5 == 0:
+                self.logger.info(f"Scroll iteration {scroll_iteration}, collected {len(collected_posts)} posts")
             
             # Scroll down incrementally
             page.evaluate("window.scrollBy(0, 800)")
@@ -1148,66 +1421,42 @@ class ThreadDetector:
             except Exception as e:
                 self.logger.debug(f"Overlay detection/close check failed: {e}")
             
-            # Click any expand buttons that became visible (more frequently)
-            if scroll_attempt % 2 == 0:
+            # Click any expand buttons that became visible
+            if scroll_iteration % 2 == 0:
                 buttons_clicked = click_show_buttons()
                 if buttons_clicked > 0:
-                    # Reset stall count if we found new buttons
-                    stall_count = 0
-                    # Give time for content to load after clicking
                     page.wait_for_timeout(1000)
             
             # Collect new tweets
+            prev_count = len(collected_posts)
             collect_visible_tweets()
-            
-            # Check if we're making progress
             current_count = len(collected_posts)
+            
+            # Check if we collected any user posts
+            if not has_user_posts:
+                has_user_posts = any(p.get('username', '').lower() == username_lower for p in collected_posts.values())
+            
+            # Check if any newly collected posts are from other users (indicates end of thread)
+            if current_count > prev_count and has_user_posts:
+                for post_id, post_data in collected_posts.items():
+                    if post_data.get('username', '').lower() != username_lower:
+                        # Found a non-user post after we have user posts - thread ends here
+                        found_thread_end = True
+                        self.logger.debug(f"Found non-user post from @{post_data.get('username', '?')}, marking thread end")
+                        break
+            
+            # Check if we're making progress (for page bottom detection)
             if current_count == last_count:
-                stall_count += 1
-                # When stalling, try per-article expansion first on early stalls
-                if stall_count in (2, 4, 6):
-                    per_clicked = click_per_article_show_buttons()
-                    if per_clicked > 0:
-                        stall_count = 0
-                        page.wait_for_timeout(1000)
-                        collect_visible_tweets()
-                        continue
-                # Additional fallback strategies
-                if stall_count == 3:
-                    click_show_buttons()
-                    page.evaluate("window.scrollBy(0, 500)")
-                elif stall_count == 5:
-                    # Scroll back up a bit and try per-article expansion again
-                    page.evaluate("window.scrollBy(0, -500)")
-                    page.wait_for_timeout(500)
-                    per_clicked = click_per_article_show_buttons()
-                    if per_clicked > 0:
-                        stall_count = 0
-                        page.wait_for_timeout(1000)
-                        collect_visible_tweets()
-                elif stall_count == 7:
-                    # Try scrolling to specific positions and do a per-article pass
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
-                    page.wait_for_timeout(500)
-                    per_clicked = click_per_article_show_buttons()
-                    if per_clicked > 0:
-                        stall_count = 0
-                        page.wait_for_timeout(1000)
-                        collect_visible_tweets()
+                consecutive_empty_scrolls += 1
             else:
-                stall_count = 0
+                consecutive_empty_scrolls = 0
             last_count = current_count
             
-            self.logger.debug(f"Scroll {scroll_attempt}: collected {current_count} tweets (stall: {stall_count})")
+            self.logger.debug(f"Scroll {scroll_iteration}: collected {current_count} tweets (empty scrolls: {consecutive_empty_scrolls})")
         
-        # Final pass: scroll through entire page clicking buttons
-        page.evaluate("window.scrollTo(0, 0)")
-        page.wait_for_timeout(500)
-        for _ in range(20):
-            click_show_buttons()
-            page.evaluate("window.scrollBy(0, 500)")
-            page.wait_for_timeout(400)
-            collect_visible_tweets()
+        # Quick final collection pass - just collect any visible tweets we may have missed
+        # No need to re-scroll entire page since main loop already did that
+        collect_visible_tweets()
         
         if not collected_posts:
             return []
@@ -1354,13 +1603,76 @@ class ThreadDetector:
                 pass
 
             try:
+                self.logger.info(f"🧵 Navigating to thread page: {thread_url}")
                 page.goto(thread_url, wait_until="domcontentloaded")
-                page.wait_for_timeout(3000)
+                
+                # Check actual URL after navigation
+                actual_url = page.url
+                self.logger.info(f"🧵 Page loaded. Actual URL: {actual_url}")
+                
+                # Check if we got redirected to a Twitter internal page instead of the tweet
+                def is_bad_redirect(url: str) -> bool:
+                    bad_patterns = [
+                        '/explore', '/i/connect_people', '/i/flow/', '/home',
+                        '/login', '/signup', '/messages', '/notifications'
+                    ]
+                    for pattern in bad_patterns:
+                        if pattern in url:
+                            return True
+                    if url.endswith('x.com/') or url.endswith('twitter.com/'):
+                        return True
+                    return False
+                
+                # If we got redirected to an internal page, try navigating again
+                if is_bad_redirect(actual_url):
+                    self.logger.warning(f"🧵 Redirected to {actual_url}, trying direct navigation again...")
+                    page.goto(thread_url, wait_until="networkidle")
+                    actual_url = page.url
+                    self.logger.info(f"🧵 Second navigation. Actual URL: {actual_url}")
+                    
+                    # If still redirected, the tweet might be unavailable
+                    if is_bad_redirect(actual_url):
+                        self.logger.error(f"🧵 Cannot access thread page, redirected to: {actual_url}")
+                        return None
+                
+                page.wait_for_timeout(2000)
+                
+                # Verify we're still on the right page after wait (Twitter can redirect after load)
+                actual_url = page.url
+                if is_bad_redirect(actual_url):
+                    self.logger.error(f"🧵 Page redirected after load to: {actual_url}")
+                    return None
+                
+                # Wait for tweet article to be present - confirms we're on a tweet page
+                try:
+                    page.wait_for_selector('article[data-testid="tweet"]', timeout=10000)
+                except Exception as e:
+                    self.logger.error(f"🧵 No tweet article found on page - may have redirected. URL: {page.url}")
+                    return None
+                
+                # Double-check URL one more time
+                actual_url = page.url
+                if is_bad_redirect(actual_url):
+                    self.logger.error(f"🧵 Page redirected to: {actual_url}")
+                    return None
+                
+                # Dismiss any modals Twitter shows on page load
+                self.logger.info(f"🧵 Dismissing modals...")
+                self._dismiss_page_modals(page)
+                page.wait_for_timeout(1000)
+                
+                # Final URL check after modal dismissal
+                actual_url = page.url
+                if is_bad_redirect(actual_url):
+                    self.logger.error(f"🧵 Page redirected after modal dismissal to: {actual_url}")
+                    return None
 
                 # Extract full thread chain with scrolling
+                self.logger.info(f"🧵 Extracting thread chain...")
                 thread_chain = self._extract_thread_chain_from_conversation(
-                    page, username.lower(), thread_start_id
+                    page, username.lower(), thread_start_id, expected_url=thread_url
                 )
+                self.logger.info(f"🧵 Extracted {len(thread_chain)} posts from thread")
 
                 if len(thread_chain) < 2:
                     self.logger.info(f"Not a thread or only 1 post found")
@@ -1432,7 +1744,9 @@ class ThreadDetector:
                             page2 = context.new_page()
                             page2.goto(f"https://x.com/{username}/status/{candidate_id}", wait_until="domcontentloaded")
                             page2.wait_for_timeout(800)
-                            extra_chain = self._extract_thread_chain_from_conversation(page2, username.lower(), candidate_id, max_scroll_attempts=60)
+                            # Dismiss any modals Twitter shows on page load
+                            self._dismiss_page_modals(page2, max_attempts=3)
+                            extra_chain = self._extract_thread_chain_from_conversation(page2, username.lower(), candidate_id)
                             new_ids = 0
                             for t in extra_chain:
                                 if t['tweet_id'] not in existing_ids:
@@ -1492,6 +1806,11 @@ class ThreadDetector:
                 page = existing_context.new_page()
                 result = _collect_using_page(page, existing_context)
                 return result
+            except (PlaywrightError, Exception) as e:
+                if is_browser_closed_error(e):
+                    self.logger.warning("Browser was closed by user - stopping thread collection")
+                    raise BrowserClosedByUserError("User closed the browser") from e
+                raise
             finally:
                 try:
                     if page:
@@ -1500,15 +1819,29 @@ class ThreadDetector:
                     pass
         else:
             # Create a fresh playwright context and clean it up afterwards
-            with sync_playwright() as p:
-                browser, context, page = session_manager.create_browser_context(p, save_session=False)
-                try:
-                    return _collect_using_page(page, context)
-                finally:
+            try:
+                with sync_playwright() as p:
+                    browser, context, page = session_manager.create_browser_context(p, save_session=False)
                     try:
-                        session_manager.cleanup_session(browser, context)
-                    except Exception:
-                        pass
+                        return _collect_using_page(page, context)
+                    except (PlaywrightError, Exception) as e:
+                        if is_browser_closed_error(e):
+                            self.logger.warning("Browser was closed by user - stopping thread collection")
+                            raise BrowserClosedByUserError("User closed the browser") from e
+                        raise
+                    finally:
+                        try:
+                            session_manager.cleanup_session(browser, context)
+                        except Exception:
+                            pass
+            except BrowserClosedByUserError:
+                # Re-raise browser closed error to propagate it up
+                raise
+            except (PlaywrightError, Exception) as e:
+                if is_browser_closed_error(e):
+                    self.logger.warning("Browser was closed by user - stopping thread collection")
+                    raise BrowserClosedByUserError("User closed the browser") from e
+                raise
 
     def save_thread_to_database(
         self,

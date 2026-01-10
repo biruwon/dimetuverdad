@@ -97,6 +97,12 @@ def fetch_tweets_in_sessions(page, username: str, max_tweets: int, session_size:
             print(f"🌐 Loading profile page: {url}")
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
             
+            # Wait for page to settle - cookie banners often appear after initial load
+            page.wait_for_timeout(1500)
+            
+            # Dismiss cookie banners and other modals that may block interaction
+            collector.thread_detector._dismiss_page_modals(page, max_attempts=5)
+            
             # Wait for tweets to load
             try:
                 page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
@@ -213,6 +219,12 @@ def fetch_latest_tweets(page, username: str, max_tweets: int = 30) -> List[Dict]
     url = f"https://x.com/{username}"
     print(f"🌐 Loading profile page: {url}")
     page.goto(url, wait_until="domcontentloaded", timeout=30000)
+
+    # Wait for page to settle - cookie banners often appear after initial load
+    page.wait_for_timeout(1500)
+
+    # Dismiss cookie banners and other modals that may block interaction
+    collector.thread_detector._dismiss_page_modals(page, max_attempts=5)
 
     # Wait for tweets to load
     try:
@@ -393,6 +405,12 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
                 print(f"🌐 Loading profile page: {url}")
                 page.goto(url, wait_until="domcontentloaded", timeout=30000)
                 
+                # Wait for page to settle - cookie banners often appear after initial load
+                page.wait_for_timeout(1500)
+                
+                # Dismiss cookie banners and other modals that may block interaction
+                collector.thread_detector._dismiss_page_modals(page, max_attempts=5)
+                
                 # Wait for tweets to load
                 try:
                     page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
@@ -471,6 +489,12 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
             print(f"🌐 Loading profile page: {url}")
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
             
+            # Wait for page to settle - cookie banners often appear after initial load
+            page.wait_for_timeout(1500)
+            
+            # Dismiss cookie banners and other modals that may block interaction
+            collector.thread_detector._dismiss_page_modals(page, max_attempts=5)
+            
             # Wait for tweets to load
             try:
                 page.wait_for_selector('[data-testid="tweetText"], [data-testid="tweet"]', timeout=15000)
@@ -528,7 +552,7 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
         # Print summary by post type
         post_type_counts = {}
         for tweet in all_collected_tweets:
-            post_type = tweet['post_type']
+            post_type = tweet.get('post_type', 'unknown')
             post_type_counts[post_type] = post_type_counts.get(post_type, 0) + 1
         
         print("📈 Post type breakdown:")
