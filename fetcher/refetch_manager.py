@@ -142,19 +142,27 @@ class RefetchManager:
         
         return False
 
-    def refetch_account_all(self, username: str, max_tweets: int = None) -> bool:
+    def refetch_account_all(self, username: str, max_tweets: int = None, use_async: bool = False) -> bool:
         """
         Delete all existing data for an account and refetch all tweets from scratch.
         
         Args:
             username: The username to refetch (without @)
             max_tweets: Maximum number of tweets to fetch (None for unlimited)
+            use_async: Whether to use async Playwright for improved I/O handling
             
         Returns:
             bool: True if successful, False otherwise
         """
+        from fetcher.config import get_config
+        
         username = username.lstrip('@').strip()
         print(f"🔄 REFETCH ALL MODE: Cleaning and refetching @{username}")
+        
+        # Enable skip_duplicate_check since we're refetching from scratch
+        cfg = get_config()
+        cfg.skip_duplicate_check = True
+        print("⚡ Skip duplicate checks enabled (refetch mode)")
         
         try:
             # Delete existing data for the account
@@ -169,13 +177,18 @@ class RefetchManager:
                 max_tweets_display = str(max_tweets)
                 max_tweets_param = max_tweets
             
-            # Import here to avoid circular imports
-            from fetcher.fetch_tweets import run_fetch_session
-            
-            # Fetch fresh data using the same pattern as main function
             print(f"🚀 Starting fresh fetch for @{username} (max: {max_tweets_display})")
-            with sync_playwright() as p:
-                total_fetched, accounts_processed = run_fetch_session(p, [username], max_tweets_param, False)
+            
+            # Use async or sync based on flag
+            if use_async:
+                from fetcher.async_collector import run_async_fetch
+                print("🔄 Using async Playwright for improved I/O handling")
+                total_fetched, accounts_processed = run_async_fetch([username], max_tweets_param)
+            else:
+                # Import here to avoid circular imports
+                from fetcher.fetch_tweets import run_fetch_session
+                with sync_playwright() as p:
+                    total_fetched, accounts_processed = run_fetch_session(p, [username], max_tweets_param, False)
             
             if total_fetched > 0:
                 print(f"✅ Successfully refetched {total_fetched} tweets for @{username}")

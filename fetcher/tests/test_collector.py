@@ -21,6 +21,8 @@ def mock_config():
     config = Mock(spec=FetcherConfig)
     config.db_timeout = 30.0
     config.max_consecutive_empty_scrolls = 10
+    config.skip_duplicate_check = False  # Default to checking duplicates in tests
+    config.batch_write_size = 50
     return config
 
 

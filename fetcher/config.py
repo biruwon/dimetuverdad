@@ -35,9 +35,9 @@ class FetcherConfig:
     element_wait_timeout: int = 15000
     login_verification_timeout: int = 15000
 
-    # Delays (in seconds)
-    min_human_delay: float = 1.0
-    max_human_delay: float = 3.0
+    # Delays (in seconds) - reduced defaults for better performance
+    min_human_delay: float = 0.5
+    max_human_delay: float = 1.5
     recovery_delay_min: float = 3.0
     recovery_delay_max: float = 6.0
     session_refresh_delay_min: float = 3.0
@@ -48,7 +48,7 @@ class FetcherConfig:
     max_consecutive_existing_tweets: int = 10
     max_recovery_attempts: int = 5
     max_session_retries: int = 5
-    max_sessions: int = 10
+    max_sessions: int = 30  # Increased to support 24k tweets (30 × 800)
 
     # Thread detection tuning
     thread_detect_interval: int = 5  # number of scroll cycles between inline thread detection
@@ -60,6 +60,11 @@ class FetcherConfig:
     
     # Performance optimization: use adaptive scroll delays (wait for content instead of fixed delays)
     use_adaptive_scroll: bool = os.getenv("FETCHER_ADAPTIVE_SCROLL", "true").lower() in ("1", "true", "yes")
+    
+    # Fast mode: reduces delays and disables threads (safe speedup)
+    # Note: We do NOT skip video monitoring (captures real MP4 URLs) or
+    # quoted navigation (timeline truncates content) - those lose data
+    fast_mode: bool = os.getenv("FETCHER_FAST_MODE", "false").lower() in ("1", "true", "yes")
 
     # Session management
     session_size: int = 800
@@ -71,6 +76,8 @@ class FetcherConfig:
 
     # Database settings
     db_timeout: float = 10.0
+    batch_write_size: int = 50  # Number of tweets to buffer before writing to DB
+    skip_duplicate_check: bool = False  # Skip DB existence checks during refetch-all
 
     def __post_init__(self):
         """Initialize default values that depend on other attributes."""

@@ -574,14 +574,29 @@ class TestDeleteAccountData:
         # Mock the tweet repository
         mock_tweet_repo = MagicMock()
         
-        # Create mock connection context manager
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone.side_effect = [
-            {'analyses_count': 5},  # First call: analyses count
-            (10,),  # Second call: tweets count before delete
-        ]
-        mock_cursor.rowcount = 10
+        # Track rowcount values - the function reads rowcount after each DELETE
+        # Order: SELECT, model_analyses DELETE, user_feedback DELETE, post_edits DELETE, analyses DELETE, tweets DELETE
+        rowcount_values = iter([0, 1, 2, 3, 5, 10])  # values for each execute that reads rowcount
         
+        class MockCursor:
+            def __init__(self):
+                self._rowcount = 0
+                
+            def execute(self, sql, params=None):
+                # After execute, set rowcount based on which query this is
+                try:
+                    self._rowcount = next(rowcount_values)
+                except StopIteration:
+                    self._rowcount = 0
+                    
+            def fetchall(self):
+                return [('tweet1',), ('tweet2',)]  # Return some tweet_ids
+                
+            @property
+            def rowcount(self):
+                return self._rowcount
+        
+        mock_cursor = MockCursor()
         mock_conn = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)

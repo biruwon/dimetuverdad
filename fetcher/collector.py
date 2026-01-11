@@ -16,6 +16,7 @@ from .scroller import get_scroller
 from .media_monitor import get_media_monitor
 from .thread_detector import ThreadDetector, _sync_handle, BrowserClosedByUserError
 from . import db as fetcher_db
+from .db import TweetBuffer
 from . import parsers as fetcher_parsers
 from . import html_extractor
 from .session_manager import SessionManager
@@ -59,6 +60,10 @@ class TweetCollector:
         Returns:
             Tuple of (exists, tweet_data_for_comparison)
         """
+        # Skip duplicate check in refetch mode - always treat as new
+        if self.config.skip_duplicate_check:
+            return False, None
+        
         # Always check if tweet exists to avoid re-saving duplicates
         tweet_repo = get_tweet_repository()
         tweet = tweet_repo.get_tweet_by_id(tweet_id)
@@ -405,6 +410,9 @@ class TweetCollector:
         tweets_found_this_cycle = 0
         saved_count = 0
         scrolls_since_last_detect = 0
+        
+        # Initialize batch write buffer for improved DB performance
+        tweet_buffer = TweetBuffer(conn, batch_size=self.config.batch_write_size)
 
         if max_tweets == float('inf'):
             logger.info("Collecting unlimited tweets...")
@@ -641,13 +649,11 @@ class TweetCollector:
                             logger.warning(f"Thread collection for {tweet_id} failed: {e}")
                             processed_thread_ids.add(tweet_id)
 
-                    # Save tweet
-                    if self.save_tweet_data(conn, tweet_data):
+                    # Add tweet to batch buffer (will auto-flush when batch_size reached)
+                    if tweet_buffer.add(tweet_data):
                         saved_count += 1
-                        if exists_in_db:
-                            logger.info(f"Updated {tweet_data.get('post_type', 'unknown')}: {tweet_id}")
-                        else:
-                            logger.info(f"Saved {tweet_data.get('post_type', 'unknown')}: {tweet_id}")
+                        post_type = tweet_data.get('post_type', 'unknown')
+                        logger.info(f"Buffered {post_type}: {tweet_id}")
 
                     collected_tweets.append(tweet_data)
                     seen_tweet_ids.add(tweet_id)
@@ -743,6 +749,16 @@ class TweetCollector:
             logger.info(f"Completed: Reached target tweet count ({max_tweets})")
         else:
             logger.info("Stopped: Collection completed")
+
+        # Flush any remaining tweets in the buffer
+        remaining = tweet_buffer.flush()
+        if remaining > 0:
+            logger.info(f"Flushed final batch: {remaining} tweets")
+        
+        # Log batch write statistics
+        stats = tweet_buffer.stats
+        if stats.batches_written > 0:
+            logger.info(f"Batch write stats: {stats.total_tweets} tweets in {stats.batches_written} batches, avg {stats.avg_batch_time:.3f}s/batch")
 
         logger.info(f"Final count: {len(collected_tweets)} tweets processed, {saved_count} saved to database from @{username}")
 

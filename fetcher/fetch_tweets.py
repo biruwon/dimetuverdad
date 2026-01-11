@@ -652,10 +652,21 @@ def main():
     parser.add_argument("--refetch-all", help="Delete all data for specified username and refetch from scratch")
     parser.add_argument("--no-threads", action='store_true', help="Disable thread detection and collection for this run")
     parser.add_argument("--visible", action='store_true', help="Show browser window (disable headless mode) for debugging")
+    parser.add_argument("--fast", action='store_true', help="Enable fast mode: disable threads for faster bulk collection")
+    parser.add_argument("--async", dest='use_async', action='store_true', help="Use async Playwright for improved I/O handling")
     args = parser.parse_args()
 
     # Apply runtime config overrides
     cfg = get_config()
+    
+    # Honor --fast flag for bulk collection (disables thread collection)
+    if getattr(args, 'fast', False):
+        cfg.fast_mode = True
+        cfg.collect_threads = False  # Threads add significant overhead
+        # NOTE: Reduced delays (0.5-1.5s) are now the default
+        # NOTE: We do NOT skip video monitoring (captures real MP4 URLs)
+        # NOTE: We do NOT skip quoted navigation (timeline truncates content)
+        print("🚀 FAST MODE enabled: disabled threads")
     
     # Honor --no-threads flag
     if getattr(args, 'no_threads', False):
@@ -676,7 +687,8 @@ def main():
     # Handle refetch-all mode for entire account
     if args.refetch_all:
         username = args.refetch_all.strip()
-        success = refetch_manager.refetch_account_all(username, args.max)
+        use_async = getattr(args, 'use_async', False)
+        success = refetch_manager.refetch_account_all(username, args.max, use_async=use_async)
         return  # Exit after refetch-all
 
     max_tweets = args.max
@@ -696,8 +708,14 @@ def main():
 
     print(f"📣 Targets resolved (final): {handles}")
 
-    with sync_playwright() as p:
-        total, accounts_processed = run_fetch_session(p, handles, max_tweets, args.resume, args.latest)
+    # Use async or sync playwright based on flag
+    if getattr(args, 'use_async', False):
+        from fetcher.async_collector import run_async_fetch
+        print("🔄 Using async Playwright for improved I/O handling")
+        total, accounts_processed = run_async_fetch(handles, max_tweets)
+    else:
+        with sync_playwright() as p:
+            total, accounts_processed = run_fetch_session(p, handles, max_tweets, args.resume, args.latest)
     
     # Increment performance counter with total tweets processed
     tracker.increment_operations(total)
