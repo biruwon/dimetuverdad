@@ -654,6 +654,9 @@ def main():
     parser.add_argument("--visible", action='store_true', help="Show browser window (disable headless mode) for debugging")
     parser.add_argument("--fast", action='store_true', help="Enable fast mode: disable threads for faster bulk collection")
     parser.add_argument("--async", dest='use_async', action='store_true', help="Use async Playwright for improved I/O handling")
+    parser.add_argument("--full-archive", action='store_true', help="Use date-range based collection to bypass scroll limits (for complete account archiving)")
+    parser.add_argument("--parallel", type=int, default=1, metavar='N', help="Number of parallel workers for date-range collection (default: 1)")
+    parser.add_argument("--window-months", type=int, default=6, help="Initial window size in months for date-range collection (default: 6)")
     args = parser.parse_args()
 
     # Apply runtime config overrides
@@ -708,8 +711,52 @@ def main():
 
     print(f"📣 Targets resolved (final): {handles}")
 
+    # Handle full-archive mode with date-range collection
+    if getattr(args, 'full_archive', False):
+        import asyncio
+        from fetcher.date_range_collector import run_date_range_collection, DateRangeCollectorConfig
+        from fetcher.parallel_orchestrator import run_parallel_collection, OrchestratorConfig
+        
+        print("📚 FULL ARCHIVE MODE: Using date-range based collection")
+        print(f"   Window size: {args.window_months} months")
+        
+        num_workers = getattr(args, 'parallel', 1)
+        
+        if num_workers > 1:
+            print(f"   Parallel workers: {num_workers}")
+            config = OrchestratorConfig(
+                max_workers=num_workers,
+                window_months=args.window_months
+            )
+            
+            with get_db_connection_context() as conn:
+                async def run_parallel():
+                    total = 0
+                    for username in handles:
+                        result = await run_parallel_collection(username, conn, num_workers, config)
+                        total += result.get('total_tweets', 0)
+                    return total, len(handles)
+                
+                total, accounts_processed = asyncio.run(run_parallel())
+        else:
+            # Single-threaded date-range collection
+            config = DateRangeCollectorConfig(
+                initial_window_months=args.window_months,
+                split_threshold=750
+            )
+            
+            with get_db_connection_context() as conn:
+                async def run_sequential():
+                    total = 0
+                    for username in handles:
+                        result = await run_date_range_collection(username, conn, config)
+                        total += result.total_tweets
+                    return total, len(handles)
+                
+                total, accounts_processed = asyncio.run(run_sequential())
+    
     # Use async or sync playwright based on flag
-    if getattr(args, 'use_async', False):
+    elif getattr(args, 'use_async', False):
         from fetcher.async_collector import run_async_fetch
         print("🔄 Using async Playwright for improved I/O handling")
         total, accounts_processed = run_async_fetch(handles, max_tweets)

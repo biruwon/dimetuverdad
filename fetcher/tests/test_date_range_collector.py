@@ -84,6 +84,7 @@ class TestSearchURLBuilder:
     def test_build_search_url_basic(self):
         """Builds correct search URL with from, since, until."""
         from fetcher.date_range_collector import build_search_url
+        from urllib.parse import unquote_plus
         
         url = build_search_url(
             username="testuser",
@@ -91,9 +92,12 @@ class TestSearchURLBuilder:
             end_date=date(2025, 1, 31)
         )
         
-        assert "from:testuser" in url
-        assert "since:2025-01-01" in url
-        assert "until:2025-01-31" in url
+        # Decode URL for checking content
+        decoded_url = unquote_plus(url)
+        
+        assert "from:testuser" in decoded_url
+        assert "since:2025-01-01" in decoded_url
+        assert "until:2025-01-31" in decoded_url
         assert "x.com/search" in url
         assert "f=live" in url  # Live/latest results
     
@@ -107,8 +111,8 @@ class TestSearchURLBuilder:
             end_date=date(2025, 1, 31)
         )
         
-        # Should be URL encoded
-        assert "%20" in url or "+" in url or "from:test_user" in url
+        # Should be URL encoded (spaces and colons)
+        assert "+" in url or "%3A" in url  # + for spaces or %3A for colons
 
 
 class TestDateRangeCollectorConfig:
@@ -155,9 +159,12 @@ class TestDateRangeCollector:
         """Create a mock database connection."""
         db = Mock()
         db.get_collected_ranges = Mock(return_value=[])
+        db.is_range_collected = Mock(return_value=False)
         db.mark_range_complete = Mock()
+        db.mark_range_in_progress = Mock()
         db.get_oldest_tweet_date = Mock(return_value=None)
         db.get_newest_tweet_date = Mock(return_value=None)
+        db.get_collection_stats = Mock(return_value={'total_tweets': 0, 'completed_ranges': 0})
         return db
     
     @pytest.mark.asyncio
@@ -253,6 +260,7 @@ class TestDateRangeCollector:
         mock_db.get_collected_ranges = Mock(return_value=[
             {"start_date": "2025-01-01", "end_date": "2025-03-31", "status": "complete"}
         ])
+        mock_db.is_range_collected = Mock(return_value=True)
         
         mock_collector.collect_from_search = AsyncMock(return_value=[
             {"tweet_id": str(i)} for i in range(50)
@@ -297,9 +305,10 @@ class TestDateRangeCollector:
         )
         
         mock_db.mark_range_complete.assert_called_once()
-        call_args = mock_db.mark_range_complete.call_args
-        assert call_args[1]["username"] == "testuser"
-        assert call_args[1]["tweets_found"] == 100
+        # Check positional args - (username, start_date, end_date, tweets_collected)
+        call_args = mock_db.mark_range_complete.call_args[0]
+        assert call_args[0] == "testuser"  # username
+        assert call_args[3] == 100  # tweets_collected
     
     @pytest.mark.asyncio
     async def test_single_day_window_not_split_even_if_over_threshold(self, mock_collector, mock_db):
@@ -342,8 +351,10 @@ class TestBackwardsCrawl:
     @pytest.fixture
     def mock_db(self):
         db = Mock()
+        db.is_range_collected = Mock(return_value=False)
         db.get_collected_ranges = Mock(return_value=[])
         db.mark_range_complete = Mock()
+        db.mark_range_in_progress = Mock()
         db.get_oldest_tweet_date = Mock(return_value=None)
         db.get_newest_tweet_date = Mock(return_value=None)
         return db
@@ -379,8 +390,8 @@ class TestBackwardsCrawl:
         
         windows_collected = []
         
-        async def track_windows(search_url, **kwargs):
-            windows_collected.append(search_url)
+        async def track_windows(username, start_date, end_date, **kwargs):
+            windows_collected.append((start_date, end_date))
             return [{"tweet_id": "1"}] if len(windows_collected) < 3 else []
         
         mock_collector.collect_from_search = track_windows
@@ -400,6 +411,13 @@ class TestBackwardsCrawl:
         
         # Should have collected multiple windows going backwards
         assert len(windows_collected) >= 2
+        
+        # Verify windows move backwards in time
+        for i in range(1, len(windows_collected)):
+            prev_end = windows_collected[i-1][1]
+            curr_end = windows_collected[i][1]
+            # Each window's end_date should be <= previous window's start_date
+            assert curr_end <= prev_end, f"Window {i} should be earlier than window {i-1}"
 
 
 class TestProgressTracking:

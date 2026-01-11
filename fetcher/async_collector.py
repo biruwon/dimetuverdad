@@ -238,6 +238,166 @@ class AsyncTweetCollector:
         logger.info(f"Async collection complete: {len(collected_tweets)} tweets, {saved_count} saved")
         return collected_tweets
 
+    async def collect_from_search(
+        self,
+        username: str,
+        start_date,
+        end_date,
+        page=None,
+        conn=None
+    ) -> List[Dict]:
+        """
+        Collect tweets from a search results page with date range filters.
+        
+        Uses Twitter's search with: from:username since:YYYY-MM-DD until:YYYY-MM-DD
+        
+        Args:
+            username: Twitter username to search for
+            start_date: Start date (inclusive)
+            end_date: End date (exclusive)
+            page: Optional Playwright page (if None, creates new browser)
+            conn: Optional database connection
+        
+        Returns:
+            List of collected tweet data
+        """
+        from urllib.parse import quote_plus
+        from datetime import date
+        
+        # Build search URL
+        query = f"from:{username} since:{start_date.isoformat()} until:{end_date.isoformat()}"
+        encoded_query = quote_plus(query)
+        search_url = f"https://x.com/search?q={encoded_query}&src=typed_query&f=live"
+        
+        logger.info(f"🔍 Search: {query}")
+        
+        collected_tweets = []
+        
+        # If no page provided, we need to create a browser session
+        if page is None:
+            from playwright.async_api import async_playwright
+            
+            async with async_playwright() as p:
+                browser, context, page = await self.session_manager.create_browser_context(p)
+                
+                try:
+                    # Navigate to search
+                    await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+                    await self.scroller.delay(2, 3)  # Wait for results
+                    
+                    # Collect from this page
+                    if conn is None:
+                        with get_db_connection_context() as conn:
+                            collected_tweets = await self._collect_search_results(
+                                page, username, conn
+                            )
+                    else:
+                        collected_tweets = await self._collect_search_results(
+                            page, username, conn
+                        )
+                finally:
+                    await context.close()
+                    await browser.close()
+        else:
+            # Use provided page
+            await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+            await self.scroller.delay(2, 3)
+            
+            if conn is None:
+                with get_db_connection_context() as conn:
+                    collected_tweets = await self._collect_search_results(
+                        page, username, conn
+                    )
+            else:
+                collected_tweets = await self._collect_search_results(
+                    page, username, conn
+                )
+        
+        logger.info(f"   Collected {len(collected_tweets)} tweets from search")
+        return collected_tweets
+
+    async def _collect_search_results(
+        self,
+        page,
+        username: str,
+        conn,
+        max_tweets: int = 1000
+    ) -> List[Dict]:
+        """
+        Collect tweets from search results page.
+        
+        Similar to collect_tweets_from_page but for search results.
+        """
+        collected_tweets = []
+        seen_tweet_ids: Set[str] = set()
+        consecutive_empty_scrolls = 0
+        
+        tweet_buffer = TweetBuffer(conn, batch_size=self.config.batch_write_size)
+        
+        while len(collected_tweets) < max_tweets:
+            if consecutive_empty_scrolls >= 10:  # Fewer scrolls for search
+                break
+            
+            # Find tweet articles
+            articles = await page.query_selector_all('article[data-testid="tweet"]')
+            tweets_found_this_cycle = 0
+            
+            for article in articles:
+                if len(collected_tweets) >= max_tweets:
+                    break
+                
+                try:
+                    tweet_link = await article.query_selector('a[href*="/status/"]')
+                    if not tweet_link:
+                        continue
+                    
+                    href = await tweet_link.get_attribute('href')
+                    if not href:
+                        continue
+                    
+                    # Parse tweet ID
+                    parts = href.strip('/').split('/')
+                    tweet_id = parts[-1].split('?')[0] if parts else None
+                    
+                    if not tweet_id or tweet_id in seen_tweet_ids:
+                        continue
+                    
+                    # Extract tweet data
+                    article_html = await article.evaluate('el => el.outerHTML')
+                    tweet_data = html_extractor.parse_tweet_from_html(article_html, username)
+                    
+                    if not tweet_data:
+                        continue
+                    
+                    tweet_data['tweet_id'] = tweet_id
+                    tweet_data['tweet_url'] = f"https://x.com{href}"
+                    tweet_data['username'] = username
+                    
+                    # Add to buffer
+                    tweet_buffer.add(tweet_data)
+                    collected_tweets.append(tweet_data)
+                    seen_tweet_ids.add(tweet_id)
+                    tweets_found_this_cycle += 1
+                    
+                except Exception as e:
+                    logger.debug(f"Error processing search result: {e}")
+                    continue
+            
+            # Scroll for more
+            if tweets_found_this_cycle == 0:
+                consecutive_empty_scrolls += 1
+            else:
+                consecutive_empty_scrolls = 0
+            
+            if len(collected_tweets) < max_tweets:
+                await self.scroller.scroll_to_bottom(page)
+                await self.scroller.delay(1, 2)
+        
+        # Flush remaining tweets
+        tweet_buffer.flush()
+        
+        return collected_tweets
+
 
 async def run_async_fetch_session(
     usernames: List[str],
