@@ -183,6 +183,63 @@ class ThreadDetector:
             self.logger.warning(f"Error checking thread line: {e}")
             return False
 
+    def _extract_content_with_links(self, content_element: ElementHandle) -> str:
+        """Extract tweet text content and preserve external URLs.
+        
+        Twitter shows shortened versions of URLs (like t.co or domain names),
+        but the actual href contains the full URL. This method extracts both
+        the visible text and appends any external URLs that might be hidden.
+        """
+        try:
+            content_handle = _sync_handle(content_element)
+            
+            # Get the visible text content
+            text_content = content_handle.inner_text() or ''
+            
+            # Find all anchor tags within the content
+            anchors = content_handle.query_selector_all('a')
+            external_urls = []
+            
+            for anchor in anchors:
+                try:
+                    href = anchor.get_attribute('href')
+                    if not href:
+                        continue
+                    
+                    # Skip Twitter internal links
+                    if href.startswith('/') or 'twitter.com' in href or 'x.com' in href:
+                        continue
+                    
+                    # Skip hashtag and mention links
+                    if '/hashtag/' in href or href.startswith('#'):
+                        continue
+                    
+                    # This is an external link - extract it
+                    # t.co links are often shortened URLs, keep them
+                    if href not in text_content and href not in external_urls:
+                        external_urls.append(href)
+                except Exception:
+                    continue
+            
+            # If we found external URLs not in the text, append them
+            if external_urls:
+                # Add URLs at the end of the content
+                urls_text = '\n'.join(external_urls)
+                if text_content:
+                    text_content = f"{text_content}\n{urls_text}"
+                else:
+                    text_content = urls_text
+            
+            return text_content.strip()
+            
+        except Exception as e:
+            self.logger.warning(f"Error extracting content with links: {e}")
+            # Fallback to simple inner_text
+            try:
+                return _sync_handle(content_element).inner_text() or ''
+            except Exception:
+                return ''
+
     def _dismiss_specific_overlays(self, page: Page) -> None:
         """Dismiss specific known Twitter overlays that need special handling.
         
@@ -490,7 +547,8 @@ class ThreadDetector:
 
             content_div = article_handle.query_selector('[data-testid="tweetText"]')
             if content_div:
-                tweet_data['content'] = content_div.inner_text()
+                # Extract text content and preserve URLs
+                tweet_data['content'] = self._extract_content_with_links(content_div)
             else:
                 tweet_data['content'] = article_handle.inner_text()
 
@@ -1008,12 +1066,17 @@ class ThreadDetector:
             
             posts = [self._format_thread_post(t) for t in thread_chain]
             
+            # Use the actual first tweet in the chain as the thread start_id
+            # (the tweet with the smallest ID, since Twitter IDs are chronologically ordered)
+            actual_start_id = min(t.get('tweet_id', '0') for t in thread_chain)
+            actual_start_url = f"https://x.com/{username}/status/{actual_start_id}"
+            
             # Use the smallest conversation_id (usually the root tweet)
-            conv_id = min(conversation_ids) if conversation_ids else None
+            conv_id = min(conversation_ids) if conversation_ids else actual_start_id
             
             return ThreadSummary(
-                start_id=start_id,
-                url=thread_url,
+                start_id=actual_start_id,
+                url=actual_start_url,
                 tweets=posts,
                 conversation_id=conv_id
             )
@@ -1781,11 +1844,16 @@ class ThreadDetector:
                 merged = sorted(unique_by_id.values(), key=lambda x: int(x.get('tweet_id', '0')))
 
                 posts = [self._format_thread_post(t) for t in merged]
-                conv_id = min(conversation_ids) if conversation_ids else thread_start_id
+                
+                # Use the actual first tweet in the chain as the thread start_id
+                # (the tweet with the smallest ID, since Twitter IDs are chronologically ordered)
+                actual_start_id = merged[0]['tweet_id'] if merged else thread_start_id
+                actual_start_url = f"https://x.com/{username}/status/{actual_start_id}"
+                conv_id = min(conversation_ids) if conversation_ids else actual_start_id
 
                 thread = ThreadSummary(
-                    start_id=thread_start_id,
-                    url=thread_url,
+                    start_id=actual_start_id,
+                    url=actual_start_url,
                     tweets=posts,
                     conversation_id=conv_id
                 )
@@ -1867,6 +1935,13 @@ class ThreadDetector:
         for position, tweet in enumerate(thread.tweets):
             tweet_id = tweet.get('tweet_id')
             if not tweet_id:
+                continue
+            
+            # Check if this tweet already exists with correct thread metadata
+            existing = fetcher_db.get_tweet_by_id(conn, tweet_id)
+            if existing and existing.get('thread_id') == thread_id and existing.get('thread_position') == position:
+                # Tweet already saved with correct thread metadata, skip
+                self.logger.debug(f"Tweet {tweet_id} already in thread {thread_id} at position {position}, skipping")
                 continue
             
             # Build tweet data with thread metadata

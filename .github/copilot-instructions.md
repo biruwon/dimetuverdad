@@ -19,7 +19,8 @@ Purpose: help AI agents be productive in this repo by summarizing architecture, 
   - `./run_in_venv.sh fetch` — collect tweets
   - `./run_in_venv.sh analyze-twitter` — run analysis pipeline
   - `./run_in_venv.sh web` — start web UI (localhost:5000)
-  - Use `pytest` or `./run_in_venv.sh test` to run tests after any code change.
+  - `./run_in_venv.sh test-unit` — run all unit tests after any code change
+  - `pytest path/to/test_file.py` — run specific test file
 
 - Big picture (files to read first):
   - `fetcher/` — data collection (entry: `fetcher/fetch_tweets.py`, collectors in `fetcher/collector.py`).

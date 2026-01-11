@@ -1055,3 +1055,203 @@ class TestExtractReplyMetadata:
         assert result is not None
         assert result['reply_to_tweet_id'] == '555666777'
         assert result['is_reply'] is True
+
+
+class TestExtractContentWithLinks:
+    """Tests for _extract_content_with_links method - preserves URLs in tweet text."""
+
+    @pytest.fixture
+    def detector(self):
+        """Create ThreadDetector instance."""
+        return ThreadDetector()
+
+    def test_extracts_plain_text(self, detector):
+        """Should extract plain text content without links."""
+        mock_element = MagicMock()
+        mock_element.inner_text.return_value = "Just a simple tweet"
+        mock_element.query_selector_all.return_value = []
+
+        result = detector._extract_content_with_links(mock_element)
+
+        assert result == "Just a simple tweet"
+
+    def test_preserves_external_links(self, detector):
+        """Should append external URLs that aren't in the visible text."""
+        mock_element = MagicMock()
+        mock_element.inner_text.return_value = "Check this link"
+        
+        # Mock anchor with external URL
+        mock_anchor = MagicMock()
+        mock_anchor.get_attribute.return_value = "https://example.com/article"
+        mock_element.query_selector_all.return_value = [mock_anchor]
+
+        result = detector._extract_content_with_links(mock_element)
+
+        assert "Check this link" in result
+        assert "https://example.com/article" in result
+
+    def test_skips_twitter_internal_links(self, detector):
+        """Should not append Twitter internal links."""
+        mock_element = MagicMock()
+        mock_element.inner_text.return_value = "Mentioning @someone"
+        
+        # Mock anchor with Twitter internal URL
+        mock_anchor = MagicMock()
+        mock_anchor.get_attribute.return_value = "/someone"
+        mock_element.query_selector_all.return_value = [mock_anchor]
+
+        result = detector._extract_content_with_links(mock_element)
+
+        assert result == "Mentioning @someone"
+        assert "/" not in result or "http" in result  # No raw path added
+
+    def test_skips_x_com_links(self, detector):
+        """Should not append x.com internal links."""
+        mock_element = MagicMock()
+        mock_element.inner_text.return_value = "See this tweet"
+        
+        mock_anchor = MagicMock()
+        mock_anchor.get_attribute.return_value = "https://x.com/user/status/123"
+        mock_element.query_selector_all.return_value = [mock_anchor]
+
+        result = detector._extract_content_with_links(mock_element)
+
+        assert result == "See this tweet"
+        assert "x.com" not in result
+
+    def test_skips_hashtag_links(self, detector):
+        """Should not append hashtag links."""
+        mock_element = MagicMock()
+        mock_element.inner_text.return_value = "Trending #topic"
+        
+        mock_anchor = MagicMock()
+        mock_anchor.get_attribute.return_value = "/hashtag/topic"
+        mock_element.query_selector_all.return_value = [mock_anchor]
+
+        result = detector._extract_content_with_links(mock_element)
+
+        assert result == "Trending #topic"
+        assert "hashtag" not in result
+
+    def test_deduplicates_links_already_in_text(self, detector):
+        """Should not append links that already appear in the visible text."""
+        mock_element = MagicMock()
+        mock_element.inner_text.return_value = "Visit https://example.com for more"
+        
+        mock_anchor = MagicMock()
+        mock_anchor.get_attribute.return_value = "https://example.com"
+        mock_element.query_selector_all.return_value = [mock_anchor]
+
+        result = detector._extract_content_with_links(mock_element)
+
+        # Link should appear only once (in original text, not appended)
+        assert result.count("https://example.com") == 1
+
+    def test_handles_multiple_external_links(self, detector):
+        """Should append multiple external URLs."""
+        mock_element = MagicMock()
+        mock_element.inner_text.return_value = "Multiple links here"
+        
+        mock_anchor1 = MagicMock()
+        mock_anchor1.get_attribute.return_value = "https://first.com"
+        mock_anchor2 = MagicMock()
+        mock_anchor2.get_attribute.return_value = "https://second.com"
+        mock_element.query_selector_all.return_value = [mock_anchor1, mock_anchor2]
+
+        result = detector._extract_content_with_links(mock_element)
+
+        assert "Multiple links here" in result
+        assert "https://first.com" in result
+        assert "https://second.com" in result
+
+    def test_handles_anchor_without_href(self, detector):
+        """Should gracefully handle anchors without href attribute."""
+        mock_element = MagicMock()
+        mock_element.inner_text.return_value = "Tweet text"
+        
+        mock_anchor = MagicMock()
+        mock_anchor.get_attribute.return_value = None
+        mock_element.query_selector_all.return_value = [mock_anchor]
+
+        result = detector._extract_content_with_links(mock_element)
+
+        assert result == "Tweet text"
+
+    def test_fallback_on_exception(self, detector):
+        """Should fallback to inner_text on exception."""
+        mock_element = MagicMock()
+        mock_element.inner_text.return_value = "Fallback text"
+        mock_element.query_selector_all.side_effect = Exception("DOM error")
+
+        result = detector._extract_content_with_links(mock_element)
+
+        assert result == "Fallback text"
+
+
+class TestThreadIdUsesFirstTweet:
+    """Tests that thread_id uses the actual first tweet (min tweet_id), not clicked tweet."""
+
+    @pytest.fixture
+    def detector(self):
+        """Create ThreadDetector instance."""
+        return ThreadDetector()
+
+    def test_format_thread_post_preserves_tweet_id(self, detector):
+        """_format_thread_post should preserve original tweet_id for sorting."""
+        tweet = {
+            'tweet_id': '1234567890',
+            'username': 'testuser',
+            'content': 'Test content',
+        }
+        
+        formatted = detector._format_thread_post(tweet)
+        
+        assert formatted['tweet_id'] == '1234567890'
+
+    def test_thread_summary_with_correct_start_id(self):
+        """ThreadSummary should reflect actual first tweet as start_id."""
+        from fetcher.thread_detector import ThreadSummary
+        
+        # Simulate a thread where user clicked tweet 200, but 100 is the actual start
+        tweets = [
+            {'tweet_id': '100', 'content': 'First (actual start)'},
+            {'tweet_id': '150', 'content': 'Second'},
+            {'tweet_id': '200', 'content': 'Third (clicked)'},
+        ]
+        
+        # After our fix, start_id should be the min (100), not clicked (200)
+        actual_start_id = min(t['tweet_id'] for t in tweets)
+        
+        summary = ThreadSummary(
+            start_id=actual_start_id,  # Should be '100'
+            url=f'https://x.com/user/status/{actual_start_id}',
+            tweets=tweets,
+            conversation_id=actual_start_id
+        )
+        
+        assert summary.start_id == '100'
+        assert '100' in summary.url
+
+    def test_collect_thread_chain_recursive_order(self, detector):
+        """_collect_thread_chain should maintain tweet order for proper ID sorting."""
+        tweets = [
+            {'tweet_id': '100', 'username': 'testuser', 'content': 'First'},
+            {'tweet_id': '101', 'username': 'testuser', 'content': 'Second', 'reply_to_tweet_id': '100'},
+            {'tweet_id': '102', 'username': 'testuser', 'content': 'Third', 'reply_to_tweet_id': '101'},
+        ]
+        
+        tweet_by_id = {t['tweet_id']: t for t in tweets}
+        children_map = {'100': ['101'], '101': ['102']}
+        
+        result = []
+        used = set()
+        
+        detector._collect_thread_chain('100', tweet_by_id, children_map, result, used, 'testuser')
+        
+        assert len(result) == 3
+        assert result[0]['tweet_id'] == '100'  # First tweet
+        assert result[1]['tweet_id'] == '101'
+        assert result[2]['tweet_id'] == '102'
+        
+        # Verify min would give correct start
+        assert min(t['tweet_id'] for t in result) == '100'

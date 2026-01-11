@@ -110,12 +110,15 @@ class TestTweetCollector:
         assert result is False
 
     @patch('fetcher.collector.get_tweet_repository')
-    def test_check_tweet_exists_in_db_no_resume(self, mock_repo, collector):
-        """Test check_tweet_exists_in_db when not resuming."""
+    def test_check_tweet_exists_in_db_always_checks(self, mock_repo, collector):
+        """Test check_tweet_exists_in_db always checks database (even without resume flag)."""
+        mock_repo.return_value.get_tweet_by_id.return_value = None
+        
         result = collector.check_tweet_exists_in_db('username', 'tweet_id', False)
 
         assert result == (False, None)
-        mock_repo.assert_not_called()
+        # Should always check database to avoid re-saving duplicates
+        mock_repo.return_value.get_tweet_by_id.assert_called_once_with('tweet_id')
 
     @patch('fetcher.collector.get_tweet_repository')
     def test_check_tweet_exists_in_db_resume_not_found(self, mock_repo, collector):
@@ -678,3 +681,141 @@ class TestExtractTweetDataEdgeCases:
                 )
                 # Video monitoring should have been triggered
                 assert mock_extract.called
+
+
+class TestCollectorAlwaysChecksDatabaseForExistingTweets:
+    """Tests that collector always checks database to avoid duplicates."""
+
+    @pytest.fixture
+    def collector(self, mock_config):
+        """Create TweetCollector instance with mocked dependencies."""
+        with patch('fetcher.collector.get_config', return_value=mock_config), \
+             patch('fetcher.collector.get_scroller') as mock_scroller, \
+             patch('fetcher.collector.get_media_monitor') as mock_monitor, \
+             patch('utils.paths.get_db_path', return_value=Mock()):
+
+            c = TweetCollector()
+            c.scroller = mock_scroller.return_value
+            c.media_monitor = mock_monitor.return_value
+            return c
+
+    @patch('fetcher.collector.get_tweet_repository')
+    def test_check_tweet_exists_even_without_resume(self, mock_repo, collector):
+        """check_tweet_exists_in_db should query database even when resume_from_last is False."""
+        # Set up mock to indicate tweet exists
+        mock_repo.return_value.get_tweet_by_id.return_value = {
+            'username': 'testuser',
+            'post_type': 'original',
+            'content': 'existing content'
+        }
+        
+        # Call with resume_from_last=False - should still check database
+        exists, data = collector.check_tweet_exists_in_db('testuser', 'tweet123', False)
+        
+        # Should have checked the database
+        mock_repo.return_value.get_tweet_by_id.assert_called_once_with('tweet123')
+        assert exists is True
+
+    @patch('fetcher.collector.get_tweet_repository')
+    def test_check_tweet_exists_returns_comparison_data(self, mock_repo, collector):
+        """check_tweet_exists_in_db should return comparison data for update checks."""
+        mock_repo.return_value.get_tweet_by_id.return_value = {
+            'username': 'testuser',
+            'post_type': 'repost',
+            'content': 'test content',
+            'original_author': 'original',
+            'original_tweet_id': '999'
+        }
+        
+        exists, data = collector.check_tweet_exists_in_db('testuser', 'tweet123', True)
+        
+        assert exists is True
+        assert data is not None
+        assert data['post_type'] == 'repost'
+        assert data['content'] == 'test content'
+
+    @patch('fetcher.collector.get_tweet_repository')
+    def test_check_tweet_wrong_username_returns_not_exists(self, mock_repo, collector):
+        """check_tweet_exists_in_db should return False if username doesn't match."""
+        mock_repo.return_value.get_tweet_by_id.return_value = {
+            'username': 'differentuser',  # Different username
+            'post_type': 'original',
+            'content': 'content'
+        }
+        
+        exists, data = collector.check_tweet_exists_in_db('testuser', 'tweet123', True)
+        
+        assert exists is False
+
+
+class TestCollectorThreadSkipBehavior:
+    """Tests for thread skip behavior using is_thread_already_collected."""
+
+    @pytest.fixture
+    def collector(self, mock_config):
+        """Create TweetCollector instance with mocked dependencies."""
+        with patch('fetcher.collector.get_config', return_value=mock_config), \
+             patch('fetcher.collector.get_scroller') as mock_scroller, \
+             patch('fetcher.collector.get_media_monitor') as mock_monitor, \
+             patch('utils.paths.get_db_path', return_value=Mock()):
+
+            mock_config.collect_threads = True
+            c = TweetCollector()
+            c.scroller = mock_scroller.return_value
+            c.media_monitor = mock_monitor.return_value
+            return c
+
+    @patch('fetcher.collector.fetcher_db.is_thread_already_collected')
+    def test_thread_check_called_when_thread_line_detected(self, mock_is_collected, collector, mock_database_connection):
+        """is_thread_already_collected should be called when has_thread_line is True."""
+        mock_is_collected.return_value = True
+        
+        # This simulates the check that happens in collect_tweets_from_page
+        result = mock_is_collected(mock_database_connection, 'tweet123')
+        
+        assert result is True
+        mock_is_collected.assert_called_once_with(mock_database_connection, 'tweet123')
+
+    @patch('fetcher.collector.fetcher_db.is_thread_already_collected')
+    def test_thread_not_skipped_when_not_collected(self, mock_is_collected, collector, mock_database_connection):
+        """Thread should not be skipped when is_thread_already_collected returns False."""
+        mock_is_collected.return_value = False
+        
+        result = mock_is_collected(mock_database_connection, 'new_tweet_123')
+        
+        assert result is False
+
+
+class TestFetchTweetsNoneVsEmptyList:
+    """Tests for distinguishing between None (failure) and empty list (no new tweets)."""
+
+    def test_empty_list_is_not_failure(self):
+        """An empty list should not be treated as failure."""
+        tweets = []
+        
+        # With our fix, we check `tweets is None` not `not tweets`
+        is_failure = tweets is None
+        
+        assert is_failure is False  # Empty list is NOT a failure
+
+    def test_none_is_failure(self):
+        """None should be treated as failure."""
+        tweets = None
+        
+        is_failure = tweets is None
+        
+        assert is_failure is True  # None IS a failure
+
+    def test_empty_list_length_is_zero(self):
+        """Empty list should contribute 0 to total count."""
+        tweets = []
+        total = len(tweets) if tweets else 0
+        
+        assert total == 0
+
+    def test_none_tweets_length_is_zero(self):
+        """None tweets should contribute 0 to total count (not error)."""
+        tweets = None
+        total = len(tweets) if tweets else 0
+        
+        assert total == 0

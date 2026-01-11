@@ -709,3 +709,152 @@ class TestInitDb:
         with patch('database.get_db_connection', return_value=mock_conn):
             with pytest.raises(Exception, match="Database not properly initialized"):
                 db.init_db()
+
+
+# ===== Tests for get_tweet_by_id =====
+
+class TestGetTweetById:
+    """Tests for get_tweet_by_id function."""
+    
+    def test_returns_tweet_when_exists(self, test_db):
+        """Test that existing tweet is returned."""
+        conn = get_test_connection(test_db)
+        
+        # Create account first
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+        conn.commit()
+        
+        tweet_data = {
+            'tweet_id': '123456789',
+            'username': 'testuser',
+            'content': 'Test tweet content',
+            'tweet_url': 'https://x.com/testuser/status/123456789',
+        }
+        db.save_tweet(conn, tweet_data)
+        
+        result = db.get_tweet_by_id(conn, '123456789')
+        assert result is not None
+        assert result['tweet_id'] == '123456789'
+        assert result['username'] == 'testuser'
+        assert result['content'] == 'Test tweet content'
+        conn.close()
+    
+    def test_returns_none_when_not_exists(self, test_db):
+        """Test that None is returned for non-existent tweet."""
+        conn = get_test_connection(test_db)
+        
+        result = db.get_tweet_by_id(conn, 'nonexistent123')
+        assert result is None
+        conn.close()
+
+
+# ===== Tests for is_thread_already_collected =====
+
+class TestIsThreadAlreadyCollected:
+    """Tests for is_thread_already_collected function."""
+    
+    def test_returns_false_when_no_thread(self, test_db):
+        """Test returns False when thread doesn't exist."""
+        conn = get_test_connection(test_db)
+        
+        result = db.is_thread_already_collected(conn, '999999')
+        assert result is False
+        conn.close()
+    
+    def test_returns_false_when_tweet_exists_but_no_thread_metadata(self, test_db):
+        """Test returns False when tweet exists but has no thread metadata."""
+        conn = get_test_connection(test_db)
+        
+        # Create account first
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+        conn.commit()
+        
+        tweet_data = {
+            'tweet_id': '123456789',
+            'username': 'testuser',
+            'content': 'Test tweet',
+            'tweet_url': 'https://x.com/testuser/status/123456789',
+        }
+        db.save_tweet(conn, tweet_data)
+        
+        result = db.is_thread_already_collected(conn, '123456789')
+        assert result is False
+        conn.close()
+    
+    def test_returns_true_when_thread_start_exists(self, test_db):
+        """Test returns True when thread start tweet exists."""
+        conn = get_test_connection(test_db)
+        
+        # Create account first
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+        conn.commit()
+        
+        tweet_data = {
+            'tweet_id': '123456789',
+            'username': 'testuser',
+            'content': 'Thread start',
+            'tweet_url': 'https://x.com/testuser/status/123456789',
+            'thread_id': '123456789',
+            'is_thread_start': 1,
+            'thread_position': 0,
+        }
+        db.save_tweet(conn, tweet_data)
+        
+        result = db.is_thread_already_collected(conn, '123456789')
+        assert result is True
+        conn.close()
+    
+    def test_returns_true_when_tweet_is_continuation_in_collected_thread(self, test_db):
+        """Test returns True when checking a continuation tweet that's part of a collected thread."""
+        conn = get_test_connection(test_db)
+        
+        # Create account first
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+        conn.commit()
+        
+        # Save a thread continuation (has thread_id set)
+        tweet_data = {
+            'tweet_id': '123456790',
+            'username': 'testuser',
+            'content': 'Thread continuation',
+            'tweet_url': 'https://x.com/testuser/status/123456790',
+            'thread_id': '123456789',
+            'is_thread_start': 0,
+            'thread_position': 1,
+        }
+        db.save_tweet(conn, tweet_data)
+        
+        # Check for the continuation tweet itself - should be True since it has thread_id
+        result = db.is_thread_already_collected(conn, '123456790')
+        assert result is True
+        conn.close()
+    
+    def test_returns_true_when_checking_thread_start_id_with_existing_members(self, test_db):
+        """Test returns True when checking thread_id and thread members exist."""
+        conn = get_test_connection(test_db)
+        
+        # Create account first
+        c = conn.cursor()
+        c.execute("INSERT INTO accounts (username) VALUES (?)", ('testuser',))
+        conn.commit()
+        
+        # Save a thread continuation referencing thread_id = 123456789
+        tweet_data = {
+            'tweet_id': '123456790',
+            'username': 'testuser',
+            'content': 'Thread continuation',
+            'tweet_url': 'https://x.com/testuser/status/123456790',
+            'thread_id': '123456789',
+            'is_thread_start': 0,
+            'thread_position': 1,
+        }
+        db.save_tweet(conn, tweet_data)
+        
+        # Check for the thread_id (start tweet) - should be True since we have members referencing it
+        result = db.is_thread_already_collected(conn, '123456789')
+        assert result is True
+        conn.close()

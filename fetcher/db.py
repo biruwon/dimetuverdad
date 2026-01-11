@@ -385,7 +385,9 @@ def save_tweet(conn: sqlite3.Connection, tweet_data: Dict) -> bool:
         ))
         conn.commit()
         return True
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"save_tweet error: {e}")
         return False
 
 def check_if_tweet_exists(username: str, tweet_id: str) -> bool:
@@ -516,3 +518,50 @@ def update_tweet_in_database(tweet_id: str, tweet_data: dict) -> bool:
     except Exception as e:
         print(f"❌ Database update error: {e}")
         return False
+
+
+def get_tweet_by_id(conn, tweet_id: str) -> Optional[Dict]:
+    """Get a tweet by its ID.
+    
+    Args:
+        conn: Database connection
+        tweet_id: The tweet ID to look up
+        
+    Returns:
+        Tweet data as a dictionary, or None if not found
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM tweets WHERE tweet_id = ?",
+        (tweet_id,)
+    )
+    row = cursor.fetchone()
+    if row:
+        return dict(row)
+    return None
+
+
+def is_thread_already_collected(conn, tweet_id: str) -> bool:
+    """Check if a tweet is already part of a collected thread.
+    
+    A tweet is considered part of a collected thread if:
+    1. It has a thread_id set (meaning it's been identified as part of a thread), OR
+    2. Its tweet_id matches the thread_id of another tweet (it's the thread start)
+    
+    Args:
+        conn: Database connection  
+        tweet_id: The tweet ID to check
+        
+    Returns:
+        True if tweet is already part of a collected thread, False otherwise
+    """
+    cursor = conn.cursor()
+    # Check if this tweet has thread metadata OR if it's referenced as a thread_id by other tweets
+    cursor.execute(
+        """SELECT COUNT(*) FROM tweets 
+           WHERE (tweet_id = ? AND thread_id IS NOT NULL)
+              OR thread_id = ?""",
+        (tweet_id, tweet_id)
+    )
+    count = cursor.fetchone()[0]
+    return count > 0

@@ -22,7 +22,8 @@
             --success-color: #27ae60;
             --warning-color: #f39c12;
             --dark-color: #34495e;
-            --thread-color: #9c27b0;
+            --thread-color: #1da1f2;
+            --thread-line-color: #cfd9de;
         }
         
         .navbar-brand {
@@ -42,39 +43,131 @@
             background: #fafafa;
         }
         
-        /* Thread connector line */
-        .thread-connector {
-            position: relative;
+        /* X-style Thread Layout */
+        .thread-container {
+            max-width: 600px;
+            margin: 0 auto;
         }
         
-        .thread-connector::before {
+        .thread-tweet {
+            position: relative;
+            padding-left: 60px;
+            padding-bottom: 0;
+        }
+        
+        /* Thread connector line - X style */
+        .thread-tweet::before {
             content: '';
             position: absolute;
-            left: 30px;
-            top: -1rem;
-            bottom: 100%;
+            left: 28px;
+            top: 56px;
+            bottom: 0;
             width: 2px;
-            background: var(--thread-color);
+            background: var(--thread-line-color);
         }
         
-        .thread-connector:first-child::before {
+        .thread-tweet:last-child::before {
             display: none;
         }
         
-        .thread-position-badge {
-            background-color: var(--thread-color);
-            color: white;
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
+        .thread-avatar {
+            position: absolute;
+            left: 8px;
+            top: 12px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
-            min-width: 24px;
-            text-align: center;
+            object-fit: cover;
+        }
+        
+        .thread-position-indicator {
+            position: absolute;
+            left: 0;
+            top: 12px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--thread-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
         }
         
         .thread-header {
-            background: linear-gradient(135deg, var(--thread-color), #7b1fa2);
+            background: linear-gradient(135deg, var(--thread-color), #0d8bd9);
             color: white;
             border-radius: 0.5rem;
+        }
+        
+        /* View toggle buttons */
+        .view-toggle {
+            background: #f7f9fa;
+            border-radius: 9999px;
+            padding: 4px;
+        }
+        
+        .view-toggle .btn {
+            border-radius: 9999px;
+            padding: 8px 20px;
+            font-weight: 500;
+        }
+        
+        .view-toggle .btn.active {
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .view-toggle .btn:not(.active) {
+            background: transparent;
+            color: #536471;
+        }
+        
+        /* Thread Analysis Card */
+        .analysis-card {
+            border-left: 4px solid var(--thread-color);
+            background: linear-gradient(135deg, #f8f9fa, #fff);
+        }
+        
+        /* Twitter embed container */
+        .twitter-embed-container {
+            min-height: 200px;
+        }
+        
+        .twitter-embed-container .twitter-tweet {
+            margin: 0 !important;
+        }
+        
+        /* Fallback tweet display */
+        .fallback-tweet {
+            background: white;
+            border: 1px solid #cfd9de;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 0;
+        }
+        
+        .fallback-tweet .tweet-content {
+            font-size: 15px;
+            line-height: 1.5;
+            color: #0f1419;
+            white-space: pre-wrap;
+        }
+        
+        .fallback-tweet .tweet-meta {
+            color: #536471;
+            font-size: 13px;
+        }
+        
+        .fallback-tweet .tweet-link {
+            color: var(--thread-color);
+            text-decoration: none;
+        }
+        
+        .fallback-tweet .tweet-link:hover {
+            text-decoration: underline;
         }
         
         /* Category badge colors */
@@ -112,8 +205,16 @@
         .tweet-card.analysis-general { border-left-color: #6c757d; }
 
         @media (max-width: 768px) {
-            .thread-connector::before {
-                left: 20px;
+            .thread-tweet {
+                padding-left: 50px;
+            }
+            .thread-tweet::before {
+                left: 23px;
+            }
+            .thread-position-indicator {
+                width: 32px;
+                height: 32px;
+                font-size: 12px;
             }
         }
     </style>
@@ -152,7 +253,7 @@
             <div class="col-12">
                 <div class="card thread-header">
                     <div class="card-body">
-                        <div class="d-flex align-items-center">
+                        <div class="d-flex align-items-center flex-wrap">
                             {% if user_profile_pic %}
                             <img src="{{ user_profile_pic }}" 
                                  alt="@{{ username }}" 
@@ -171,7 +272,7 @@
                                     {{ tweet_count }} tweets en este hilo
                                 </p>
                             </div>
-                            <div class="ms-auto">
+                            <div class="ms-auto mt-2 mt-md-0">
                                 <a href="/user/{{ username }}" class="btn btn-light">
                                     <i class="fas fa-arrow-left me-1"></i>
                                     Volver al perfil
@@ -183,15 +284,110 @@
             </div>
         </div>
 
-        <!-- Thread Tweets -->
-        <div class="row">
+        <!-- View Toggle -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-center">
+                    <div class="view-toggle d-inline-flex">
+                        <button class="btn active" id="btn-embed-view" onclick="showView('embed')">
+                            <i class="fab fa-x-twitter me-1"></i>
+                            Vista Embed
+                        </button>
+                        <button class="btn" id="btn-analysis-view" onclick="showView('analysis')">
+                            <i class="fas fa-microscope me-1"></i>
+                            Vista Análisis
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Thread Analysis Summary (shown in both views) -->
+        {% set first_tweet = tweets[0] if tweets else none %}
+        {% if first_tweet and first_tweet.analysis_category %}
+        <div class="row mb-4">
+            <div class="col-12 col-lg-8 mx-auto">
+                <div class="card analysis-card">
+                    <div class="card-header bg-transparent">
+                        <h5 class="mb-0">
+                            <i class="fas fa-brain me-2"></i>
+                            Análisis del Hilo
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <strong>Categoría:</strong>
+                            {% set categories = first_tweet.analysis_category.split(',') if first_tweet.analysis_category else [] %}
+                            {% for cat in categories %}
+                            <span class="badge category-badge category-{{ cat.strip() }} ms-1">
+                                {{ cat.strip().replace('_', ' ').title() }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% if first_tweet.local_explanation or first_tweet.external_explanation %}
+                        <div class="mb-2">
+                            <strong>Explicación:</strong>
+                            <p class="mb-0 text-muted">
+                                {{ first_tweet.external_explanation or first_tweet.local_explanation or first_tweet.analysis_explanation }}
+                            </p>
+                        </div>
+                        {% endif %}
+                        {% if first_tweet.analysis_stages %}
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-layer-group me-1"></i>
+                                Análisis: {{ first_tweet.analysis_stages }}
+                            </small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Embed View (X-style thread) -->
+        <div id="embed-view" class="row">
+            <div class="col-12 col-lg-8 mx-auto">
+                <div class="thread-container">
+                    {% for tweet in tweets %}
+                    <div class="thread-tweet mb-3">
+                        <div class="thread-position-indicator">{{ loop.index }}</div>
+                        
+                        <!-- Twitter Embed -->
+                        <div class="twitter-embed-container" id="embed-{{ tweet.tweet_id }}">
+                            <blockquote class="twitter-tweet" data-conversation="none" data-dnt="true">
+                                <a href="https://twitter.com/{{ username }}/status/{{ tweet.tweet_id }}"></a>
+                            </blockquote>
+                        </div>
+                        
+                        <!-- Fallback display (shown if embed fails) -->
+                        <div class="fallback-tweet d-none" id="fallback-{{ tweet.tweet_id }}">
+                            <div class="tweet-content">{{ tweet.content or tweet.text }}</div>
+                            <div class="tweet-meta mt-2">
+                                <span>{{ tweet.created_at.strftime('%d %b %Y, %H:%M') if tweet.created_at else '' }}</span>
+                                <span class="mx-1">·</span>
+                                <a href="https://twitter.com/{{ username }}/status/{{ tweet.tweet_id }}" 
+                                   class="tweet-link" target="_blank" rel="noopener">
+                                    <i class="fas fa-external-link-alt me-1"></i>Ver en X
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Analysis View (detailed analysis per tweet) -->
+        <div id="analysis-view" class="row d-none">
             <div class="col-12">
                 {% for tweet in tweets %}
                 <div class="thread-connector mb-4">
                     <div class="d-flex align-items-start">
                         <!-- Thread position indicator -->
                         <div class="me-3 d-flex flex-column align-items-center">
-                            <span class="thread-position-badge">{{ loop.index }}</span>
+                            <span class="badge bg-primary rounded-pill" style="width: 28px; height: 28px; line-height: 20px;">{{ loop.index }}</span>
                         </div>
                         
                         <!-- Tweet content -->
@@ -215,6 +411,46 @@
             </div>
         </div>
     </div>
+
+    <script>
+        function showView(view) {
+            const embedView = document.getElementById('embed-view');
+            const analysisView = document.getElementById('analysis-view');
+            const btnEmbed = document.getElementById('btn-embed-view');
+            const btnAnalysis = document.getElementById('btn-analysis-view');
+            
+            if (view === 'embed') {
+                embedView.classList.remove('d-none');
+                analysisView.classList.add('d-none');
+                btnEmbed.classList.add('active');
+                btnAnalysis.classList.remove('active');
+            } else {
+                embedView.classList.add('d-none');
+                analysisView.classList.remove('d-none');
+                btnEmbed.classList.remove('active');
+                btnAnalysis.classList.add('active');
+            }
+        }
+        
+        // Handle embed load failures - show fallback
+        document.addEventListener('DOMContentLoaded', function() {
+            // Give Twitter time to load embeds, then check for failures
+            setTimeout(function() {
+                document.querySelectorAll('.twitter-embed-container').forEach(function(container) {
+                    const iframe = container.querySelector('iframe');
+                    if (!iframe) {
+                        // Embed didn't load, show fallback
+                        const tweetId = container.id.replace('embed-', '');
+                        const fallback = document.getElementById('fallback-' + tweetId);
+                        if (fallback) {
+                            fallback.classList.remove('d-none');
+                            container.classList.add('d-none');
+                        }
+                    }
+                });
+            }, 5000);
+        });
+    </script>
 
     <!-- Footer -->
     <footer class="bg-dark text-white py-4 mt-5">

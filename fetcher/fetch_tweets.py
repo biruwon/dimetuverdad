@@ -546,9 +546,6 @@ def fetch_tweets(page, username: str, max_tweets: int = 30, resume_from_last: bo
         
         print(f"\n📊 Collection complete: {len(all_collected_tweets)} tweets from @{username}")
         
-        # Thread detection is performed inline during Phase 1 collection (no separate Phase 3)
-        print("🧵 Thread detection: performed inline during collection; no post-collection Phase 3 run.")
-        
         # Print summary by post type
         post_type_counts = {}
         for tweet in all_collected_tweets:
@@ -591,7 +588,7 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
         # Add retries with exponential backoff for each handle
         max_retries = 2  # allow a couple of retries to recover from transient site failures
         attempt = 0
-        tweets = []
+        tweets = None  # Use None to indicate fetch hasn't succeeded yet
         while attempt <= max_retries:
             try:
                 # Choose strategy based on latest flag
@@ -605,7 +602,8 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
                 backoff = min(60, (2 ** attempt) + random.random() * 5)
                 print(f"  ⚠️ Fetch attempt {attempt} failed for @{handle}: {e} - retrying in {backoff:.1f}s")
                 time.sleep(backoff)
-        if not tweets:
+        if tweets is None:
+            # Only show failure if fetch actually failed (returned None), not just empty
             print(f"  ❌ Failed to fetch tweets for @{handle} after {max_retries} retries")
             # Log failure
             try:
@@ -624,12 +622,12 @@ def run_fetch_session(p, handles: List[str], max_tweets: int, resume_from_last_f
         
         # Tweets are already saved during fetch_tweets, so just count them
         # Save profile information if tweets were collected successfully
-        if tweets and 'profile_pic_url' in tweets[0]:
+        if tweets and len(tweets) > 0 and 'profile_pic_url' in tweets[0]:
             profile_pic_url = tweets[0]['profile_pic_url']
             fetcher_db.save_account_profile_info(conn, handle, profile_pic_url)
         
         # Count tweets that were processed (saved during collection)
-        total_saved += len(tweets)
+        total_saved += len(tweets) if tweets else 0
     
     conn.close()
     session_mgr.cleanup_session(browser, context)

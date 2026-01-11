@@ -54,15 +54,12 @@ class TweetCollector:
         Args:
             username: Twitter username
             tweet_id: Tweet ID
-            resume_from_last: Whether we're resuming from last collection
+            resume_from_last: Whether we're resuming from last collection (unused, kept for API compat)
 
         Returns:
-            Tuple of (exists, needs_update_data)
+            Tuple of (exists, tweet_data_for_comparison)
         """
-        if not resume_from_last:
-            return False, None
-
-        # Use repository pattern
+        # Always check if tweet exists to avoid re-saving duplicates
         tweet_repo = get_tweet_repository()
         tweet = tweet_repo.get_tweet_by_id(tweet_id)
         
@@ -504,6 +501,7 @@ class TweetCollector:
             logger.debug(f"DEBUG: Found tweet IDs this cycle: {found_ids[:10]}... (total {len(found_ids)})")
 
             tweets_found_this_cycle = 0
+            tweets_skipped_this_cycle = 0  # Track already-existing tweets
 
             # Process each article
             for article in articles:
@@ -573,6 +571,9 @@ class TweetCollector:
 
                         if not needs_update:
                             logger.debug(f"Skipping existing tweet ({tweet_id})")
+                            # Mark as seen so we don't check it again
+                            seen_tweet_ids.add(tweet_id)
+                            tweets_skipped_this_cycle += 1
                             continue
 
                         logger.info(f"Tweet {tweet_id} exists but needs update")
@@ -594,6 +595,13 @@ class TweetCollector:
 
                     # If thread collection is enabled, and this tweet shows a thread connector, collect the full thread first
                     if getattr(self.config, 'collect_threads', False) and tweet_data.get('has_thread_line') and tweet_id not in processed_thread_ids and tweet_id not in seen_tweet_ids:
+                        # Check if this thread was already collected in a previous run
+                        if fetcher_db.is_thread_already_collected(conn, tweet_id):
+                            logger.debug(f"Thread {tweet_id} already collected in database, skipping")
+                            processed_thread_ids.add(tweet_id)
+                            seen_tweet_ids.add(tweet_id)
+                            tweets_skipped_this_cycle += 1
+                            continue
                         logger.info(f"Thread connector detected at {tweet_id} — collecting thread")
                         try:
                             session_manager = SessionManager()
@@ -661,16 +669,24 @@ class TweetCollector:
 
                 # Track consecutive empty scrolls
                 if tweets_found_this_cycle == 0:
-                    consecutive_empty_scrolls += 1
-                    logger.warning(f"No new tweets found ({consecutive_empty_scrolls}/{self.config.max_consecutive_empty_scrolls} consecutive empty cycles)")
+                    # Check if we skipped existing tweets (all tweets already collected)
+                    if tweets_skipped_this_cycle > 0:
+                        consecutive_empty_scrolls += 1
+                        if consecutive_empty_scrolls >= 3:
+                            logger.info(f"All visible tweets already collected ({tweets_skipped_this_cycle} skipped this cycle). Stopping.")
+                            break
+                        logger.info(f"Skipped {tweets_skipped_this_cycle} existing tweets, checking for new content...")
+                    else:
+                        consecutive_empty_scrolls += 1
+                        logger.warning(f"No new tweets found ({consecutive_empty_scrolls}/{self.config.max_consecutive_empty_scrolls} consecutive empty cycles)")
 
-                    # Try recovery strategies
-                    if consecutive_empty_scrolls % 5 == 0 and consecutive_empty_scrolls <= 10:
-                        recovery_attempt = consecutive_empty_scrolls // 5
-                        if self.scroller.try_recovery_strategies(page, recovery_attempt):
-                            logger.info("Recovery attempted - checking if it helped...")
-                        else:
-                            logger.warning("Recovery failed")
+                        # Try recovery strategies only when Twitter isn't serving content
+                        if consecutive_empty_scrolls % 5 == 0 and consecutive_empty_scrolls <= 10:
+                            recovery_attempt = consecutive_empty_scrolls // 5
+                            if self.scroller.try_recovery_strategies(page, recovery_attempt):
+                                logger.info("Recovery attempted - checking if it helped...")
+                            else:
+                                logger.warning("Recovery failed")
                 else:
                     consecutive_empty_scrolls = 0
                     logger.info(f"Found {tweets_found_this_cycle} new tweets, continuing...")
